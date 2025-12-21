@@ -8,67 +8,78 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Users, BookOpen, AlertTriangle } from "lucide-react";
+import { Users, BookOpen, Loader2 } from "lucide-react";
+import { useCredits } from "@/hooks/use-credits";
 
 interface CreditConfirmModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
-  type: "character" | "book";
-  action: string;
-  creditsRequired: number;
-  creditsAvailable: number;
+  title: string;
+  description: string;
+  creditCost: number;
+  creditType: "character" | "book";
+  isLoading?: boolean;
 }
 
 export function CreditConfirmModal({
   open,
   onOpenChange,
   onConfirm,
-  type,
-  action,
-  creditsRequired,
-  creditsAvailable,
+  title,
+  description,
+  creditCost,
+  creditType,
+  isLoading = false,
 }: CreditConfirmModalProps) {
-  const hasEnough = creditsAvailable >= creditsRequired;
-  const Icon = type === "character" ? Users : BookOpen;
-  const creditLabel = type === "character" ? "Character Credits" : "Book Credits";
+  const { credits } = useCredits();
+  const creditsAvailable = creditType === "character" ? credits.characterCredits : credits.bookCredits;
+  const hasEnough = creditsAvailable >= creditCost;
+  const Icon = creditType === "character" ? Users : BookOpen;
+  const creditLabel = creditType === "character" ? "Character Credits" : "Book Credits";
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            {!hasEnough && <AlertTriangle className="w-5 h-5 text-destructive" />}
-            {action}
-          </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-4">
-            <p>This action will consume credits from your account.</p>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
-              <div className="flex items-center gap-2">
-                <Icon className="w-5 h-5 text-muted-foreground" />
-                <span className="font-medium">{creditLabel}</span>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-4">
+              <p>{description}</p>
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
+                <div className="flex items-center gap-2">
+                  <Icon className="w-5 h-5 text-muted-foreground" />
+                  <span className="font-medium">{creditLabel}</span>
+                </div>
+                <div className="text-right">
+                  <span className={hasEnough ? "text-foreground" : "text-destructive"}>
+                    {creditCost} required
+                  </span>
+                  <p className="text-sm text-muted-foreground">
+                    {creditsAvailable} available
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <span className={hasEnough ? "text-foreground" : "text-destructive"}>
-                  {creditsRequired} required
-                </span>
-                <p className="text-sm text-muted-foreground">
-                  {creditsAvailable} available
+              {!hasEnough && (
+                <p className="text-destructive text-sm">
+                  You don't have enough credits. Please upgrade your plan or purchase more credits.
                 </p>
-              </div>
+              )}
             </div>
-            {!hasEnough && (
-              <p className="text-destructive text-sm">
-                You don't have enough credits. Please upgrade your plan or purchase more credits.
-              </p>
-            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
           {hasEnough ? (
-            <AlertDialogAction onClick={onConfirm}>
-              Confirm ({creditsRequired} credits)
+            <AlertDialogAction onClick={onConfirm} disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Confirm (${creditCost} credits)`
+              )}
             </AlertDialogAction>
           ) : (
             <AlertDialogAction asChild>
