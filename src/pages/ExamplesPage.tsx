@@ -6,28 +6,23 @@ import { CharacterCard } from "@/components/shared/CharacterCard";
 import { BookCoverCard } from "@/components/shared/BookCoverCard";
 import { PoseGrid } from "@/components/shared/PoseGrid";
 import { ArrowRight, BookOpen, Users, Layout } from "lucide-react";
+import { demoCharacters, demoBooks } from "@/lib/demo-data";
 
-const exampleCharacters = [
-  { name: "Amira", role: "Curious Explorer", ageRange: "6-9", status: "approved" as const },
-  { name: "Yusuf", role: "Kind Helper", ageRange: "5-7", status: "approved" as const },
-  { name: "Fatima", role: "Wise Teacher", ageRange: "8-12", status: "approved" as const },
-  { name: "Omar", role: "Brave Friend", ageRange: "6-9", status: "locked" as const },
-  { name: "Layla", role: "Creative Artist", ageRange: "7-10", status: "approved" as const },
-  { name: "Zaid", role: "Thoughtful Student", ageRange: "9-12", status: "draft" as const },
-  { name: "Maryam", role: "Helpful Sister", ageRange: "5-8", status: "approved" as const },
-  { name: "Hassan", role: "Adventurous Boy", ageRange: "7-10", status: "approved" as const },
-];
+const exampleCharacters = demoCharacters.map(c => ({
+  name: c.name,
+  role: c.role,
+  ageRange: c.ageRange,
+  status: c.status,
+  imageUrl: c.imageUrl,
+}));
 
-const exampleBooks = [
-  { title: "The Generous Traveler", author: "Sara Ahmad", ageRange: "5-8", category: "Values" },
-  { title: "Ramadan with Amira", author: "Yusuf Khan", ageRange: "4-7", category: "Islamic" },
-  { title: "The Mountain of Patience", author: "Aisha Malik", ageRange: "7-10", category: "Adventure" },
-  { title: "Learning Wudu with Omar", author: "Fatima Ali", ageRange: "4-6", category: "Educational" },
-  { title: "Kindness in the Souk", author: "Zahra Ibrahim", ageRange: "6-9", category: "Values" },
-  { title: "The Prophet's Garden", author: "Hassan Omar", ageRange: "8-12", category: "Seerah" },
-  { title: "Salah Steps", author: "Nadia Hassan", ageRange: "3-6", category: "Educational" },
-  { title: "The Brave Companion", author: "Kareem Ali", ageRange: "8-11", category: "Seerah" },
-];
+const exampleBooks = demoBooks.map(b => ({
+  title: b.title,
+  author: b.author,
+  ageRange: b.ageRange,
+  category: b.category,
+  coverUrl: b.coverUrl,
+}));
 
 export default function ExamplesPage() {
   return (
@@ -55,11 +50,15 @@ export default function ExamplesPage() {
               <p className="text-muted-foreground">Pixar-style characters with consistent visual DNA</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {exampleCharacters.map((char, i) => (
               <CharacterCard
                 key={char.name}
-                {...char}
+                name={char.name}
+                role={char.role}
+                ageRange={char.ageRange}
+                status={char.status}
+                imageUrl={char.imageUrl}
                 className="animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` } as React.CSSProperties}
               />
@@ -138,11 +137,15 @@ export default function ExamplesPage() {
               <p className="text-muted-foreground">Beautiful covers ready for print and digital distribution</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {exampleBooks.map((book, i) => (
               <BookCoverCard
                 key={book.title}
-                {...book}
+                title={book.title}
+                author={book.author}
+                ageRange={book.ageRange}
+                category={book.category}
+                coverUrl={book.coverUrl}
                 className="animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` } as React.CSSProperties}
               />
