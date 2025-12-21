@@ -8,6 +8,7 @@ interface BookCoverCardProps extends React.HTMLAttributes<HTMLDivElement> {
   ageRange: string;
   category: string;
   imageUrl?: string;
+  coverUrl?: string;
 }
 
 export function BookCoverCard({
@@ -16,15 +17,17 @@ export function BookCoverCard({
   ageRange,
   category,
   imageUrl,
+  coverUrl,
   className,
 }: BookCoverCardProps) {
+  const imgSrc = imageUrl || coverUrl;
   return (
     <div className={cn("card-glow overflow-hidden group", className)}>
       {/* Cover placeholder */}
       <div className="aspect-[3/4] bg-gradient-teal relative overflow-hidden">
-        {imageUrl ? (
+        {imgSrc ? (
           <img
-            src={imageUrl}
+            src={imgSrc}
             alt={title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
