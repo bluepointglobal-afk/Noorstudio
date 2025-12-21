@@ -24,24 +24,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-// Mock data
-const mockCharacters = [
-  { name: "Amira", role: "Curious Explorer", ageRange: "6-9" },
-  { name: "Yusuf", role: "Kind Helper", ageRange: "5-7" },
-  { name: "Fatima", role: "Wise Teacher", ageRange: "8-12" },
-  { name: "Omar", role: "Brave Friend", ageRange: "6-9" },
-  { name: "Layla", role: "Creative Artist", ageRange: "7-10" },
-  { name: "Zaid", role: "Thoughtful Student", ageRange: "9-12" },
-];
+import { demoCharacters, demoBooks } from "@/lib/demo-data";
 
-const mockBooks = [
-  { title: "The Generous Traveler", author: "Sara Ahmad", ageRange: "5-8", category: "Values" },
-  { title: "Ramadan with Amira", author: "Yusuf Khan", ageRange: "4-7", category: "Islamic" },
-  { title: "The Mountain of Patience", author: "Aisha Malik", ageRange: "7-10", category: "Adventure" },
-  { title: "Learning Wudu with Omar", author: "Fatima Ali", ageRange: "4-6", category: "Educational" },
-  { title: "Kindness in the Souk", author: "Zahra Ibrahim", ageRange: "6-9", category: "Values" },
-  { title: "The Prophet's Garden", author: "Hassan Omar", ageRange: "8-12", category: "Seerah" },
-];
+// Use demo data with images
+const mockCharacters = demoCharacters;
+const mockBooks = demoBooks;
 
 const howItWorks = [
   {

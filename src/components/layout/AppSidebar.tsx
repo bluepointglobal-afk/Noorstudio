@@ -5,47 +5,52 @@ import {
   BookOpen,
   Library,
   FolderKanban,
-  FileEdit,
-  Image,
-  Download,
+  Globe,
+  CreditCard,
   Settings,
   HelpCircle,
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { CreditBadge } from "@/components/shared/CreditBadge";
+import { demoUserCredits } from "@/lib/demo-data";
+import { Button } from "@/components/ui/button";
 
 const mainNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/app/dashboard" },
-  { icon: Users, label: "Character Studio", href: "/app/characters" },
-  { icon: BookOpen, label: "Book Builder", href: "/app/book-builder" },
+  { icon: Globe, label: "Universes", href: "/app/universes" },
+  { icon: Users, label: "Characters", href: "/app/characters" },
   { icon: Library, label: "Knowledge Base", href: "/app/knowledge-base" },
   { icon: FolderKanban, label: "Projects", href: "/app/projects" },
 ];
 
-const projectNavItems = [
-  { icon: FileEdit, label: "Chapter Editor", href: "/app/chapters" },
-  { icon: Image, label: "Illustrations", href: "/app/illustrations" },
-  { icon: Download, label: "Layout & Export", href: "/app/export" },
+const createNavItems = [
+  { icon: Plus, label: "New Book", href: "/app/books/new" },
 ];
 
 const bottomNavItems = [
+  { icon: CreditCard, label: "Billing", href: "/app/billing" },
   { icon: Settings, label: "Settings", href: "/app/settings" },
-  { icon: HelpCircle, label: "Help Center", href: "/app/help" },
+  { icon: HelpCircle, label: "Help", href: "/app/help" },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const credits = demoUserCredits;
 
   const NavLink = ({
     item,
+    highlight = false,
   }: {
     item: { icon: typeof LayoutDashboard; label: string; href: string };
+    highlight?: boolean;
   }) => {
-    const isActive = location.pathname === item.href;
+    const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + "/");
     return (
       <Link
         to={item.href}
@@ -53,6 +58,8 @@ export function AppSidebar() {
           "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
           isActive
             ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-gold"
+            : highlight
+            ? "bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         )}
       >
@@ -93,6 +100,26 @@ export function AppSidebar() {
         </button>
       </div>
 
+      {/* Credits Display */}
+      {!collapsed && (
+        <div className="px-3 py-4 border-b border-sidebar-border">
+          <div className="space-y-2">
+            <CreditBadge
+              type="character"
+              current={credits.characterCredits}
+              max={credits.characterCreditsMax}
+              className="w-full justify-between bg-sidebar-accent border-sidebar-border"
+            />
+            <CreditBadge
+              type="book"
+              current={credits.bookCredits}
+              max={credits.bookCreditsMax}
+              className="w-full justify-between bg-sidebar-accent border-sidebar-border"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto py-4 px-3">
         <nav className="space-y-1">
@@ -101,16 +128,16 @@ export function AppSidebar() {
           ))}
         </nav>
 
-        {/* Project Navigation */}
+        {/* Create Section */}
         <div className="mt-6">
           {!collapsed && (
             <p className="px-3 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider mb-2">
-              Current Project
+              Create
             </p>
           )}
           <nav className="space-y-1">
-            {projectNavItems.map((item) => (
-              <NavLink key={item.href} item={item} />
+            {createNavItems.map((item) => (
+              <NavLink key={item.href} item={item} highlight />
             ))}
           </nav>
         </div>
@@ -141,8 +168,8 @@ export function AppSidebar() {
               <p className="text-sm font-medium text-sidebar-foreground truncate">
                 Author Demo
               </p>
-              <p className="text-xs text-sidebar-foreground/60 truncate">
-                author@example.com
+              <p className="text-xs text-sidebar-foreground/60 truncate capitalize">
+                {credits.plan} Plan
               </p>
             </div>
           )}

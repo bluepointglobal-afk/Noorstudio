@@ -7,6 +7,7 @@ import HomePage from "./pages/HomePage";
 import ExamplesPage from "./pages/ExamplesPage";
 import PricingPage from "./pages/PricingPage";
 import DashboardPage from "./pages/app/DashboardPage";
+import CharactersPage from "./pages/app/CharactersPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,13 +29,15 @@ const App = () => (
           
           {/* App Routes */}
           <Route path="/app/dashboard" element={<DashboardPage />} />
-          <Route path="/app/characters" element={<DashboardPage />} />
-          <Route path="/app/book-builder" element={<DashboardPage />} />
+          <Route path="/app/universes" element={<DashboardPage />} />
+          <Route path="/app/characters" element={<CharactersPage />} />
+          <Route path="/app/characters/:id" element={<CharactersPage />} />
+          <Route path="/app/characters/new" element={<CharactersPage />} />
           <Route path="/app/knowledge-base" element={<DashboardPage />} />
+          <Route path="/app/books/new" element={<DashboardPage />} />
           <Route path="/app/projects" element={<DashboardPage />} />
-          <Route path="/app/chapters" element={<DashboardPage />} />
-          <Route path="/app/illustrations" element={<DashboardPage />} />
-          <Route path="/app/export" element={<DashboardPage />} />
+          <Route path="/app/projects/:id" element={<DashboardPage />} />
+          <Route path="/app/billing" element={<DashboardPage />} />
           <Route path="/app/settings" element={<DashboardPage />} />
           <Route path="/app/help" element={<DashboardPage />} />
           
