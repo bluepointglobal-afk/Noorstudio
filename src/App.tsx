@@ -8,6 +8,13 @@ import ExamplesPage from "./pages/ExamplesPage";
 import PricingPage from "./pages/PricingPage";
 import DashboardPage from "./pages/app/DashboardPage";
 import CharactersPage from "./pages/app/CharactersPage";
+import CharacterDetailPage from "./pages/app/CharacterDetailPage";
+import CharacterCreatePage from "./pages/app/CharacterCreatePage";
+import UniversesPage from "./pages/app/UniversesPage";
+import KnowledgeBasePage from "./pages/app/KnowledgeBasePage";
+import BookBuilderPage from "./pages/app/BookBuilderPage";
+import ProjectWorkspacePage from "./pages/app/ProjectWorkspacePage";
+import BillingPage from "./pages/app/BillingPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,15 +36,15 @@ const App = () => (
           
           {/* App Routes */}
           <Route path="/app/dashboard" element={<DashboardPage />} />
-          <Route path="/app/universes" element={<DashboardPage />} />
+          <Route path="/app/universes" element={<UniversesPage />} />
           <Route path="/app/characters" element={<CharactersPage />} />
-          <Route path="/app/characters/:id" element={<CharactersPage />} />
-          <Route path="/app/characters/new" element={<CharactersPage />} />
-          <Route path="/app/knowledge-base" element={<DashboardPage />} />
-          <Route path="/app/books/new" element={<DashboardPage />} />
+          <Route path="/app/characters/new" element={<CharacterCreatePage />} />
+          <Route path="/app/characters/:id" element={<CharacterDetailPage />} />
+          <Route path="/app/knowledge-base" element={<KnowledgeBasePage />} />
+          <Route path="/app/books/new" element={<BookBuilderPage />} />
           <Route path="/app/projects" element={<DashboardPage />} />
-          <Route path="/app/projects/:id" element={<DashboardPage />} />
-          <Route path="/app/billing" element={<DashboardPage />} />
+          <Route path="/app/projects/:id" element={<ProjectWorkspacePage />} />
+          <Route path="/app/billing" element={<BillingPage />} />
           <Route path="/app/settings" element={<DashboardPage />} />
           <Route path="/app/help" element={<DashboardPage />} />
           
