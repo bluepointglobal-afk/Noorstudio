@@ -3,6 +3,7 @@
 
 import { Router, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { env } from "../env";
 
 const router = Router();
 
@@ -10,10 +11,10 @@ const router = Router();
 // Configuration
 // ============================================
 
-const TEXT_PROVIDER = process.env.AI_TEXT_PROVIDER || "mock";
-const IMAGE_PROVIDER = process.env.AI_IMAGE_PROVIDER || "mock";
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || "";
-const NANOBANANA_API_KEY = process.env.NANOBANANA_API_KEY || "";
+const TEXT_PROVIDER = env.AI_TEXT_PROVIDER;
+const IMAGE_PROVIDER = env.AI_IMAGE_PROVIDER;
+const CLAUDE_API_KEY = env.CLAUDE_API_KEY || "";
+const NANOBANANA_API_KEY = env.NANOBANANA_API_KEY || "";
 const MAX_RETRIES = parseInt(process.env.AI_MAX_RETRIES || "2", 10);
 
 // Initialize Claude client if key is available
@@ -312,7 +313,12 @@ router.post("/text", async (req: Request, res: Response) => {
     const body = req.body as TextRequest;
 
     if (!body.prompt || !body.system) {
-      res.status(400).json({ error: "Missing required fields: prompt, system" });
+      res.status(400).json({
+        error: {
+          code: "BAD_REQUEST",
+          message: "Missing required fields: prompt, system",
+        },
+      });
       return;
     }
 
@@ -335,11 +341,14 @@ router.post("/text", async (req: Request, res: Response) => {
     }
 
     res.json(response);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Text generation error:", error);
-    res.status(500).json({
-      error: "Text generation failed",
-      message: error instanceof Error ? error.message : "Unknown error",
+    res.status(error.status || 500).json({
+      error: {
+        code: error.code || "TEXT_GENERATION_FAILED",
+        message: error.message || "Text generation failed",
+        details: env.NODE_ENV === "development" ? error.stack : undefined,
+      },
     });
   }
 });
@@ -350,7 +359,12 @@ router.post("/image", async (req: Request, res: Response) => {
     const body = req.body as ImageRequest;
 
     if (!body.prompt) {
-      res.status(400).json({ error: "Missing required field: prompt" });
+      res.status(400).json({
+        error: {
+          code: "BAD_REQUEST",
+          message: "Missing required field: prompt",
+        },
+      });
       return;
     }
 
@@ -363,11 +377,14 @@ router.post("/image", async (req: Request, res: Response) => {
     }
 
     res.json(response);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Image generation error:", error);
-    res.status(500).json({
-      error: "Image generation failed",
-      message: error instanceof Error ? error.message : "Unknown error",
+    res.status(error.status || 500).json({
+      error: {
+        code: error.code || "IMAGE_GENERATION_FAILED",
+        message: error.message || "Image generation failed",
+        details: env.NODE_ENV === "development" ? error.stack : undefined,
+      },
     });
   }
 });
