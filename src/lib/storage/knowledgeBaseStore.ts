@@ -75,7 +75,9 @@ export function listKnowledgeBases(): KnowledgeBase[] {
     const parsed = JSON.parse(stored);
     return validateArrayAndRepair(KB_LIST_KEY, parsed, KnowledgeBaseSchema);
   } catch {
-    console.error("Failed to parse knowledge bases from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse knowledge bases from localStorage");
+    }
     return [];
   }
 }
@@ -145,7 +147,9 @@ export function listItems(kbId: string): KnowledgeBaseItem[] {
     const parsed = JSON.parse(stored);
     return validateArrayAndRepair(key, parsed, KnowledgeBaseItemSchema);
   } catch {
-    console.error("Failed to parse KB items from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse KB items from localStorage");
+    }
     return [];
   }
 }

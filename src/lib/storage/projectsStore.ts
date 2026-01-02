@@ -2,6 +2,8 @@
 // Key: noorstudio.projects.v1
 
 import { ProjectStage } from "@/lib/models";
+import { ProjectSchema } from "@/lib/validation/schemas";
+import { validateArrayAndRepair } from "./validation";
 
 // ============================================
 // Types
@@ -186,7 +188,9 @@ export function listProjects(): StoredProject[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return [];
-    return JSON.parse(stored) as StoredProject[];
+
+    const parsed = JSON.parse(stored);
+    return validateArrayAndRepair(STORAGE_KEY, parsed, ProjectSchema);
   } catch {
     console.error("Failed to parse projects from localStorage");
     return [];
