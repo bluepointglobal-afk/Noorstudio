@@ -5,6 +5,7 @@
 import { env } from "./env";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
 import { AppError, RateLimitError } from "./errors";
@@ -155,6 +156,9 @@ app.use(
   })
 );
 
+app.use(helmet({
+  contentSecurityPolicy: env.NODE_ENV === "production", // Enable CSP in production
+}));
 app.use(cors({
   origin: env.CLIENT_ORIGIN,
   credentials: true,
