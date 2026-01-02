@@ -18,6 +18,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
+import { AppError, RateLimitError } from "./errors";
 
 const app = express();
 const PORT = env.PORT;
@@ -39,9 +40,9 @@ interface RateLimitConfig {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
-  "/api/ai/text": { maxRequests: 30, windowMs: 10 * 60 * 1000 }, // 30 req / 10 min
-  "/api/ai/image": { maxRequests: 15, windowMs: 10 * 60 * 1000 }, // 15 req / 10 min
-  "/api/share/upsert": { maxRequests: 20, windowMs: 10 * 60 * 1000 }, // 20 req / 10 min
+  "/api/ai/text": { maxRequests: 2, windowMs: 10 * 60 * 1000 }, // 2 req / 10 min
+  "/api/ai/image": { maxRequests: 15, windowMs: 10 * 60 * 1000 },
+  "/api/share/upsert": { maxRequests: 20, windowMs: 10 * 60 * 1000 },
 };
 
 function getClientIp(req: Request): string {
@@ -90,14 +91,18 @@ function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): v
 
     // Standardized error shape
     res.setHeader("Retry-After", resetInSec.toString());
-    res.status(429).json({
+    const error = new RateLimitError(
+      `Rate limit exceeded. Please try again in ${resetInMin} minute${resetInMin === 1 ? "" : "s"}.`,
+      {
+        retryAfterMs: resetInMs,
+        retryAfterSec: resetInSec,
+      }
+    );
+    res.status(error.statusCode).json({
       error: {
-        code: "TOO_MANY_REQUESTS",
-        message: `Rate limit exceeded. Please try again in ${resetInMin} minute${resetInMin === 1 ? "" : "s"}.`,
-        details: {
-          retryAfterMs: resetInMs,
-          retryAfterSec: resetInSec,
-        },
+        code: error.code,
+        message: error.message,
+        details: error.details,
       },
     });
     return;
@@ -159,17 +164,30 @@ app.use("/api/share", shareRoutes);
 // ============================================
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("Server error:", err);
+  // If we already sent headers, don't try to send again
+  if (res.headersSent) {
+    return _next(err);
+  }
 
-  const statusCode = err.status || err.statusCode || 500;
+  const isAppError = err instanceof AppError;
+  const statusCode = isAppError ? err.statusCode : (err.status || err.statusCode || 500);
+  const errorCode = isAppError ? err.code : (err.code || "INTERNAL_SERVER_ERROR");
+
+  // Log 500s as errors, others as warnings
+  if (statusCode >= 500) {
+    console.error(`[SERVER ERROR] ${errorCode}:`, err);
+  } else {
+    console.warn(`[SERVER WARN] ${errorCode}: ${err.message}`);
+  }
 
   res.status(statusCode).json({
     error: {
-      code: err.code || "INTERNAL_SERVER_ERROR",
+      code: errorCode,
       message: statusCode === 500 && env.NODE_ENV !== "development"
         ? "An unexpected error occurred"
         : err.message || "Internal server error",
-      details: env.NODE_ENV === "development" ? err.stack : undefined,
+      details: (env.NODE_ENV === "development" || isAppError) ? err.details : undefined,
+      stack: env.NODE_ENV === "development" ? err.stack : undefined,
     },
   });
 });

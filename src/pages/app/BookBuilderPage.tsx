@@ -90,7 +90,9 @@ function saveAutosave(data: AutosaveData): void {
   try {
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
   } catch (error) {
-    console.error("Failed to save autosave:", error);
+    if (import.meta.env.DEV) {
+      console.error("Failed to save autosave:", error);
+    }
   }
 }
 
@@ -293,7 +295,9 @@ export default function BookBuilderPage() {
 
       navigate(`/app/projects/${project.id}`);
     } catch (error) {
-      console.error("Failed to create project:", error);
+      if (import.meta.env.DEV) {
+        console.error("Failed to create project:", error);
+      }
       toast({
         title: "Failed to create project",
         description: "An error occurred while creating the project. Your draft has been saved.",
@@ -384,8 +388,8 @@ export default function BookBuilderPage() {
                   currentStep > step.id
                     ? "bg-primary text-primary-foreground"
                     : currentStep === step.id
-                    ? "bg-primary/20 text-primary border-2 border-primary"
-                    : "bg-muted text-muted-foreground"
+                      ? "bg-primary/20 text-primary border-2 border-primary"
+                      : "bg-muted text-muted-foreground"
                 )}
               >
                 {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
@@ -630,8 +634,8 @@ export default function BookBuilderPage() {
                         isSelected
                           ? "border-primary bg-primary/5"
                           : isLocked
-                          ? "border-border hover:border-primary/50"
-                          : "border-border/50 opacity-60"
+                            ? "border-border hover:border-primary/50"
+                            : "border-border/50 opacity-60"
                       )}
                       onClick={() => handleCharacterToggle(char.id, char)}
                     >

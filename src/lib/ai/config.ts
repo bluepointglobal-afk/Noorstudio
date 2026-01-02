@@ -62,11 +62,15 @@ export function validateConfig(): { valid: boolean; errors: string[] } {
 
   if (config.textProvider === "claude" && !config.claudeApiKey) {
     // API key should be on server, not client - this is just a warning
-    console.warn("Claude provider selected but no API key configured. Using server proxy.");
+    if (import.meta.env.DEV) {
+      console.warn("Claude provider selected but no API key configured. Using server proxy.");
+    }
   }
 
   if (config.imageProvider === "nanobanana" && !config.nanobananaApiKey) {
-    console.warn("NanoBanana provider selected but no API key configured. Using server proxy.");
+    if (import.meta.env.DEV) {
+      console.warn("NanoBanana provider selected but no API key configured. Using server proxy.");
+    }
   }
 
   if (config.maxOutputTokensOutline < 100 || config.maxOutputTokensOutline > 4000) {
