@@ -134,11 +134,11 @@ export function sanitizeProjectForShare(
     characters: sanitizedCharacters,
     kbSummary: kbSummary
       ? {
-          kbName: kbSummary.kbName,
-          faithRules: kbSummary.faithRules,
-          vocabularyRules: kbSummary.vocabularyRules,
-          illustrationRules: kbSummary.illustrationRules,
-        }
+        kbName: kbSummary.kbName,
+        faithRules: kbSummary.faithRules,
+        vocabularyRules: kbSummary.vocabularyRules,
+        illustrationRules: kbSummary.illustrationRules,
+      }
       : undefined,
   };
 }
@@ -270,7 +270,9 @@ export async function loadProjectForDemo(
         },
       };
     } catch (parseErr) {
-      console.error("Error parsing shared project:", parseErr);
+      if (import.meta.env.DEV) {
+        console.error("Error parsing shared project:", parseErr);
+      }
       return {
         success: false,
         error: "Failed to parse project data.",
@@ -278,7 +280,9 @@ export async function loadProjectForDemo(
       };
     }
   } catch (error) {
-    console.error("Error loading demo project:", error);
+    if (import.meta.env.DEV) {
+      console.error("Error loading demo project:", error);
+    }
     return {
       success: false,
       error: "Failed to load project data. Please try again.",
@@ -303,7 +307,9 @@ export async function copyDemoUrl(projectId: string): Promise<boolean> {
     await navigator.clipboard.writeText(url);
     return true;
   } catch (error) {
-    console.error("Failed to copy demo URL:", error);
+    if (import.meta.env.DEV) {
+      console.error("Failed to copy demo URL:", error);
+    }
     return false;
   }
 }
@@ -429,7 +435,9 @@ export async function shareProjectToCloud(
       isCloudEnabled: true,
     };
   } catch (error) {
-    console.error("Error sharing project to cloud:", error);
+    if (import.meta.env.DEV) {
+      console.error("Error sharing project to cloud:", error);
+    }
     return {
       success: false,
       error: "Failed to share project. Please try again.",
@@ -463,7 +471,9 @@ export async function copyShareUrl(
     await navigator.clipboard.writeText(shareResult.shareUrl);
     return shareResult;
   } catch (error) {
-    console.error("Failed to copy share URL:", error);
+    if (import.meta.env.DEV) {
+      console.error("Failed to copy share URL:", error);
+    }
     return {
       ...shareResult,
       success: false,

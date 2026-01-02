@@ -267,7 +267,9 @@ export async function generateTextWithJSONRetry<T>(
   }
 
   // First parse failed, try repair
-  console.warn("JSON parse failed, attempting repair:", parseResult.error);
+  if (import.meta.env.DEV) {
+    console.warn("JSON parse failed, attempting repair:", parseResult.error);
+  }
 
   const repairPrompt = repairPromptBuilder(response.text);
   const repairRequest: TextGenerationRequest = {
@@ -282,15 +284,17 @@ export async function generateTextWithJSONRetry<T>(
   if (repairParseResult.success) {
     const totalUsage = response.usage && repairResponse.usage
       ? {
-          inputTokens: response.usage.inputTokens + repairResponse.usage.inputTokens,
-          outputTokens: response.usage.outputTokens + repairResponse.usage.outputTokens,
-        }
+        inputTokens: response.usage.inputTokens + repairResponse.usage.inputTokens,
+        outputTokens: response.usage.outputTokens + repairResponse.usage.outputTokens,
+      }
       : undefined;
     return { data: repairParseResult.data, usage: totalUsage };
   }
 
   // Repair also failed, return raw text for manual review
-  console.error("JSON repair failed:", repairParseResult.error);
+  if (import.meta.env.DEV) {
+    console.error("JSON repair failed:", repairParseResult.error);
+  }
   throw {
     error: "JSON parse failed",
     message: "Could not parse AI response as valid JSON after retry",

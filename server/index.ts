@@ -29,7 +29,7 @@ interface RateLimitConfig {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
-  "/api/ai/text": { maxRequests: 2, windowMs: 10 * 60 * 1000 }, // 2 req / 10 min
+  "/api/ai/text": { maxRequests: 30, windowMs: 10 * 60 * 1000 }, // 30 req / 10 min
   "/api/ai/image": { maxRequests: 15, windowMs: 10 * 60 * 1000 },
   "/api/share/upsert": { maxRequests: 20, windowMs: 10 * 60 * 1000 },
 };
