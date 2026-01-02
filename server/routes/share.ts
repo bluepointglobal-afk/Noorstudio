@@ -215,6 +215,78 @@ router.post("/upsert", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/share/rotate
+ * Rotate the share token for a project
+ */
+router.post("/rotate", async (req: Request, res: Response) => {
+  try {
+    if (!isSupabaseConfigured()) {
+      res.status(503).json({
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Sharing service not configured.",
+        },
+      });
+      return;
+    }
+
+    const { projectId } = req.body;
+    if (!projectId || typeof projectId !== "string") {
+      res.status(400).json({
+        error: { code: "BAD_REQUEST", message: "projectId is required" },
+      });
+      return;
+    }
+
+    // Generate new token
+    let shareToken = generateShareToken();
+    const MAX_RETRIES = 3;
+    let updateError: any = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const { error } = await supabaseAdmin!
+        .from("shared_projects")
+        .update({ share_token: shareToken })
+        .eq("id", projectId);
+
+      if (!error) {
+        updateError = null;
+        break;
+      }
+
+      const isUniqueError = error.code === "23505" && error.message?.includes("share_token");
+      if (isUniqueError) {
+        shareToken = generateShareToken();
+        updateError = error;
+        continue;
+      }
+
+      updateError = error;
+      break;
+    }
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    res.json({
+      success: true,
+      projectId,
+      shareToken,
+    });
+  } catch (error: any) {
+    console.error("Token rotation error:", error);
+    res.status(500).json({
+      error: {
+        code: "ROTATION_FAILED",
+        message: "Failed to rotate share token",
+        details: env.NODE_ENV === "development" ? error : undefined,
+      },
+    });
+  }
+});
+
+/**
  * GET /api/share/status
  * Check if sharing service is configured
  */
