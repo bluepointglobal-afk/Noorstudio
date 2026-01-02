@@ -66,7 +66,9 @@ export function getBalances(): CreditBalances {
     }
     return JSON.parse(stored) as CreditBalances;
   } catch {
-    console.error("Failed to parse credit balances from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse credit balances from localStorage");
+    }
     return DEFAULT_BALANCES;
   }
 }
@@ -96,7 +98,9 @@ export function getLedger(): CreditLedgerEntry[] {
     if (!stored) return [];
     return JSON.parse(stored) as CreditLedgerEntry[];
   } catch {
-    console.error("Failed to parse credit ledger from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse credit ledger from localStorage");
+    }
     return [];
   }
 }

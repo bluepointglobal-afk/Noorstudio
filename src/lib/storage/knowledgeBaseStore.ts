@@ -1,7 +1,8 @@
-// Knowledge Base Store - localStorage persistence for KB and items
-// Keys:
 //   - noorstudio.kb.v1 (knowledge bases list)
 //   - noorstudio.kb.items.v1.<kbId> (items per KB)
+
+import { KnowledgeBaseSchema, KnowledgeBaseItemSchema } from "@/lib/validation/schemas";
+import { validateArrayAndRepair } from "./validation";
 
 // ============================================
 // Types
@@ -70,7 +71,9 @@ export function listKnowledgeBases(): KnowledgeBase[] {
   try {
     const stored = localStorage.getItem(KB_LIST_KEY);
     if (!stored) return [];
-    return JSON.parse(stored) as KnowledgeBase[];
+
+    const parsed = JSON.parse(stored);
+    return validateArrayAndRepair(KB_LIST_KEY, parsed, KnowledgeBaseSchema);
   } catch {
     console.error("Failed to parse knowledge bases from localStorage");
     return [];
@@ -134,10 +137,13 @@ export function deleteKnowledgeBase(id: string): boolean {
 // ============================================
 
 export function listItems(kbId: string): KnowledgeBaseItem[] {
+  const key = getItemsKey(kbId);
   try {
-    const stored = localStorage.getItem(getItemsKey(kbId));
+    const stored = localStorage.getItem(key);
     if (!stored) return [];
-    return JSON.parse(stored) as KnowledgeBaseItem[];
+
+    const parsed = JSON.parse(stored);
+    return validateArrayAndRepair(key, parsed, KnowledgeBaseItemSchema);
   } catch {
     console.error("Failed to parse KB items from localStorage");
     return [];

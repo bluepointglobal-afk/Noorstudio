@@ -2,17 +2,6 @@
 // Handles AI proxy, sharing, with rate limiting
 // Keeps API keys and service role keys server-side only
 
-import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
-
-// ESM compatibility for __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables from server/.env
-dotenv.config({ path: path.resolve(__dirname, ".env") });
-
 import { env } from "./env";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
