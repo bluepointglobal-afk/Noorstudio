@@ -84,11 +84,6 @@ export default function DashboardPage() {
 
   const handleDebugProjects = () => {
     const allProjects = listProjects();
-    console.log("[DEBUG] All projects in localStorage:", allProjects);
-    console.log("[DEBUG] Project IDs:", allProjects.map(p => p.id));
-    allProjects.forEach(p => {
-      console.log(`[DEBUG] Project "${p.title}" - ID: ${p.id} - URL: /app/projects/${p.id}`);
-    });
     toast({
       title: "Debug info logged",
       description: `Found ${allProjects.length} projects. Check browser console (F12).`,

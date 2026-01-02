@@ -227,23 +227,13 @@ export default function ProjectWorkspacePage() {
 
   // Load project and characters
   useEffect(() => {
-    console.log("[ProjectWorkspace] useEffect triggered, id from URL:", id);
-
     if (!id) {
-      console.log("[ProjectWorkspace] No project ID provided");
       setIsLoading(false);
       return;
     }
 
-    console.log("[ProjectWorkspace] Loading project with ID:", id);
-
-    // Debug: show all projects
-    const allProjects = JSON.parse(localStorage.getItem("noorstudio.projects.v1") || "[]");
-    console.log("[ProjectWorkspace] All projects in storage:", allProjects.length);
-    console.log("[ProjectWorkspace] Available IDs:", allProjects.map((p: { id: string }) => p.id));
-
     const loadedProject = getProject(id);
-    console.log("[ProjectWorkspace] Loaded project result:", loadedProject ? `Found: ${loadedProject.title}` : "NOT FOUND");
+    setProject(loadedProject);
     setProject(loadedProject);
 
     if (loadedProject) {
@@ -252,7 +242,6 @@ export default function ProjectWorkspacePage() {
         .map((charId) => getCharacter(charId))
         .filter((c): c is StoredCharacter => c !== null);
       setCharacters(loadedChars);
-      console.log("[ProjectWorkspace] Loaded characters:", loadedChars.length);
 
       // Load KB rules summary
       if (loadedProject.knowledgeBaseId) {
@@ -269,8 +258,6 @@ export default function ProjectWorkspacePage() {
       // Load AI usage stats
       const usage = getProjectAIUsage(loadedProject);
       setAiUsage(usage);
-    } else {
-      console.log("[ProjectWorkspace] Project not found in localStorage");
     }
 
     setIsLoading(false);
@@ -519,7 +506,6 @@ export default function ProjectWorkspacePage() {
 
       if (!consumeResult.success) {
         // Credit consumption failed after success - log but don't block
-        console.error("Failed to consume credits after successful stage:", consumeResult.error);
       }
 
       // Store the artifact
@@ -688,9 +674,8 @@ export default function ProjectWorkspacePage() {
     ? project.artifacts.export!.content as Array<{ format: string; fileUrl: string; fileSize: number }>
     : undefined;
 
-  // Debug: log artifact status
-  console.log("[Artifacts] Status:", { hasOutline, hasChapters, hasIllustrations, hasHumanize, hasLayout, hasCover, hasExport });
-  console.log("[Artifacts] Outline content:", outlineArtifact);
+  // No-op for now
+
 
   // Helper to scroll to artifacts section and switch tab
   const viewArtifact = (stageName: string) => {
@@ -723,7 +708,6 @@ export default function ProjectWorkspacePage() {
         });
       }
     } catch (err) {
-      console.error("Share error:", err);
       toast({
         title: "Share Failed",
         description: "An unexpected error occurred.",
@@ -788,10 +772,10 @@ export default function ProjectWorkspacePage() {
                         stage.status === "completed"
                           ? "bg-primary text-primary-foreground"
                           : stage.status === "running"
-                          ? "bg-gold-100 text-gold-600"
-                          : stage.status === "error"
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-muted text-muted-foreground"
+                            ? "bg-gold-100 text-gold-600"
+                            : stage.status === "error"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-muted text-muted-foreground"
                       )}
                     >
                       {stage.status === "running" ? (
@@ -1508,9 +1492,8 @@ export default function ProjectWorkspacePage() {
         open={!!showCreditModal}
         onOpenChange={(open) => !open && setShowCreditModal(null)}
         title="Run Pipeline Stage"
-        description={`Running the ${
-          PIPELINE_STAGES.find((s) => s.id === showCreditModal)?.label
-        } stage will consume book credits.`}
+        description={`Running the ${PIPELINE_STAGES.find((s) => s.id === showCreditModal)?.label
+          } stage will consume book credits.`}
         creditCost={getCreditCost(showCreditModal || "")}
         creditType="book"
         onConfirm={confirmRunStage}
@@ -1570,7 +1553,7 @@ export default function ProjectWorkspacePage() {
             ) : previewFile?.type === "md" ? (
               <div className="rounded-lg border bg-muted/50 p-6">
                 <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-{`# ${project?.title || "Book Title"}
+                  {`# ${project?.title || "Book Title"}
 
 ## Chapter 1: The Beginning
 Once upon a time, in a cozy home filled with love and the gentle glow of lanterns...
@@ -1592,25 +1575,25 @@ Knowledge Base: ${project?.knowledgeBaseName || "Default KB"}`}
             ) : previewFile?.type === "json" ? (
               <div className="rounded-lg border bg-muted/50 p-6">
                 <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-{JSON.stringify({
-  title: project?.title,
-  author: "NoorStudio",
-  ageRange: project?.ageRange,
-  templateType: project?.templateType,
-  layoutStyle: project?.layoutStyle,
-  trimSize: project?.trimSize,
-  knowledgeBase: project?.knowledgeBaseName,
-  characters: characters.map(c => c.name),
-  createdAt: project?.createdAt,
-  exportedAt: project?.exportPackage?.generatedAt,
-  version: project?.exportPackage?.version,
-}, null, 2)}
+                  {JSON.stringify({
+                    title: project?.title,
+                    author: "NoorStudio",
+                    ageRange: project?.ageRange,
+                    templateType: project?.templateType,
+                    layoutStyle: project?.layoutStyle,
+                    trimSize: project?.trimSize,
+                    knowledgeBase: project?.knowledgeBaseName,
+                    characters: characters.map(c => c.name),
+                    createdAt: project?.createdAt,
+                    exportedAt: project?.exportPackage?.generatedAt,
+                    version: project?.exportPackage?.version,
+                  }, null, 2)}
                 </pre>
               </div>
             ) : (
               <div className="rounded-lg border bg-muted/50 p-6">
                 <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-{`NoorStudio License Agreement
+                  {`NoorStudio License Agreement
 
 This book was created using NoorStudio, an AI-powered
 Islamic children's book creation platform.
