@@ -217,7 +217,9 @@ export default function DemoViewerPage() {
           setError({ message: result.error || "Unknown error", type: result.errorType });
         }
       } catch (err) {
-        console.error("Error loading demo:", err);
+        if (import.meta.env.DEV) {
+          console.error("Error loading demo:", err);
+        }
         setError({ message: "Failed to load demo", type: "parse_error" });
       } finally {
         setIsLoading(false);

@@ -243,12 +243,14 @@ async function nanobananaImageGeneration(
   const size = req.size || defaultSize;
 
   try {
-    console.log("NanoBanana API call:", {
-      task: req.task,
-      promptLength: req.prompt.length,
-      references: req.references?.length || 0,
-      size,
-    });
+    if (env.NODE_ENV === "development") {
+      console.log("NanoBanana API call:", {
+        task: req.task,
+        promptLength: req.prompt.length,
+        references: req.references?.length || 0,
+        size,
+      });
+    }
 
     const response = await fetch(`${NANOBANANA_API_URL}/generate`, {
       method: "POST",

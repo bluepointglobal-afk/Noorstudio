@@ -8,6 +8,7 @@ import cors from "cors";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
 import { AppError, RateLimitError } from "./errors";
+import helmet from "helmet";
 
 const app = express();
 const PORT = env.PORT;
@@ -123,6 +124,36 @@ setInterval(() => {
 // ============================================
 // Middleware
 // ============================================
+
+// Baseline HTTP Hardening
+app.use(helmet());
+
+// Custom CSP to allow Vite, Supabase, and NanoBanana
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-inline/eval needed for Vite dev
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:",
+        "https://*.supabase.co", // Supabase Storage
+        "https://api.nanobanana.com", // NanoBanana API (if it returns direct image URLs)
+      ],
+      connectSrc: [
+        "'self'",
+        env.CLIENT_ORIGIN,
+        "https://*.supabase.co", // Supabase API/Storage
+        "https://api.nanobanana.com", // NanoBanana API
+      ],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  })
+);
 
 app.use(cors({
   origin: env.CLIENT_ORIGIN,
