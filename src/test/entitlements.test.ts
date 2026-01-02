@@ -1,4 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Must be before other imports that might use it
+vi.mock('@/lib/entitlements/entitlements', async (importOriginal) => {
+    const actual: any = await importOriginal();
+    return {
+        ...actual,
+        isDemoMode: vi.fn(() => false),
+    };
+});
+
 import {
     canExport,
     canCreateKBItem,
@@ -11,6 +21,7 @@ describe('Entitlements - Creator Plan Limits', () => {
     beforeEach(() => {
         localStorage.clear();
         setCurrentPlan('creator');
+        vi.mocked(isDemoMode).mockReturnValue(false);
     });
 
     it('blocks Export stage on Creator plan', () => {

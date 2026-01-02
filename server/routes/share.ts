@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { randomBytes } from "node:crypto";
 import { env } from "../env";
+import { ValidationError } from "../errors";
 
 const router = Router();
 
@@ -110,6 +111,11 @@ router.post("/upsert", async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate payload is valid JSON and not too large (e.g., max 5MB)
+    if (body.payload.length > 5 * 1024 * 1024) {
+      throw new ValidationError("Payload too large (max 5MB)");
+    }
+
     // Validate payload is valid JSON
     try {
       JSON.parse(body.payload);
@@ -131,7 +137,9 @@ router.post("/upsert", async (req: Request, res: Response) => {
       .single();
 
     // Use existing token or generate new one
-    let shareToken = existing?.share_token || generateShareToken();
+    let shareToken = (existing?.share_token && existing.share_token.length >= 32)
+      ? existing.share_token
+      : generateShareToken();
 
     // Calculate expiration if specified
     let expiresAt: string | null = null;
