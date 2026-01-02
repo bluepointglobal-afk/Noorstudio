@@ -3,6 +3,8 @@
 
 import { AssetStatus } from "@/lib/models";
 import { generateImage, ImageGenerationRequest } from "@/lib/ai/providers/imageProvider";
+import { CharacterSchema } from "@/lib/validation/schemas";
+import { validateArrayAndRepair } from "./validation";
 
 // ============================================
 // Types (Extended for full Character Studio)
@@ -153,7 +155,9 @@ export function getCharacters(): StoredCharacter[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return [];
-    return JSON.parse(stored) as StoredCharacter[];
+
+    const parsed = JSON.parse(stored);
+    return validateArrayAndRepair(STORAGE_KEY, parsed, CharacterSchema);
   } catch {
     console.error("Failed to parse characters from localStorage");
     return [];

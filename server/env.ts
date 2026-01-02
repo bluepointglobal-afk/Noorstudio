@@ -1,4 +1,14 @@
 import { z } from "zod";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// ESM compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from server/.env
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const envSchema = z.object({
     PORT: z.string().transform((v) => parseInt(v, 10)).default("3001"),
