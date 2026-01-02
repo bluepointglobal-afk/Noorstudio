@@ -4,6 +4,8 @@
 // - noorstudio.credits.ledger.v1
 
 import { CreditType, PlanTier } from "@/lib/models";
+import { CreditBalancesSchema, CreditLedgerEntrySchema } from "@/lib/validation/schemas";
+import { validateAndRepair, validateArrayAndRepair } from "./validation";
 
 // ============================================
 // Types
@@ -64,7 +66,9 @@ export function getBalances(): CreditBalances {
       seedDefaultBalancesIfEmpty();
       return DEFAULT_BALANCES;
     }
-    return JSON.parse(stored) as CreditBalances;
+
+    const parsed = JSON.parse(stored);
+    return validateAndRepair(BALANCES_KEY, parsed, CreditBalancesSchema, DEFAULT_BALANCES);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse credit balances from localStorage");
@@ -96,7 +100,9 @@ export function getLedger(): CreditLedgerEntry[] {
   try {
     const stored = localStorage.getItem(LEDGER_KEY);
     if (!stored) return [];
-    return JSON.parse(stored) as CreditLedgerEntry[];
+
+    const parsed = JSON.parse(stored);
+    return validateArrayAndRepair(LEDGER_KEY, parsed, CreditLedgerEntrySchema);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse credit ledger from localStorage");

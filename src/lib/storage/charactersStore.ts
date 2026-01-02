@@ -159,7 +159,9 @@ export function getCharacters(): StoredCharacter[] {
     const parsed = JSON.parse(stored);
     return validateArrayAndRepair(STORAGE_KEY, parsed, CharacterSchema);
   } catch {
-    console.error("Failed to parse characters from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse characters from localStorage");
+    }
     return [];
   }
 }
@@ -335,7 +337,9 @@ export async function generatePoseSheet(
           createdAt: new Date().toISOString(),
         });
       } catch (error) {
-        console.error(`Failed to generate pose "${poseName}" alternative ${altIdx + 1}:`, error);
+        if (import.meta.env.DEV) {
+          console.error(`Failed to generate pose "${poseName}" alternative ${altIdx + 1}:`, error);
+        }
         // Skip failed alternatives
       }
 
@@ -440,14 +444,18 @@ export async function regeneratePose(
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
-      console.error(`Failed to regenerate pose alternative ${altIdx + 1}:`, error);
+      if (import.meta.env.DEV) {
+        console.error(`Failed to regenerate pose alternative ${altIdx + 1}:`, error);
+      }
     }
   }
 
   onProgress?.(ALTERNATIVES_PER_POSE, ALTERNATIVES_PER_POSE);
 
   if (alternatives.length === 0) {
-    console.error(`Failed to regenerate pose: no alternatives generated`);
+    if (import.meta.env.DEV) {
+      console.error(`Failed to regenerate pose: no alternatives generated`);
+    }
     return null;
   }
 
@@ -509,7 +517,9 @@ export async function regenerateAllPoses(
           createdAt: new Date().toISOString(),
         });
       } catch (error) {
-        console.error(`Failed to regenerate pose "${poseName}" alternative ${altIdx + 1}:`, error);
+        if (import.meta.env.DEV) {
+          console.error(`Failed to regenerate pose "${poseName}" alternative ${altIdx + 1}:`, error);
+        }
       }
 
       completedGenerations++;

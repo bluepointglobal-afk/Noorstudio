@@ -192,7 +192,9 @@ export function listProjects(): StoredProject[] {
     const parsed = JSON.parse(stored);
     return validateArrayAndRepair(STORAGE_KEY, parsed, ProjectSchema);
   } catch {
-    console.error("Failed to parse projects from localStorage");
+    if (import.meta.env.DEV) {
+      console.error("Failed to parse projects from localStorage");
+    }
     return [];
   }
 }
