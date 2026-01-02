@@ -2,32 +2,102 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { demoCharacters, defaultPoses, Pose } from "@/lib/demo-data";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { ArrowLeft, Lock, RefreshCw, Check, History, Palette, User, BookOpen } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  ArrowLeft,
+  Lock,
+  Unlock,
+  RefreshCw,
+  Check,
+  History,
+  Palette,
+  User,
+  Sparkles,
+  Trash2,
+  AlertTriangle,
+  Plus,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
-import { useCredits } from "@/hooks/use-credits";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getCharacter,
+  StoredCharacter,
+  approvePose,
+  unappprovePose,
+  regeneratePose,
+  regenerateAllPoses,
+  lockCharacter,
+  unlockCharacter,
+  createNewVersion,
+  generatePoseSheet,
+  deleteCharacter,
+  getApprovedPoseCount,
+  canLockCharacter,
+  selectPoseAlternative,
+} from "@/lib/storage/charactersStore";
+import {
+  consumeCredits,
+  hasEnoughCredits,
+  getBalances,
+} from "@/lib/storage/creditsStore";
+import { AssetStatus } from "@/lib/models";
 
-const statusColors = {
+const statusColors: Record<AssetStatus, string> = {
   draft: "bg-gold-100 text-gold-600",
   approved: "bg-teal-100 text-teal-600",
   locked: "bg-muted text-muted-foreground",
 };
 
+const REGENERATE_SINGLE_COST = 1;
+const REGENERATE_ALL_COST = 8;
+const POSE_SHEET_COST = 10;
+
 export default function CharacterDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { consumeCharacterCredits, hasCharacterCredits } = useCredits();
-  
-  const character = demoCharacters.find((c) => c.id === id);
-  const [poses, setPoses] = useState<Pose[]>(defaultPoses);
+
+  const [character, setCharacter] = useState<StoredCharacter | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [showRegenerateAll, setShowRegenerateAll] = useState(false);
   const [showRegenerateSingle, setShowRegenerateSingle] = useState<number | null>(null);
+  const [showGeneratePoses, setShowGeneratePoses] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [credits, setCredits] = useState(getBalances());
+  const [expandedPoseId, setExpandedPoseId] = useState<number | null>(null); // For viewing alternatives
+
+  // Load character
+  useEffect(() => {
+    if (id) {
+      const char = getCharacter(id);
+      setCharacter(char);
+    }
+    setIsLoading(false);
+    setCredits(getBalances());
+  }, [id]);
+
+  const refreshCharacter = () => {
+    if (id) {
+      const char = getCharacter(id);
+      setCharacter(char);
+      setCredits(getBalances());
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout title="Loading...">
+        <div className="text-center py-12">
+          <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (!character) {
     return (
@@ -40,48 +110,215 @@ export default function CharacterDetailPage() {
     );
   }
 
-  const approvedCount = poses.filter((p) => p.status === "approved" || p.status === "locked").length;
-  const canLock = approvedCount >= 10;
+  const approvedCount = getApprovedPoseCount(character);
+  const canLock = canLockCharacter(character);
+  const isLocked = character.status === "locked";
 
+  // Handlers
   const handleApprovePose = (poseId: number) => {
-    setPoses((prev) =>
-      prev.map((p) => (p.id === poseId ? { ...p, status: "approved" } : p))
-    );
-    toast({ title: "Pose approved", description: `Pose ${poseId} has been approved.` });
+    const updated = approvePose(character.id, poseId);
+    if (updated) {
+      setCharacter(updated);
+      toast({ title: "Pose approved", description: `Pose has been approved.` });
+    }
   };
 
-  const handleRegeneratePose = (poseId: number) => {
+  const handleUnapprovePose = (poseId: number) => {
+    const updated = unappprovePose(character.id, poseId);
+    if (updated) {
+      setCharacter(updated);
+      toast({ title: "Pose unapproved", description: `Pose reverted to draft.` });
+    }
+  };
+
+  const handleSelectAlternative = (poseId: number, alternativeIndex: number) => {
+    const updated = selectPoseAlternative(character.id, poseId, alternativeIndex);
+    if (updated) {
+      setCharacter(updated);
+      toast({ title: "Alternative selected", description: `Pose updated with selected alternative.` });
+    }
+  };
+
+  const handleRegenerateSingle = async () => {
+    if (!showRegenerateSingle) return;
+
+    if (!hasEnoughCredits("character", REGENERATE_SINGLE_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${REGENERATE_SINGLE_COST} character credit.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
-    setTimeout(() => {
-      setPoses((prev) =>
-        prev.map((p) => (p.id === poseId ? { ...p, status: "draft" } : p))
-      );
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: REGENERATE_SINGLE_COST,
+      reason: `Regenerate pose for ${character.name}`,
+      entityType: "pose",
+      entityId: character.id,
+      meta: { poseId: showRegenerateSingle },
+    });
+
+    if (!result.success) {
       setIsGenerating(false);
       setShowRegenerateSingle(null);
-      toast({ title: "Pose regenerated", description: `Pose ${poseId} has been regenerated.` });
-    }, 1500);
+      toast({ title: "Failed", description: result.error, variant: "destructive" });
+      return;
+    }
+
+    try {
+      const updated = await regeneratePose(character.id, showRegenerateSingle);
+      if (updated) {
+        setCharacter(updated);
+        setCredits(getBalances());
+        toast({ title: "Pose regenerated", description: `1 credit used.` });
+      }
+    } catch (error) {
+      toast({ title: "Failed", description: "Failed to regenerate pose", variant: "destructive" });
+    }
+    setIsGenerating(false);
+    setShowRegenerateSingle(null);
   };
 
-  const handleRegenerateAll = () => {
+  const handleRegenerateAll = async () => {
+    if (!hasEnoughCredits("character", REGENERATE_ALL_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${REGENERATE_ALL_COST} character credits.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
-    setTimeout(() => {
-      setPoses(defaultPoses.map((p) => ({ ...p, status: "draft" })));
+
+    const result = consumeCredits({
+      type: "character",
+      amount: REGENERATE_ALL_COST,
+      reason: `Regenerate all poses for ${character.name}`,
+      entityType: "character",
+      entityId: character.id,
+      meta: { action: "regenerate_all" },
+    });
+
+    if (!result.success) {
       setIsGenerating(false);
       setShowRegenerateAll(false);
-      toast({ title: "All poses regenerated", description: "The entire pose sheet has been regenerated." });
-    }, 2500);
+      toast({ title: "Failed", description: result.error, variant: "destructive" });
+      return;
+    }
+
+    try {
+      const updated = await regenerateAllPoses(character.id);
+      if (updated) {
+        setCharacter(updated);
+        setCredits(getBalances());
+        toast({
+          title: "All poses regenerated",
+          description: `New version v${updated.version} created. ${REGENERATE_ALL_COST} credits used.`,
+        });
+      }
+    } catch (error) {
+      toast({ title: "Failed", description: "Failed to regenerate poses", variant: "destructive" });
+    }
+    setIsGenerating(false);
+    setShowRegenerateAll(false);
+  };
+
+  const handleGeneratePoseSheet = async () => {
+    if (!hasEnoughCredits("character", POSE_SHEET_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${POSE_SHEET_COST} character credits.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    const result = consumeCredits({
+      type: "character",
+      amount: POSE_SHEET_COST,
+      reason: `Generate 12-pose sheet for ${character.name}`,
+      entityType: "character",
+      entityId: character.id,
+      meta: { poseCount: 12 },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      setShowGeneratePoses(false);
+      toast({ title: "Failed", description: result.error, variant: "destructive" });
+      return;
+    }
+
+    try {
+      const updated = await generatePoseSheet(character.id);
+      if (updated) {
+        setCharacter(updated);
+        setCredits(getBalances());
+        toast({
+          title: "Pose sheet generated",
+          description: `12 poses created. ${POSE_SHEET_COST} credits used.`,
+        });
+      }
+    } catch (error) {
+      toast({ title: "Failed", description: "Failed to generate pose sheet", variant: "destructive" });
+    }
+    setIsGenerating(false);
+    setShowGeneratePoses(false);
   };
 
   const handleLockCharacter = () => {
-    setPoses((prev) => prev.map((p) => ({ ...p, status: "locked" })));
-    toast({ title: "Character locked", description: `${character.name} is now locked for production use.` });
+    const updated = lockCharacter(character.id);
+    if (updated) {
+      setCharacter(updated);
+      toast({
+        title: "Character locked",
+        description: `${character.name} is now locked for production use.`,
+      });
+    }
   };
 
-  const versionHistory = [
-    { version: character.version, date: character.createdAt, changes: "Current version" },
-    { version: character.version - 1, date: "2024-01-10", changes: "Updated color palette" },
-    { version: 1, date: "2024-01-05", changes: "Initial creation" },
-  ].filter((v) => v.version > 0);
+  const handleUnlockCharacter = () => {
+    const updated = unlockCharacter(character.id);
+    if (updated) {
+      setCharacter(updated);
+      setShowUnlockModal(false);
+      toast({
+        title: "Character unlocked",
+        description: `${character.name} can now be edited.`,
+      });
+    }
+  };
+
+  const handleCreateNewVersion = () => {
+    const updated = createNewVersion(character.id);
+    if (updated) {
+      setCharacter(updated);
+      setShowUnlockModal(false);
+      toast({
+        title: "New version created",
+        description: `${character.name} v${updated.version} is ready for editing.`,
+      });
+    }
+  };
+
+  const handleDeleteCharacter = () => {
+    const success = deleteCharacter(character.id);
+    if (success) {
+      toast({
+        title: "Character deleted",
+        description: `${character.name} has been deleted.`,
+      });
+      navigate("/app/characters");
+    }
+  };
 
   return (
     <AppLayout
@@ -93,10 +330,16 @@ export default function CharacterDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          {canLock && character.status !== "locked" && (
+          {canLock && (
             <Button variant="hero" onClick={handleLockCharacter}>
               <Lock className="w-4 h-4 mr-2" />
               Lock Character
+            </Button>
+          )}
+          {isLocked && (
+            <Button variant="outline" onClick={() => setShowUnlockModal(true)}>
+              <Unlock className="w-4 h-4 mr-2" />
+              Unlock / New Version
             </Button>
           )}
         </div>
@@ -111,6 +354,10 @@ export default function CharacterDetailPage() {
                 src={character.imageUrl}
                 alt={character.name}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    "https://placehold.co/400x400/e2e8f0/64748b?text=" + character.name.charAt(0);
+                }}
               />
             </div>
             <div className="space-y-3">
@@ -120,18 +367,35 @@ export default function CharacterDetailPage() {
               </div>
               <div className="flex flex-wrap gap-1">
                 {character.traits.map((trait) => (
-                  <Badge key={trait} variant="outline" className="text-xs">
+                  <Badge key={trait} variant="outline" className="text-xs capitalize">
                     {trait}
                   </Badge>
                 ))}
               </div>
-              <div className="pt-3 border-t border-border">
-                <p className="text-sm text-muted-foreground mb-1">Age Range</p>
-                <p className="font-medium">{character.ageRange}</p>
+              <div className="pt-3 border-t border-border space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Age Range</span>
+                  <span className="font-medium">{character.ageRange}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Poses Approved</span>
+                  <span className="font-medium">{approvedCount}/12</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Versions</span>
+                  <span className="font-medium">{character.versions.length + 1}</span>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Knowledge Level</p>
-                <p className="font-medium capitalize">{character.knowledgeLevel}</p>
+              <div className="pt-3 border-t border-border">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setShowDeleteModal(true)}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Character
+                </Button>
               </div>
             </div>
           </div>
@@ -140,84 +404,19 @@ export default function CharacterDetailPage() {
         {/* Tabs */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="poses" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="poses">Pose Sheet</TabsTrigger>
-              <TabsTrigger value="persona">Persona</TabsTrigger>
-              <TabsTrigger value="visual">Visual DNA</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="versions">Versions</TabsTrigger>
             </TabsList>
 
-            {/* Pose Sheet Tab */}
-            <TabsContent value="poses" className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">12-Pose Grid</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {approvedCount}/12 poses approved • Need 10+ to lock
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRegenerateAll(true)}
-                  disabled={character.status === "locked"}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Regenerate All
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-                {poses.map((pose) => (
-                  <div
-                    key={pose.id}
-                    className={cn(
-                      "card-glow p-3 space-y-2",
-                      pose.status === "locked" && "opacity-75"
-                    )}
-                  >
-                    <div className="aspect-square bg-gradient-subtle rounded-lg flex items-center justify-center">
-                      <User className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs font-medium truncate">{pose.name}</p>
-                      <Badge className={cn("text-xs mt-1", statusColors[pose.status])}>
-                        {pose.status}
-                      </Badge>
-                    </div>
-                    {character.status !== "locked" && (
-                      <div className="flex gap-1">
-                        {pose.status === "draft" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="flex-1 h-7 text-xs"
-                            onClick={() => handleApprovePose(pose.id)}
-                          >
-                            <Check className="w-3 h-3" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="flex-1 h-7 text-xs"
-                          onClick={() => setShowRegenerateSingle(pose.id)}
-                          disabled={pose.status === "locked"}
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* Persona Tab */}
-            <TabsContent value="persona" className="space-y-6">
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-6">
+              {/* Persona */}
               <div className="card-glow p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-4">
                   <User className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold">Character Persona</h3>
+                  <h3 className="font-semibold">Persona</h3>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
@@ -233,38 +432,50 @@ export default function CharacterDetailPage() {
                     <p className="font-medium">{character.ageRange}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Speech Style</p>
-                    <p className="font-medium">{character.speechStyle}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Speaking Style</p>
+                    <p className="font-medium">{character.speakingStyle || "Not specified"}</p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-2">Traits</p>
-                  <div className="flex flex-wrap gap-2">
-                    {character.traits.map((trait) => (
-                      <Badge key={trait} variant="secondary">
-                        {trait}
-                      </Badge>
-                    ))}
+                {character.traits.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Traits</p>
+                    <div className="flex flex-wrap gap-2">
+                      {character.traits.map((trait) => (
+                        <Badge key={trait} variant="secondary" className="capitalize">
+                          {trait}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            </TabsContent>
 
-            {/* Visual DNA Tab */}
-            <TabsContent value="visual" className="space-y-6">
+              {/* Visual DNA */}
               <div className="card-glow p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-4">
                   <Palette className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold">Visual DNA</h3>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Appearance</p>
-                  <p className="font-medium">{character.appearance}</p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Skin Tone</p>
+                    <p className="font-medium">{character.visualDNA.skinTone || "Not specified"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Hair / Hijab</p>
+                    <p className="font-medium">{character.visualDNA.hairOrHijab || "Not specified"}</p>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Modesty Rules</p>
-                  <p className="font-medium">{character.modestyRules}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Outfit Rules</p>
+                  <p className="font-medium">{character.visualDNA.outfitRules || "Not specified"}</p>
                 </div>
+                {character.visualDNA.accessories && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Accessories</p>
+                    <p className="font-medium">{character.visualDNA.accessories}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Color Palette</p>
                   <div className="flex gap-2">
@@ -279,36 +490,254 @@ export default function CharacterDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Modesty Rules */}
+              <div className="card-glow p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Check className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold">Modesty Rules</h3>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-5 h-5 rounded-full flex items-center justify-center text-xs",
+                      character.modestyRules.hijabAlways ? "bg-primary text-white" : "bg-muted"
+                    )}>
+                      {character.modestyRules.hijabAlways && <Check className="w-3 h-3" />}
+                    </div>
+                    <span className="text-sm">Hijab Always</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-5 h-5 rounded-full flex items-center justify-center text-xs",
+                      character.modestyRules.longSleeves ? "bg-primary text-white" : "bg-muted"
+                    )}>
+                      {character.modestyRules.longSleeves && <Check className="w-3 h-3" />}
+                    </div>
+                    <span className="text-sm">Long Sleeves</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-5 h-5 rounded-full flex items-center justify-center text-xs",
+                      character.modestyRules.looseClothing ? "bg-primary text-white" : "bg-muted"
+                    )}>
+                      {character.modestyRules.looseClothing && <Check className="w-3 h-3" />}
+                    </div>
+                    <span className="text-sm">Loose Clothing</span>
+                  </div>
+                </div>
+                {character.modestyRules.notes && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Additional Notes</p>
+                    <p className="font-medium">{character.modestyRules.notes}</p>
+                  </div>
+                )}
+              </div>
             </TabsContent>
 
-            {/* History Tab */}
-            <TabsContent value="history" className="space-y-6">
+            {/* Pose Sheet Tab */}
+            <TabsContent value="poses" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">12-Pose Grid</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {approvedCount}/12 poses approved {approvedCount >= 10 ? "• Ready to lock" : "• Need 10+ to lock"}
+                  </p>
+                </div>
+                {character.poseSheetGenerated ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRegenerateAll(true)}
+                    disabled={isLocked || isGenerating}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Regenerate All ({REGENERATE_ALL_COST} credits)
+                  </Button>
+                ) : (
+                  <Button
+                    variant="hero"
+                    onClick={() => setShowGeneratePoses(true)}
+                    disabled={isGenerating}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate Poses ({POSE_SHEET_COST} credits)
+                  </Button>
+                )}
+              </div>
+
+              {!character.poseSheetGenerated ? (
+                <div className="text-center py-12 card-glow">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No Pose Sheet Yet</h3>
+                  <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                    Generate a 12-pose sheet to create consistent character illustrations.
+                  </p>
+                  <Button variant="hero" onClick={() => setShowGeneratePoses(true)} disabled={isGenerating}>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate 12-Pose Sheet
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                  {character.poses.map((pose) => (
+                    <div
+                      key={pose.id}
+                      className={cn(
+                        "card-glow p-3 space-y-2",
+                        pose.status === "locked" && "opacity-75",
+                        expandedPoseId === pose.id && "ring-2 ring-primary"
+                      )}
+                    >
+                      {/* Main pose image - clickable to show alternatives */}
+                      <div
+                        className="aspect-square bg-gradient-subtle rounded-lg overflow-hidden flex items-center justify-center cursor-pointer relative group"
+                        onClick={() => pose.alternatives?.length > 0 && setExpandedPoseId(expandedPoseId === pose.id ? null : pose.id)}
+                      >
+                        {pose.imageUrl ? (
+                          <img
+                            src={pose.imageUrl}
+                            alt={pose.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <User className="w-8 h-8 text-muted-foreground" />
+                        )}
+                        {/* Show alternatives count badge */}
+                        {pose.alternatives?.length > 1 && (
+                          <div className="absolute top-1 right-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                            {pose.alternatives.length}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Alternatives thumbnail row - shown when expanded */}
+                      {expandedPoseId === pose.id && pose.alternatives?.length > 1 && (
+                        <div className="flex gap-1">
+                          {pose.alternatives.map((alt, altIdx) => (
+                            <button
+                              key={alt.id}
+                              onClick={() => handleSelectAlternative(pose.id, altIdx)}
+                              className={cn(
+                                "flex-1 aspect-square rounded overflow-hidden border-2 transition-all",
+                                pose.selectedAlternative === altIdx
+                                  ? "border-primary ring-1 ring-primary"
+                                  : "border-transparent opacity-70 hover:opacity-100"
+                              )}
+                            >
+                              <img
+                                src={alt.imageUrl}
+                                alt={`Alternative ${altIdx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="text-center">
+                        <p className="text-xs font-medium truncate">{pose.name}</p>
+                        <Badge className={cn("text-xs mt-1", statusColors[pose.status])}>
+                          {pose.status}
+                        </Badge>
+                      </div>
+                      {!isLocked && (
+                        <div className="flex gap-1">
+                          {pose.status === "draft" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="flex-1 h-7 text-xs"
+                              onClick={() => handleApprovePose(pose.id)}
+                              title="Approve pose"
+                            >
+                              <Check className="w-3 h-3" />
+                            </Button>
+                          )}
+                          {pose.status === "approved" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="flex-1 h-7 text-xs"
+                              onClick={() => handleUnapprovePose(pose.id)}
+                              title="Unapprove pose"
+                            >
+                              <Check className="w-3 h-3 text-primary" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setShowRegenerateSingle(pose.id)}
+                            disabled={pose.status === "locked" || isGenerating}
+                            title="Regenerate pose"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Versions Tab */}
+            <TabsContent value="versions" className="space-y-6">
               <div className="card-glow p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <History className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold">Version History</h3>
                 </div>
                 <div className="space-y-4">
-                  {versionHistory.map((v, idx) => (
-                    <div
-                      key={v.version}
-                      className={cn(
-                        "flex items-start gap-4 p-3 rounded-lg",
-                        idx === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/50"
-                      )}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                        v{v.version}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{v.changes}</p>
-                        <p className="text-sm text-muted-foreground">{v.date}</p>
-                      </div>
-                      {idx === 0 && (
-                        <Badge className="bg-primary text-primary-foreground">Current</Badge>
-                      )}
+                  {/* Current version */}
+                  <div className="flex items-start gap-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                      v{character.version}
                     </div>
-                  ))}
+                    <div className="flex-1">
+                      <p className="font-medium">Current Version</p>
+                      <p className="text-sm text-muted-foreground">
+                        {approvedCount}/12 poses • {character.status}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Updated: {new Date(character.updatedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge className="bg-primary text-primary-foreground">Current</Badge>
+                  </div>
+
+                  {/* Previous versions */}
+                  {character.versions.length > 0 ? (
+                    character.versions
+                      .slice()
+                      .reverse()
+                      .map((v) => (
+                        <div
+                          key={v.version}
+                          className="flex items-start gap-4 p-4 rounded-lg bg-muted/50"
+                        >
+                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold">
+                            v{v.version}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium">{v.note}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(v.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No previous versions. Lock the character to create a version snapshot.
+                    </p>
+                  )}
                 </div>
               </div>
             </TabsContent>
@@ -321,8 +750,8 @@ export default function CharacterDetailPage() {
         open={showRegenerateAll}
         onOpenChange={setShowRegenerateAll}
         title="Regenerate All Poses"
-        description="This will regenerate all 12 poses and consume 5 character credits. Any approved poses will need to be re-approved."
-        creditCost={5}
+        description={`This will regenerate all 12 poses and create a new version (v${character.version + 1}). Any approved poses will need to be re-approved.`}
+        creditCost={REGENERATE_ALL_COST}
         creditType="character"
         onConfirm={handleRegenerateAll}
         isLoading={isGenerating}
@@ -332,12 +761,78 @@ export default function CharacterDetailPage() {
         open={showRegenerateSingle !== null}
         onOpenChange={(open) => !open && setShowRegenerateSingle(null)}
         title="Regenerate Pose"
-        description="This will regenerate this pose and consume 1 character credit."
-        creditCost={1}
+        description="This will regenerate this pose. The pose will need to be re-approved."
+        creditCost={REGENERATE_SINGLE_COST}
         creditType="character"
-        onConfirm={() => showRegenerateSingle && handleRegeneratePose(showRegenerateSingle)}
+        onConfirm={handleRegenerateSingle}
         isLoading={isGenerating}
       />
+
+      <CreditConfirmModal
+        open={showGeneratePoses}
+        onOpenChange={setShowGeneratePoses}
+        title="Generate Pose Sheet"
+        description={`Generate a 12-pose character sheet for ${character.name}.`}
+        creditCost={POSE_SHEET_COST}
+        creditType="character"
+        onConfirm={handleGeneratePoseSheet}
+        isLoading={isGenerating}
+      />
+
+      {/* Unlock Modal */}
+      <Dialog open={showUnlockModal} onOpenChange={setShowUnlockModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-gold-500" />
+              Unlock or Create New Version?
+            </DialogTitle>
+            <DialogDescription>
+              This character is locked for production. Choose how to proceed:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <Button variant="outline" className="w-full justify-start" onClick={handleUnlockCharacter}>
+              <Unlock className="w-4 h-4 mr-2" />
+              Unlock Character
+              <span className="ml-auto text-xs text-muted-foreground">Edit existing v{character.version}</span>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" onClick={handleCreateNewVersion}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create New Version
+              <span className="ml-auto text-xs text-muted-foreground">Start fresh as v{character.version + 1}</span>
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowUnlockModal(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" />
+              Delete Character?
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete {character.name} and all associated poses. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setShowDeleteModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteCharacter}>
+              Delete Character
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

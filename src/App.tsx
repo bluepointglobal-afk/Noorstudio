@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import ExamplesPage from "./pages/ExamplesPage";
 import PricingPage from "./pages/PricingPage";
+import TemplatesPage from "./pages/TemplatesPage";
 import DashboardPage from "./pages/app/DashboardPage";
 import CharactersPage from "./pages/app/CharactersPage";
 import CharacterDetailPage from "./pages/app/CharacterDetailPage";
@@ -15,6 +16,7 @@ import KnowledgeBasePage from "./pages/app/KnowledgeBasePage";
 import BookBuilderPage from "./pages/app/BookBuilderPage";
 import ProjectWorkspacePage from "./pages/app/ProjectWorkspacePage";
 import BillingPage from "./pages/app/BillingPage";
+import DemoViewerPage from "./pages/DemoViewerPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,9 +33,12 @@ const App = () => (
           <Route path="/examples" element={<ExamplesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/product" element={<HomePage />} />
-          <Route path="/templates" element={<HomePage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/faq" element={<HomePage />} />
-          
+
+          {/* Demo Routes (public) */}
+          <Route path="/demo/:id" element={<DemoViewerPage />} />
+
           {/* App Routes */}
           <Route path="/app/dashboard" element={<DashboardPage />} />
           <Route path="/app/universes" element={<UniversesPage />} />

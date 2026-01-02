@@ -83,7 +83,9 @@ export function CreditConfirmModal({
             </AlertDialogAction>
           ) : (
             <AlertDialogAction asChild>
-              <a href="/app/billing">Buy Credits</a>
+              <a href={`/app/billing?need=${creditType}`}>
+                Buy {creditLabel}
+              </a>
             </AlertDialogAction>
           )}
         </AlertDialogFooter>

@@ -1,9 +1,11 @@
 import { AppSidebar } from "./AppSidebar";
-import { CreditBadge } from "@/components/shared/CreditBadge";
-import { demoUserCredits } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Users, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { getBalances, seedDefaultBalancesIfEmpty, CreditBalances } from "@/lib/storage/creditsStore";
+import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -12,13 +14,52 @@ interface AppLayoutProps {
   actions?: React.ReactNode;
 }
 
+function CreditIndicator({ type, current, icon: Icon }: { type: string; current: number; icon: React.ElementType }) {
+  const isLow = current < 10;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
+        isLow
+          ? "bg-destructive/10 text-destructive"
+          : "bg-muted hover:bg-muted/80"
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      <span>{current}</span>
+    </div>
+  );
+}
+
 export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
-  const credits = demoUserCredits;
+  const navigate = useNavigate();
+  const [credits, setCredits] = useState<CreditBalances>({ characterCredits: 0, bookCredits: 0, plan: "author" });
+
+  // Load credits on mount and set up refresh
+  useEffect(() => {
+    seedDefaultBalancesIfEmpty();
+    setCredits(getBalances());
+
+    // Refresh credits periodically (every 2 seconds) to catch updates
+    const interval = setInterval(() => {
+      setCredits(getBalances());
+    }, 2000);
+
+    // Listen for storage changes
+    const handleStorage = () => setCredits(getBalances());
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar />
-      
+
       {/* Top Bar */}
       <header className="fixed top-0 left-64 right-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-6">
         <div className="flex items-center gap-4 flex-1">
@@ -31,18 +72,23 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-2">
-            <CreditBadge
+          {/* Clickable Credits Indicator */}
+          <button
+            onClick={() => navigate("/app/billing")}
+            className="hidden md:flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            title="View billing & credits"
+          >
+            <CreditIndicator
               type="character"
               current={credits.characterCredits}
-              max={credits.characterCreditsMax}
+              icon={Users}
             />
-            <CreditBadge
+            <CreditIndicator
               type="book"
               current={credits.bookCredits}
-              max={credits.bookCreditsMax}
+              icon={BookOpen}
             />
-          </div>
+          </button>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full" />
