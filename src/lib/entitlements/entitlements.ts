@@ -8,13 +8,13 @@
 const DEMO_MODE_KEY = "noorstudio.demo_mode.v1";
 
 export function isDemoMode(): boolean {
-  // Always enable demo mode in development
-  if (import.meta.env.DEV) return true;
   try {
-    return localStorage.getItem(DEMO_MODE_KEY) === "true";
-  } catch {
-    return false;
-  }
+    const stored = localStorage.getItem(DEMO_MODE_KEY);
+    if (stored !== null) return stored === "true";
+  } catch { }
+
+  // Default to true in development, false otherwise
+  return !!import.meta.env.DEV;
 }
 
 export function setDemoMode(enabled: boolean): void {
