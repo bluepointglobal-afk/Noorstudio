@@ -19,7 +19,9 @@ let supabaseClient: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn("Supabase not configured. Demo sharing will be local-only.");
+    if (import.meta.env.DEV) {
+      console.warn("Supabase not configured. Demo sharing will be local-only.");
+    }
     return null;
   }
 
@@ -81,13 +83,17 @@ export async function getSharedProject(
 
     if (error) {
       // Not found or RLS blocked (expired, wrong token)
-      console.warn("Shared project not found or access denied:", error.code);
+      if (import.meta.env.DEV) {
+        console.warn("Shared project not found or access denied:", error.code);
+      }
       return null;
     }
 
     return data as SharedProject;
   } catch (err) {
-    console.error("Error fetching shared project:", err);
+    if (import.meta.env.DEV) {
+      console.error("Error fetching shared project:", err);
+    }
     return null;
   }
 }
