@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { env } from "../env";
 
 const router = Router();
 
@@ -11,8 +12,8 @@ const router = Router();
 // Configuration
 // ============================================
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const SUPABASE_URL = env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Initialize Supabase client with service role (server-only)
 let supabaseAdmin: SupabaseClient | null = null;
@@ -40,7 +41,6 @@ interface UpsertShareResponse {
   projectId?: string;
   shareToken?: string;
   shareUrl?: string;
-  error?: string;
 }
 
 // ============================================
@@ -83,9 +83,11 @@ router.post("/upsert", async (req: Request, res: Response) => {
     // Check Supabase is configured
     if (!isSupabaseConfigured()) {
       res.status(503).json({
-        success: false,
-        error: "Sharing service not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
-      } as UpsertShareResponse);
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Sharing service not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+        },
+      });
       return;
     }
 
@@ -94,17 +96,21 @@ router.post("/upsert", async (req: Request, res: Response) => {
     // Validate request
     if (!body.projectId || typeof body.projectId !== "string") {
       res.status(400).json({
-        success: false,
-        error: "Missing required field: projectId",
-      } as UpsertShareResponse);
+        error: {
+          code: "BAD_REQUEST",
+          message: "Missing required field: projectId",
+        },
+      });
       return;
     }
 
     if (!body.payload || typeof body.payload !== "string") {
       res.status(400).json({
-        success: false,
-        error: "Missing required field: payload",
-      } as UpsertShareResponse);
+        error: {
+          code: "BAD_REQUEST",
+          message: "Missing required field: payload",
+        },
+      });
       return;
     }
 
@@ -113,9 +119,11 @@ router.post("/upsert", async (req: Request, res: Response) => {
       JSON.parse(body.payload);
     } catch {
       res.status(400).json({
-        success: false,
-        error: "Invalid payload: must be valid JSON string",
-      } as UpsertShareResponse);
+        error: {
+          code: "BAD_REQUEST",
+          message: "Invalid payload: must be valid JSON string",
+        },
+      });
       return;
     }
 
@@ -156,14 +164,17 @@ router.post("/upsert", async (req: Request, res: Response) => {
     if (upsertError) {
       console.error("Supabase upsert error:", upsertError);
       res.status(500).json({
-        success: false,
-        error: "Failed to save shared project",
-      } as UpsertShareResponse);
+        error: {
+          code: "DATABASE_ERROR",
+          message: "Failed to save shared project",
+          details: env.NODE_ENV === "development" ? upsertError : undefined,
+        },
+      });
       return;
     }
 
     // Build share URL (client origin from request or env)
-    const clientOrigin = req.headers.origin || process.env.CLIENT_ORIGIN || "http://localhost:5173";
+    const clientOrigin = req.headers.origin || env.CLIENT_ORIGIN;
     const shareUrl = `${clientOrigin}/demo/${body.projectId}?t=${shareToken}`;
 
     res.json({
@@ -172,12 +183,15 @@ router.post("/upsert", async (req: Request, res: Response) => {
       shareToken,
       shareUrl,
     } as UpsertShareResponse);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Share upsert error:", error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    } as UpsertShareResponse);
+    res.status(error.status || 500).json({
+      error: {
+        code: error.code || "SHARE_UPSERT_FAILED",
+        message: error.message || "Failed to upsert share",
+        details: env.NODE_ENV === "development" ? error.stack : undefined,
+      },
+    });
   }
 });
 
