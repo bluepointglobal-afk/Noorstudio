@@ -14,7 +14,7 @@ Features ordered by dependency chain. Complete top-to-bottom.
 
 | # | Feature | Status | Blocks | PRD | Ralph |
 |---|---------|--------|--------|-----|-------|
-| 1 | Image Generation (NanoBanana) | 🟡 60% | Illustrations, Cover, full pipeline | ⬜ | ⬜ |
+| 1 | Image Generation (NanoBanana) | 🔄 50% | Illustrations, Cover, full pipeline | ✅ | 🔄 5/10 |
 | 2 | Layout Stage | 🟡 20% | Export (need page composition) | ⬜ | ⬜ |
 | 3 | Cover Stage | 🟡 20% | Export (need cover images) | ⬜ | ⬜ |
 | 4 | PDF/EPUB Export | 🟡 40% | Users downloading books | ⬜ | ⬜ |
