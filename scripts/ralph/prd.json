@@ -82,8 +82,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added ALTERNATIVES_PER_POSE=3, POSE_NAME_TO_TYPE mapping. Created generateCharacterReferenceSheet() that generates 12x3=36 images using buildCharacterPosePrompt(). Uses character ID hash as seed for consistency. Stores poses with alternatives in character record. Typecheck passes."
     },
     {
       "id": "US-006",

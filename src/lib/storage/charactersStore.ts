@@ -6,6 +6,11 @@ import { generateImage, ImageGenerationRequest } from "@/lib/ai/providers/imageP
 import { CharacterSchema } from "@/lib/validation/schemas";
 import { validateArrayAndRepair } from "./validation";
 import { getNamespacedKey } from "./keys";
+import {
+  buildCharacterPosePrompt,
+  PoseType,
+  ALL_POSE_TYPES,
+} from "@/lib/ai/imagePrompts";
 
 // ============================================
 // Types (Extended for full Character Studio)
@@ -88,6 +93,25 @@ export interface StoredCharacter {
 // ============================================
 
 const STORAGE_KEY = "noorstudio.characters.v1";
+
+// Number of alternative images to generate per pose
+export const ALTERNATIVES_PER_POSE = 3;
+
+// Map pose names to PoseType for prompt building
+const POSE_NAME_TO_TYPE: Record<string, PoseType> = {
+  "Front": "front",
+  "Side": "side",
+  "3/4 View": "three-quarter",
+  "Walking": "walking",
+  "Running": "running",
+  "Sitting": "sitting",
+  "Reading": "reading",
+  "Praying": "praying",
+  "Smiling": "smiling",
+  "Surprised": "surprised",
+  "Pointing": "pointing",
+  "Thinking": "thinking",
+};
 
 export const DEFAULT_POSE_NAMES = [
   "Front",
@@ -455,6 +479,146 @@ ${modestyRules.hijabAlways ? "□ Hijab visible and covering all hair" : ""}
 □ No text or labels`.trim();
 }
 
+
+// ============================================
+// Pose Prompt Builder (uses imagePrompts.ts)
+// ============================================
+
+/**
+ * Build a prompt for a specific pose using the imagePrompts module.
+ * @param character - The character to generate pose for
+ * @param poseName - The pose name (e.g., "Front", "Walking")
+ * @param alternativeIndex - Which alternative (0, 1, 2) for seed variation
+ */
+function buildPosePrompt(
+  character: StoredCharacter,
+  poseName: string,
+  alternativeIndex: number
+): string {
+  const poseType = POSE_NAME_TO_TYPE[poseName] || "front";
+
+  const result = buildCharacterPosePrompt({
+    character,
+    pose: poseType,
+    alternatives: alternativeIndex + 1, // Used for seed variation hint
+  });
+
+  // Add variation hint for different alternatives
+  const variationHint = alternativeIndex > 0
+    ? `\n\n## VARIATION NOTE\nThis is alternative ${alternativeIndex + 1} of 3. Add subtle variation in pose angle or expression while maintaining exact character identity.`
+    : "";
+
+  return result.prompt + variationHint;
+}
+
+/**
+ * Generate a complete reference sheet with all 12 poses, 3 alternatives each.
+ * This is the main function for US-005.
+ * @param characterId - Character to generate sheet for
+ * @param onProgress - Progress callback (completed, total, poseName)
+ * @param seed - Optional seed for consistent generation
+ */
+export async function generateCharacterReferenceSheet(
+  characterId: string,
+  onProgress?: (completed: number, total: number, poseName?: string) => void,
+  seed?: number
+): Promise<StoredCharacter | null> {
+  const character = getCharacter(characterId);
+  if (!character) return null;
+
+  // Use character ID hash as default seed for consistency
+  const baseSeed = seed ?? character.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+
+  const now = new Date().toISOString();
+  const updatedPoses: CharacterPose[] = [];
+  const totalGenerations = ALL_POSE_TYPES.length * ALTERNATIVES_PER_POSE; // 12 * 3 = 36
+  let completedGenerations = 0;
+
+  // Generate each of the 12 poses
+  for (let poseIdx = 0; poseIdx < DEFAULT_POSE_NAMES.length; poseIdx++) {
+    const poseName = DEFAULT_POSE_NAMES[poseIdx];
+    const poseType = POSE_NAME_TO_TYPE[poseName] || "front";
+    const alternatives: PoseAlternative[] = [];
+
+    // Generate 3 alternatives for each pose
+    for (let altIdx = 0; altIdx < ALTERNATIVES_PER_POSE; altIdx++) {
+      onProgress?.(completedGenerations, totalGenerations, `${poseName} (${altIdx + 1}/${ALTERNATIVES_PER_POSE})`);
+
+      try {
+        // Get prompt from imagePrompts module
+        const posePromptResult = buildCharacterPosePrompt({
+          character,
+          pose: poseType,
+        });
+
+        // Add variation hint for alternatives
+        const variationHint = altIdx > 0
+          ? `\n\nVARIATION ${altIdx + 1}: Subtle variation in pose angle or expression while maintaining exact character identity.`
+          : "";
+
+        const request: ImageGenerationRequest = {
+          prompt: posePromptResult.prompt + variationHint,
+          references: character.imageUrl ? [character.imageUrl] : undefined,
+          style: character.visualDNA.style || "pixar-3d",
+          width: 768,
+          height: 1024, // Portrait for individual poses
+          stage: "illustrations",
+          attemptId: `pose-${poseIdx}-alt-${altIdx}-seed-${baseSeed + poseIdx * 10 + altIdx}`,
+        };
+
+        const response = await generateImage(request);
+
+        alternatives.push({
+          id: altIdx + 1,
+          imageUrl: response.imageUrl,
+          selected: altIdx === 0, // First alternative selected by default
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error(`Failed to generate pose "${poseName}" alternative ${altIdx + 1}:`, error);
+        }
+        // Continue with other alternatives even if one fails
+      }
+
+      completedGenerations++;
+    }
+
+    // Create pose entry with alternatives
+    const selectedAlt = alternatives.find(a => a.selected) || alternatives[0];
+    updatedPoses.push({
+      id: poseIdx + 1,
+      name: poseName,
+      status: alternatives.length > 0 ? "draft" as AssetStatus : "draft" as AssetStatus,
+      imageUrl: selectedAlt?.imageUrl,
+      alternatives,
+      selectedAlternative: 0,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  onProgress?.(totalGenerations, totalGenerations, "Complete");
+
+  // Use first pose's first alternative as the reference sheet thumbnail
+  const poseSheetThumbnail = updatedPoses[0]?.alternatives[0]?.imageUrl;
+
+  // Create version entry
+  const newVersion: CharacterVersion = {
+    version: character.version + 1,
+    createdAt: now,
+    note: "Generated 12-pose reference sheet with 3 alternatives each",
+    snapshotPoseSheetImageUrl: poseSheetThumbnail,
+  };
+
+  return updateCharacter(characterId, {
+    poses: updatedPoses,
+    poseSheetGenerated: true,
+    poseSheetUrl: poseSheetThumbnail,
+    version: character.version + 1,
+    versions: [...character.versions, newVersion],
+    status: "draft", // Reset to draft for review
+  });
+}
 
 // ============================================
 // Pose Management
