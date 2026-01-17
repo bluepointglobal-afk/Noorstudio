@@ -449,6 +449,239 @@ ${buildModestyConstraints(mainCharacters, kbSummary)}
 }
 
 // ============================================
+// Character Pose Types & Templates
+// ============================================
+
+export type PoseType =
+  | "front"
+  | "side"
+  | "three-quarter"
+  | "walking"
+  | "running"
+  | "sitting"
+  | "reading"
+  | "praying"
+  | "smiling"
+  | "surprised"
+  | "pointing"
+  | "thinking";
+
+export const ALL_POSE_TYPES: PoseType[] = [
+  "front",
+  "side",
+  "three-quarter",
+  "walking",
+  "running",
+  "sitting",
+  "reading",
+  "praying",
+  "smiling",
+  "surprised",
+  "pointing",
+  "thinking",
+];
+
+const POSE_DESCRIPTIONS: Record<PoseType, { name: string; description: string; bodyPosition: string }> = {
+  front: {
+    name: "Front View",
+    description: "Character facing directly forward, neutral standing pose",
+    bodyPosition: "Standing straight, arms relaxed at sides, facing camera directly, both eyes visible",
+  },
+  side: {
+    name: "Side Profile",
+    description: "Character in complete side profile view",
+    bodyPosition: "Standing in full side profile, one arm visible, looking forward, profile of face",
+  },
+  "three-quarter": {
+    name: "3/4 View",
+    description: "Character at three-quarter angle, slight turn from front",
+    bodyPosition: "Body turned 45 degrees from front, both eyes visible, slight head tilt, natural stance",
+  },
+  walking: {
+    name: "Walking",
+    description: "Character mid-stride in a natural walking motion",
+    bodyPosition: "One leg forward, opposite arm forward, natural stride, looking ahead with purpose",
+  },
+  running: {
+    name: "Running",
+    description: "Character in dynamic running pose",
+    bodyPosition: "Legs in mid-run stride, arms bent at elbows pumping, body leaning slightly forward, joyful expression",
+  },
+  sitting: {
+    name: "Sitting",
+    description: "Character seated in a comfortable position",
+    bodyPosition: "Seated cross-legged or on knees (Islamic sitting), hands resting, relaxed posture, attentive expression",
+  },
+  reading: {
+    name: "Reading",
+    description: "Character engaged in reading a book or Quran",
+    bodyPosition: "Holding an open book at comfortable reading distance, eyes focused on book, peaceful expression, proper posture",
+  },
+  praying: {
+    name: "Praying",
+    description: "Character in respectful prayer position",
+    bodyPosition: "Hands raised in dua (supplication), eyes looking down or closed, peaceful serene expression, humble posture",
+  },
+  smiling: {
+    name: "Smiling",
+    description: "Character with warm, genuine smile",
+    bodyPosition: "Front-facing or slight turn, warm genuine smile showing happiness, eyes crinkled with joy, welcoming posture",
+  },
+  surprised: {
+    name: "Surprised",
+    description: "Character showing pleasant surprise",
+    bodyPosition: "Eyes wide with wonder, mouth slightly open, hands up near chest, body language showing delightful surprise",
+  },
+  pointing: {
+    name: "Pointing",
+    description: "Character pointing to indicate direction or object",
+    bodyPosition: "One arm extended pointing forward/to side, other arm relaxed, looking in direction of pointing, helpful expression",
+  },
+  thinking: {
+    name: "Thinking",
+    description: "Character in thoughtful contemplation",
+    bodyPosition: "Hand touching chin or temple, eyes looking up or to side, thoughtful expression, body in relaxed stance",
+  },
+};
+
+export interface CharacterPosePromptInput {
+  character: StoredCharacter;
+  pose: PoseType;
+  alternatives?: number; // Number of alternatives to suggest (default 3)
+}
+
+export interface CharacterPosePromptResult {
+  prompt: string;
+  negativePrompt: string;
+  style: string;
+  poseType: PoseType;
+  poseName: string;
+}
+
+/**
+ * Build a prompt for generating a specific character pose.
+ * Used for creating the 12-pose reference sheet.
+ */
+export function buildCharacterPosePrompt(input: CharacterPosePromptInput): CharacterPosePromptResult {
+  const { character, pose } = input;
+  const poseInfo = POSE_DESCRIPTIONS[pose];
+
+  // Get style info
+  const styleId = character.visualDNA?.style || "pixar-3d";
+  const stylePrompt = STYLE_PROMPTS[styleId] || STYLE_PROMPTS["pixar-3d"];
+  const styleTechnical = STYLE_TECHNICAL_DETAILS[styleId] || STYLE_TECHNICAL_DETAILS["pixar-3d"];
+
+  // Build character visual DNA block
+  const visualDNABlock: string[] = [];
+  if (character.visualDNA) {
+    if (character.visualDNA.skinTone) {
+      visualDNABlock.push(`SKIN TONE: ${character.visualDNA.skinTone} (EXACT - maintain consistency)`);
+    }
+    if (character.visualDNA.hairOrHijab) {
+      visualDNABlock.push(`HEAD/HAIR: ${character.visualDNA.hairOrHijab} (EXACT - maintain consistency)`);
+    }
+    if (character.visualDNA.outfitRules) {
+      visualDNABlock.push(`OUTFIT: ${character.visualDNA.outfitRules}`);
+    }
+    if (character.visualDNA.accessories) {
+      visualDNABlock.push(`ACCESSORIES: ${character.visualDNA.accessories}`);
+    }
+  }
+
+  // Build modesty rules block
+  const modestyBlock: string[] = ["MANDATORY MODESTY RULES:"];
+  if (character.modestyRules?.hijabAlways) {
+    modestyBlock.push("- HIJAB REQUIRED: Must cover ALL hair completely, no hair strands visible");
+  }
+  if (character.modestyRules?.longSleeves) {
+    modestyBlock.push("- LONG SLEEVES: Arms must be covered to wrists");
+  }
+  if (character.modestyRules?.looseClothing) {
+    modestyBlock.push("- LOOSE CLOTHING: All garments must be loose-fitting, not form-revealing");
+  }
+  modestyBlock.push("- No tight or revealing clothing under any circumstances");
+
+  // Build color palette block
+  const colorBlock = character.colorPalette && character.colorPalette.length > 0
+    ? `COLOR PALETTE: ${character.colorPalette.join(", ")}`
+    : "";
+
+  const prompt = `CHARACTER REFERENCE SHEET POSE: ${poseInfo.name}
+${stylePrompt}
+
+## CHARACTER IDENTITY
+Name: ${character.name}
+Role: ${character.role}
+Age Appearance: ${character.ageRange || "child"} years old
+
+## VISUAL DNA (MUST MATCH EXACTLY)
+${visualDNABlock.join("\n")}
+${colorBlock}
+
+## POSE REQUIREMENTS
+Pose: ${poseInfo.name}
+Description: ${poseInfo.description}
+Body Position: ${poseInfo.bodyPosition}
+
+## ${modestyBlock.join("\n")}
+
+## ART STYLE (CONSISTENT WITH CHARACTER)
+Style: ${styleId}
+${styleTechnical}
+
+## TECHNICAL REQUIREMENTS
+- Single character only, isolated on clean background
+- Full body visible (head to feet)
+- Clean, simple background (solid color or subtle gradient)
+- High detail on face and clothing
+- Consistent proportions for reference sheet use
+- NO text, watermarks, or labels
+- Professional character design quality
+- Portrait orientation preferred (for reference sheet grid)
+
+## CRITICAL CONSISTENCY RULES
+- This pose must match the character's established visual identity
+- Skin tone, hair/hijab style, and outfit must be EXACTLY as described
+- This image will be used as reference for all future illustrations
+- Maintain the exact same character design across all poses`;
+
+  // Build negative prompt
+  const negativePrompts = [
+    "text", "watermark", "signature", "label", "multiple characters",
+    "background elements", "props", "furniture", "scenery",
+    "inconsistent features", "changed skin tone", "different hair style",
+    "revealing clothing", "tight clothing", "short sleeves",
+    "missing hijab", "visible hair under hijab",
+    "poor anatomy", "distorted proportions", "extra limbs",
+    "low quality", "blurry", "pixelated",
+  ];
+
+  if (character.modestyRules?.hijabAlways) {
+    negativePrompts.push("exposed hair", "hair visible", "no hijab");
+  }
+
+  return {
+    prompt,
+    negativePrompt: negativePrompts.join(", "),
+    style: styleId,
+    poseType: pose,
+    poseName: poseInfo.name,
+  };
+}
+
+/**
+ * Build prompts for all 12 poses of a character.
+ * Returns an array of prompts, one for each pose type.
+ */
+export function buildCharacterReferenceSheetPrompts(
+  character: StoredCharacter
+): CharacterPosePromptResult[] {
+  return ALL_POSE_TYPES.map((pose) =>
+    buildCharacterPosePrompt({ character, pose })
+  );
+}
+
+// ============================================
 // Scene Description Generator (Enhanced)
 // ============================================
 
