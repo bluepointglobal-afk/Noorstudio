@@ -19,6 +19,7 @@ const envSchema = z.object({
     NANOBANANA_API_KEY: z.string().optional(),
     SUPABASE_URL: z.string().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+    SUPABASE_ANON_KEY: z.string().optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 }).refine((data) => {
     if (data.AI_TEXT_PROVIDER === "claude" && !data.CLAUDE_API_KEY) {

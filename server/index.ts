@@ -5,12 +5,17 @@
 import { env } from "./env";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import helmet from "helmet";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
-import { AppError, RateLimitError } from "./errors";
-import helmet from "helmet";
+import { AppError, RateLimitError, AuthError } from "./errors";
+import { createClient } from "@supabase/supabase-js";
+import helmet from "helmet"; // Added import for helmet
+import { AI_TOKEN_BUDGETS, GLOBAL_LIMITS, estimateTokens } from "../src/lib/ai/tokenBudget";
 
+const STAGE_COSTS: Record<string, number> = Object.entries(AI_TOKEN_BUDGETS).reduce((acc, [key, val]) => {
+  acc[key] = val.creditCost;
+  return acc;
+}, {} as Record<string, number>);
 const app = express();
 const PORT = env.PORT;
 
@@ -107,6 +112,171 @@ function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
+// ============================================
+// Authentication Middleware
+// ============================================
+
+export const supabase = env.SUPABASE_URL && env.SUPABASE_ANON_KEY
+  ? createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY)
+  : null;
+
+/**
+ * Deduct credits from user profile
+ * Uses service role access via the server's supabase client
+ */
+export async function deductCredits(
+  userId: string,
+  type: "character_credits" | "book_credits",
+  amount: number,
+  reason: string,
+  entityType?: string,
+  entityId?: string,
+  metadata?: unknown
+) {
+  if (!supabase) return;
+
+  const { data, error } = await supabase.rpc('deduct_credits_v2', {
+    p_user_id: userId,
+    p_credit_type: type,
+    p_amount: amount,
+    p_reason: reason,
+    p_entity_type: entityType,
+    p_entity_id: entityId,
+    p_metadata: metadata
+  });
+
+  if (error) {
+    console.error("Credit deduction RPC failed:", error);
+  }
+}
+
+// Extend Request type to include user and credit info
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: import("@supabase/supabase-js").User;
+      creditCost?: number;
+      creditType?: "character_credits" | "book_credits";
+    }
+  }
+}
+
+async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Health check doesn't need auth
+  if (req.path === "/api/health") {
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+    return;
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  if (!supabase) {
+    // If supabase not configured, allow in development but log warning
+    if (env.NODE_ENV === "development") {
+      console.warn("[AUTH] Supabase not configured, bypassing auth in DEV");
+      next();
+      return;
+    }
+    res.status(503).json({ error: { code: "SERVICE_UNAVAILABLE", message: "Auth service not configured" } });
+    return;
+  }
+
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data.user) {
+    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired session" } });
+    return;
+  }
+
+  // Attach user to request for downstream use (e.g. data isolation)
+  req.user = data.user;
+  next();
+}
+
+/**
+ * Middleware to check if user has enough credits
+ * This is the core "Foundation Hardening" for credit enforcement
+ */
+const creditMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  if (process.env.NODE_ENV === "development" && (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY)) {
+    return next();
+  }
+
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const stage = req.body.stage || (req.path.includes("image") ? "illustrations" : "outline");
+  const cost = STAGE_COSTS[stage] || 1;
+
+  try {
+    if (!supabase) {
+      console.warn("Supabase client not initialized, skipping credit check");
+      return next();
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("character_credits, book_credits")
+      .eq("id", user.id)
+      .single();
+
+    if (error || !profile) {
+      return res.status(500).json({ error: "Failed to fetch user profile" });
+    }
+
+    const creditType = stage === "illustrations" || stage === "cover" ? "character_credits" : "book_credits";
+    const balance = profile[creditType as keyof typeof profile] as number;
+
+    if (balance < cost) {
+      return res.status(402).json({
+        error: "Insufficient credits",
+        required: cost,
+        current: balance,
+        creditType
+      });
+    }
+
+    req.creditCost = cost;
+    req.creditType = creditType;
+
+    // PROJECT-WIDE TOKEN BUDGET ENFORCEMENT
+    const projectId = req.body.projectId;
+    if (projectId) {
+      // Corrected query for projectId in metadata
+      const { data: usageData } = await supabase
+        .from("ai_usage")
+        .select("tokens_in, tokens_out")
+        .filter("metadata", "cs", JSON.stringify({ projectId }));
+
+      if (usageData) {
+        const totalTokens = usageData.reduce((sum, entry) =>
+          sum + (entry.tokens_in || 0) + (entry.tokens_out || 0), 0
+        );
+
+        if (totalTokens > GLOBAL_LIMITS.totalBookMaxTokens) {
+          return res.status(403).json({
+            error: {
+              code: "AI_TOKEN_BUDGET_EXCEEDED",
+              message: `Project ${projectId} has reached the global token limit (${totalTokens} > ${GLOBAL_LIMITS.totalBookMaxTokens}).`
+            }
+          });
+        }
+      }
+    }
+
+    next();
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error during credit check" });
+  }
+};
+
 // Clean up old rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
@@ -177,25 +347,27 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// AI routes (text/image generation)
-app.use("/api/ai", aiRoutes);
+// AI routes (text/image generation) - Protected
+// Apply auth and credit middleware to AI routes
+app.use("/api/ai", authMiddleware, creditMiddleware, aiRoutes);
 
-// Share routes (project sharing to Supabase)
-app.use("/api/share", shareRoutes);
+// Share routes (project sharing to Supabase) - Protected
+app.use("/api/share", authMiddleware, shareRoutes);
 
 // ============================================
 // Error Handler
 // ============================================
 
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error | AppError, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   // If we already sent headers, don't try to send again
   if (res.headersSent) {
     return _next(err);
   }
 
+  const errWithStatus = err as Error & { status?: number; statusCode?: number; code?: string; details?: unknown };
   const isAppError = err instanceof AppError;
-  const statusCode = isAppError ? err.statusCode : (err.status || err.statusCode || 500);
-  const errorCode = isAppError ? err.code : (err.code || "INTERNAL_SERVER_ERROR");
+  const statusCode = isAppError ? err.statusCode : (errWithStatus.status || errWithStatus.statusCode || 500);
+  const errorCode = isAppError ? err.code : (errWithStatus.code || "INTERNAL_SERVER_ERROR");
 
   // Log 500s as errors, others as warnings
   if (statusCode >= 500) {
@@ -210,7 +382,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
       message: statusCode === 500 && env.NODE_ENV !== "development"
         ? "An unexpected error occurred"
         : err.message || "Internal server error",
-      details: (env.NODE_ENV === "development" || isAppError) ? err.details : undefined,
+      details: (env.NODE_ENV === "development" || isAppError) ? (isAppError ? err.details : errWithStatus.details) : undefined,
       stack: env.NODE_ENV === "development" ? err.stack : undefined,
     },
   });

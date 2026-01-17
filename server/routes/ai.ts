@@ -4,6 +4,8 @@
 import { Router, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../env";
+import { deductCredits, supabase } from "../index";
+import { AI_TOKEN_BUDGETS, IMAGE_LIMITS, estimateTokens, AIStage } from "../../src/lib/ai/tokenBudget";
 
 const router = Router();
 
@@ -31,6 +33,9 @@ interface TextRequest {
   system: string;
   prompt: string;
   maxOutputTokens: number;
+  stage?: AIStage;
+  attemptId?: string;
+  projectId?: string;
 }
 
 interface TextResponse {
@@ -48,6 +53,9 @@ interface ImageRequest {
   references?: string[];
   style?: string;
   size?: { width: number; height: number };
+  count?: number;
+  attemptId?: string;
+  projectId?: string;
 }
 
 interface ImageResponse {
@@ -59,6 +67,42 @@ interface ImageResponse {
 // NanoBanana API configuration
 const NANOBANANA_API_URL = process.env.NANOBANANA_API_URL || "https://api.nanobanana.com/v1";
 const NANOBANANA_MODEL = process.env.NANOBANANA_MODEL || "pixar-3d-v1";
+
+// ============================================
+// Telemetry Helper
+// ============================================
+
+async function logAIUsage(data: {
+  userId: string;
+  provider: string;
+  stage: string;
+  requestType: "text" | "image";
+  tokensIn?: number;
+  tokensOut?: number;
+  creditsCharged: number;
+  success: boolean;
+  errorCode?: string;
+  metadata?: unknown;
+}) {
+  if (!supabase) return;
+
+  try {
+    await supabase.from("ai_usage").insert({
+      user_id: data.userId,
+      provider: data.provider,
+      stage: data.stage,
+      request_type: data.requestType,
+      tokens_in: data.tokensIn,
+      tokens_out: data.tokensOut,
+      credits_charged: data.creditsCharged,
+      success: data.success,
+      error_code: data.errorCode,
+      metadata: data.metadata,
+    });
+  } catch (err) {
+    console.error("Failed to log AI usage:", err);
+  }
+}
 
 // ============================================
 // Mock Providers
@@ -161,7 +205,6 @@ async function mockImageGeneration(req: ImageRequest): Promise<ImageResponse> {
   const demoImages = [
     "/demo/spreads/spread-1.png",
     "/demo/spreads/spread-2.png",
-    "/demo/spreads/spread-3.png",
   ];
   const randomImage = demoImages[Math.floor(Math.random() * demoImages.length)];
 
@@ -242,6 +285,37 @@ async function nanobananaImageGeneration(
 
   const size = req.size || defaultSize;
 
+  // Build task-specific negative prompt for better compliance
+  const coverNegativePrompt = [
+    // Text prevention (HIGHEST PRIORITY for covers)
+    "text", "words", "letters", "numbers", "title", "author", "signature",
+    "watermark", "logo", "barcode", "ISBN", "typography", "font", "writing",
+    // Quality issues
+    "blurry", "distorted", "low quality", "pixelated", "artifacts",
+    "bad anatomy", "deformed", "ugly", "mutated", "disfigured",
+    // Content issues
+    "scary", "violent", "inappropriate", "revealing clothing", "tight clothing",
+    // Orientation for covers
+    "horizontal", "landscape orientation",
+  ].join(", ");
+
+  const illustrationNegativePrompt = [
+    // Text prevention
+    "text", "words", "letters", "numbers", "watermark", "signature",
+    // Character consistency (CRITICAL for illustrations)
+    "different face", "changed appearance", "wrong skin tone", "inconsistent character",
+    "missing hijab", "different hair color", "wrong clothing", "character variation",
+    // Quality issues
+    "blurry", "distorted", "low quality", "artifacts", "bad anatomy", "deformed",
+    // Content issues
+    "scary", "violent", "inappropriate", "revealing clothing",
+  ].join(", ");
+
+  const negativePrompt = req.task === "cover" ? coverNegativePrompt : illustrationNegativePrompt;
+
+  // Use higher guidance for covers to ensure stricter prompt adherence
+  const guidanceScale = req.task === "cover" ? 8.5 : 7.5;
+
   try {
     if (env.NODE_ENV === "development") {
       console.log("NanoBanana API call:", {
@@ -249,6 +323,7 @@ async function nanobananaImageGeneration(
         promptLength: req.prompt.length,
         references: req.references?.length || 0,
         size,
+        guidanceScale,
       });
     }
 
@@ -261,13 +336,13 @@ async function nanobananaImageGeneration(
       body: JSON.stringify({
         model: NANOBANANA_MODEL,
         prompt: req.prompt,
-        negative_prompt: "text, words, letters, watermark, signature, blurry, distorted, low quality",
+        negative_prompt: negativePrompt,
         reference_images: req.references || [],
         width: size.width,
         height: size.height,
         style: req.style || "pixar-3d",
-        guidance_scale: 7.5,
-        num_inference_steps: 30,
+        guidance_scale: guidanceScale,
+        num_inference_steps: req.task === "cover" ? 35 : 30, // More steps for cover quality
       }),
     });
 
@@ -324,7 +399,37 @@ router.post("/text", async (req: Request, res: Response) => {
       return;
     }
 
-    const maxTokens = body.maxOutputTokens || 1200;
+    const stage = body.stage || "outline";
+    const budget = AI_TOKEN_BUDGETS[stage];
+
+    // Enforce prompt limit early
+    const promptTokens = estimateTokens(body.prompt + (body.system || ""));
+    if (budget && promptTokens > budget.maxPromptTokens) {
+      if (req.user) {
+        logAIUsage({
+          userId: req.user.id,
+          provider: TEXT_PROVIDER,
+          stage,
+          requestType: "text",
+          tokensIn: promptTokens,
+          creditsCharged: 0,
+          success: false,
+          errorCode: "AI_TOKEN_BUDGET_EXCEEDED",
+          metadata: { attemptId: body.attemptId },
+        });
+      }
+      return res.status(400).json({
+        error: {
+          code: "AI_TOKEN_BUDGET_EXCEEDED",
+          message: `Prompt exceeds limit for ${stage} (${promptTokens} > ${budget.maxPromptTokens} tokens)`,
+        },
+      });
+    }
+
+    const maxTokens = Math.min(
+      body.maxOutputTokens || 1000,
+      budget?.maxOutputTokens || 2000
+    );
 
     let response: TextResponse;
 
@@ -342,14 +447,59 @@ router.post("/text", async (req: Request, res: Response) => {
       });
     }
 
+    // Deduct credits AFTER success
+    if (req.user && req.creditCost && req.creditType) {
+      const projectId = (body as TextRequest & { projectId?: string }).projectId;
+      await deductCredits(
+        req.user.id,
+        req.creditType,
+        req.creditCost,
+        `AI Stage: ${stage}`,
+        'project',
+        projectId,
+        { attemptId: (body as TextRequest & { attemptId?: string }).attemptId, stage }
+      );
+    }
+
+    // Log success usage
+    if (req.user) {
+      logAIUsage({
+        userId: req.user.id,
+        provider: response.provider,
+        stage,
+        requestType: "text",
+        tokensIn: response.usage?.inputTokens || promptTokens,
+        tokensOut: response.usage?.outputTokens,
+        creditsCharged: req.creditCost || 0,
+        success: true,
+        metadata: { attemptId: body.attemptId },
+      });
+    }
+
     res.json(response);
-  } catch (error: any) {
-    console.error("Text generation error:", error);
-    res.status(error.status || 500).json({
+  } catch (error: unknown) {
+    const err = error as Error & { status?: number; statusCode?: number; code?: string };
+    console.error("Text generation error:", err);
+
+    // Log failure
+    if (req.user) {
+      logAIUsage({
+        userId: req.user.id,
+        provider: TEXT_PROVIDER,
+        stage: (req.body as TextRequest & { stage?: AIStage }).stage || "outline",
+        requestType: "text",
+        creditsCharged: 0,
+        success: false,
+        errorCode: err.code || "TEXT_GENERATION_FAILED",
+        metadata: { attemptId: (req.body as TextRequest & { attemptId?: string }).attemptId },
+      });
+    }
+
+    res.status(err.status || err.statusCode || 500).json({
       error: {
-        code: error.code || "TEXT_GENERATION_FAILED",
-        message: error.message || "Text generation failed",
-        details: env.NODE_ENV === "development" ? error.stack : undefined,
+        code: err.code || "TEXT_GENERATION_FAILED",
+        message: err.message || "Text generation failed",
+        details: env.NODE_ENV === "development" ? err.stack : undefined,
       },
     });
   }
@@ -358,7 +508,19 @@ router.post("/text", async (req: Request, res: Response) => {
 // Image generation endpoint
 router.post("/image", async (req: Request, res: Response) => {
   try {
-    const body = req.body as ImageRequest;
+    const body = req.body as ImageRequest & { count?: number; attemptId?: string };
+    const stage = body.task === "cover" ? "cover" : "illustrations";
+    const limit = stage === "cover" ? IMAGE_LIMITS.cover : IMAGE_LIMITS.illustrations;
+    const count = body.count || 1;
+
+    if (count > limit) {
+      return res.status(400).json({
+        error: {
+          code: "IMAGE_LIMIT_EXCEEDED",
+          message: `Maximum ${limit} images allowed for ${stage} (requested ${count})`,
+        },
+      });
+    }
 
     if (!body.prompt) {
       res.status(400).json({
@@ -378,14 +540,57 @@ router.post("/image", async (req: Request, res: Response) => {
       response = await mockImageGeneration(body);
     }
 
+    // Deduct credits AFTER success
+    if (req.user && req.creditCost && req.creditType) {
+      const projectId = (body as ImageRequest & { projectId?: string }).projectId;
+      await deductCredits(
+        req.user.id,
+        req.creditType,
+        req.creditCost,
+        `AI Image: ${body.task || 'illustration'}`,
+        'project',
+        projectId,
+        { attemptId: body.attemptId, task: body.task }
+      );
+    }
+
+    // Log success usage
+    if (req.user) {
+      logAIUsage({
+        userId: req.user.id,
+        provider: response.provider,
+        stage,
+        requestType: "image",
+        tokensIn: estimateTokens(body.prompt),
+        creditsCharged: req.creditCost || 0,
+        success: true,
+        metadata: { attemptId: body.attemptId, task: body.task },
+      });
+    }
+
     res.json(response);
-  } catch (error: any) {
-    console.error("Image generation error:", error);
-    res.status(error.status || 500).json({
+  } catch (error: unknown) {
+    const err = error as Error & { status?: number; statusCode?: number; code?: string };
+    console.error("Image generation error:", err);
+
+    // Log failure
+    if (req.user) {
+      logAIUsage({
+        userId: req.user.id,
+        provider: IMAGE_PROVIDER,
+        stage: req.body.task === "cover" ? "cover" : "illustrations",
+        requestType: "image",
+        creditsCharged: 0,
+        success: false,
+        errorCode: err.code || "IMAGE_GENERATION_FAILED",
+      });
+    }
+
+    res.status(err.status || err.statusCode || 500).json({
       error: {
-        code: error.code || "IMAGE_GENERATION_FAILED",
-        message: error.message || "Image generation failed",
-        details: env.NODE_ENV === "development" ? error.stack : undefined,
+        code: err.code || "IMAGE_GENERATION_FAILED",
+        message: err.message || "Image generation failed",
+        details: env.NODE_ENV === "development" ? err.stack : undefined,
       },
     });
   }
