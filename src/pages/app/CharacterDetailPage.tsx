@@ -18,6 +18,8 @@ import {
   Trash2,
   AlertTriangle,
   Plus,
+  ThumbsUp,
+  Image,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
@@ -33,6 +35,8 @@ import {
   unlockCharacter,
   createNewVersion,
   generatePoseSheet,
+  generateCharacterImage,
+  approveCharacterDesign,
   deleteCharacter,
   getApprovedPoseCount,
   canLockCharacter,
@@ -51,9 +55,10 @@ const statusColors: Record<AssetStatus, string> = {
   locked: "bg-muted text-muted-foreground",
 };
 
+const CHARACTER_GENERATION_COST = 2;
 const REGENERATE_SINGLE_COST = 1;
 const REGENERATE_ALL_COST = 8;
-const POSE_SHEET_COST = 10;
+const POSE_SHEET_COST = 8;
 
 export default function CharacterDetailPage() {
   const { id } = useParams();
@@ -113,8 +118,63 @@ export default function CharacterDetailPage() {
   const approvedCount = getApprovedPoseCount(character);
   const canLock = canLockCharacter(character);
   const isLocked = character.status === "locked";
+  const hasCharacterImage = character.imageUrl && character.imageUrl.length > 0;
 
   // Handlers
+  const handleGenerateCharacter = async () => {
+    if (!hasEnoughCredits("character", CHARACTER_GENERATION_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${CHARACTER_GENERATION_COST} character credits.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    const result = consumeCredits({
+      type: "character",
+      amount: CHARACTER_GENERATION_COST,
+      reason: `Generate character image for ${character.name}`,
+      entityType: "character",
+      entityId: character.id,
+      meta: { step: "character_generation" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({ title: "Failed", description: result.error, variant: "destructive" });
+      return;
+    }
+
+    try {
+      const updated = await generateCharacterImage(character.id);
+      if (updated) {
+        setCharacter(updated);
+        setCredits(getBalances());
+        toast({
+          title: "Character generated!",
+          description: `${character.name} image has been created. Review and approve it.`,
+        });
+      }
+    } catch (error) {
+      toast({ title: "Failed", description: "Failed to generate character", variant: "destructive" });
+    }
+    setIsGenerating(false);
+  };
+
+  const handleApproveCharacterDesign = () => {
+    const updated = approveCharacterDesign(character.id);
+    if (updated) {
+      setCharacter(updated);
+      toast({
+        title: "Character approved!",
+        description: `${character.name} is ready for pose sheet generation.`,
+      });
+    }
+  };
+
   const handleApprovePose = (poseId: number) => {
     const updated = approvePose(character.id, poseId);
     if (updated) {
@@ -349,17 +409,77 @@ export default function CharacterDetailPage() {
         {/* Character Preview */}
         <div className="lg:col-span-1">
           <div className="card-glow p-6 sticky top-6">
-            <div className="aspect-square rounded-xl overflow-hidden mb-4 bg-gradient-subtle">
-              <img
-                src={character.imageUrl}
-                alt={character.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "https://placehold.co/400x400/e2e8f0/64748b?text=" + character.name.charAt(0);
-                }}
-              />
+            {/* Character Image or Placeholder */}
+            <div className="aspect-square rounded-xl overflow-hidden mb-4 bg-gradient-subtle relative">
+              {hasCharacterImage ? (
+                <>
+                  <img
+                    src={character.imageUrl}
+                    alt={character.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src =
+                        "https://placehold.co/400x400/e2e8f0/64748b?text=" + character.name.charAt(0);
+                    }}
+                  />
+                  {character.status === "approved" && (
+                    <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Approved
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-4">
+                  <Image className="w-16 h-16 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    No image generated yet
+                  </p>
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    onClick={handleGenerateCharacter}
+                    disabled={isGenerating || !hasEnoughCredits("character", CHARACTER_GENERATION_COST)}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate ({CHARACTER_GENERATION_COST} credits)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
+
+            {/* Approve/Regenerate buttons when image exists but not approved */}
+            {hasCharacterImage && character.status === "draft" && (
+              <div className="flex gap-2 mb-4">
+                <Button
+                  variant="hero"
+                  size="sm"
+                  className="flex-1"
+                  onClick={handleApproveCharacterDesign}
+                >
+                  <ThumbsUp className="w-4 h-4 mr-2" />
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateCharacter}
+                  disabled={isGenerating || !hasEnoughCredits("character", CHARACTER_GENERATION_COST)}
+                >
+                  <RefreshCw className={cn("w-4 h-4", isGenerating && "animate-spin")} />
+                </Button>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Badge className={statusColors[character.status]}>{character.status}</Badge>
@@ -580,109 +700,74 @@ export default function CharacterDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-                  {character.poses.map((pose) => (
-                    <div
-                      key={pose.id}
-                      className={cn(
-                        "card-glow p-3 space-y-2",
-                        pose.status === "locked" && "opacity-75",
-                        expandedPoseId === pose.id && "ring-2 ring-primary"
-                      )}
-                    >
-                      {/* Main pose image - clickable to show alternatives */}
-                      <div
-                        className="aspect-square bg-gradient-subtle rounded-lg overflow-hidden flex items-center justify-center cursor-pointer relative group"
-                        onClick={() => pose.alternatives?.length > 0 && setExpandedPoseId(expandedPoseId === pose.id ? null : pose.id)}
-                      >
-                        {pose.imageUrl ? (
-                          <img
-                            src={pose.imageUrl}
-                            alt={pose.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <User className="w-8 h-8 text-muted-foreground" />
-                        )}
-                        {/* Show alternatives count badge */}
-                        {pose.alternatives?.length > 1 && (
-                          <div className="absolute top-1 right-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
-                            {pose.alternatives.length}
+                <div className="space-y-4">
+                  {/* Single Pose Sheet Image */}
+                  <div className="card-glow p-4">
+                    <div className="relative">
+                      {character.poseSheetUrl ? (
+                        <img
+                          src={character.poseSheetUrl}
+                          alt={`${character.name} 12-Pose Sheet`}
+                          className="w-full rounded-lg border border-border"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="aspect-[4/3] bg-muted rounded-lg flex items-center justify-center">
+                          <div className="text-center">
+                            <Sparkles className="w-12 h-12 text-muted-foreground/40 mx-auto mb-2" />
+                            <p className="text-muted-foreground">Pose sheet not generated yet</p>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Alternatives thumbnail row - shown when expanded */}
-                      {expandedPoseId === pose.id && pose.alternatives?.length > 1 && (
-                        <div className="flex gap-1">
-                          {pose.alternatives.map((alt, altIdx) => (
-                            <button
-                              key={alt.id}
-                              onClick={() => handleSelectAlternative(pose.id, altIdx)}
-                              className={cn(
-                                "flex-1 aspect-square rounded overflow-hidden border-2 transition-all",
-                                pose.selectedAlternative === altIdx
-                                  ? "border-primary ring-1 ring-primary"
-                                  : "border-transparent opacity-70 hover:opacity-100"
-                              )}
-                            >
-                              <img
-                                src={alt.imageUrl}
-                                alt={`Alternative ${altIdx + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="text-center">
-                        <p className="text-xs font-medium truncate">{pose.name}</p>
-                        <Badge className={cn("text-xs mt-1", statusColors[pose.status])}>
-                          {pose.status}
-                        </Badge>
-                      </div>
-                      {!isLocked && (
-                        <div className="flex gap-1">
-                          {pose.status === "draft" && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="flex-1 h-7 text-xs"
-                              onClick={() => handleApprovePose(pose.id)}
-                              title="Approve pose"
-                            >
-                              <Check className="w-3 h-3" />
-                            </Button>
-                          )}
-                          {pose.status === "approved" && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="flex-1 h-7 text-xs"
-                              onClick={() => handleUnapprovePose(pose.id)}
-                              title="Unapprove pose"
-                            >
-                              <Check className="w-3 h-3 text-primary" />
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="flex-1 h-7 text-xs"
-                            onClick={() => setShowRegenerateSingle(pose.id)}
-                            disabled={pose.status === "locked" || isGenerating}
-                            title="Regenerate pose"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                          </Button>
                         </div>
                       )}
                     </div>
-                  ))}
+
+                    {/* Pose Sheet Info */}
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium">12-Pose Grid (4×3 Layout)</h4>
+                        <Badge variant="outline">Single Image</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        This pose sheet contains all 12 character poses in a single grid image.
+                        It is used as a reference for generating consistent illustrations.
+                      </p>
+
+                      {/* Pose Names Grid */}
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        {character.poses.map((pose, idx) => (
+                          <div
+                            key={pose.id}
+                            className={cn(
+                              "p-2 rounded text-center border",
+                              pose.status === "approved"
+                                ? "bg-teal-50 border-teal-200 text-teal-700"
+                                : pose.status === "locked"
+                                  ? "bg-muted border-border text-muted-foreground"
+                                  : "bg-gold-50 border-gold-200 text-gold-700"
+                            )}
+                          >
+                            <span className="font-medium">{idx + 1}.</span> {pose.name}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowRegenerateAll(true)}
+                      disabled={isLocked || isGenerating}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Regenerate Pose Sheet
+                    </Button>
+                  </div>
                 </div>
               )}
             </TabsContent>

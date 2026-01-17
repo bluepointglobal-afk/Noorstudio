@@ -2,7 +2,8 @@
 // Calls the server proxy for AI text generation
 
 import { getAIConfig, isTextMockMode } from "../config";
-import { enforceBudget, AIStage, estimateTokens } from "../budget";
+import { AIStage, isWithinBudget, estimateTokens } from "../tokenBudget";
+import { authenticatedFetch } from "@/lib/utils/api";
 
 // ============================================
 // Types
@@ -13,6 +14,8 @@ export interface TextGenerationRequest {
   prompt: string;
   maxOutputTokens: number;
   stage: AIStage;
+  projectId?: string;
+  attemptId?: string;
 }
 
 export interface TextGenerationResponse {
@@ -167,7 +170,7 @@ async function proxyTextGeneration(
 ): Promise<TextGenerationResponse> {
   const config = getAIConfig();
 
-  const response = await fetch(config.textProxyUrl, {
+  const response = await authenticatedFetch(config.textProxyUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -176,6 +179,9 @@ async function proxyTextGeneration(
       system: request.system,
       prompt: request.prompt,
       maxOutputTokens: request.maxOutputTokens,
+      stage: request.stage,
+      projectId: request.projectId,
+      attemptId: request.attemptId,
     }),
     signal: cancelToken?.signal,
   });
@@ -201,13 +207,11 @@ export async function generateText(
   cancelToken?: CancelToken
 ): Promise<TextGenerationResponse> {
   // Apply budget enforcement
-  const budgetResult = enforceBudget(request.stage, request.prompt);
+  const budgetCheck = isWithinBudget(request.stage, request.prompt);
 
-  const adjustedRequest = {
-    ...request,
-    prompt: budgetResult.adjustedInput || request.prompt,
-    maxOutputTokens: budgetResult.maxOutputTokens,
-  };
+  if (!budgetCheck.allowed) {
+    throw { error: "AI_TOKEN_BUDGET_EXCEEDED", message: budgetCheck.error, retryable: false };
+  }
 
   // Check for cancellation
   if (cancelToken?.cancelled) {
@@ -217,14 +221,9 @@ export async function generateText(
   let response: TextGenerationResponse;
 
   if (isTextMockMode()) {
-    response = await mockTextGeneration(adjustedRequest);
+    response = await mockTextGeneration(request);
   } else {
-    response = await proxyTextGeneration(adjustedRequest, cancelToken);
-  }
-
-  // Add budget warnings to response
-  if (budgetResult.warnings.length > 0) {
-    response.budgetWarnings = budgetResult.warnings;
+    response = await proxyTextGeneration(request, cancelToken);
   }
 
   return response;

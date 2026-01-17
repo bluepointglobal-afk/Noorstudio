@@ -4,6 +4,7 @@
 import { ProjectStage } from "@/lib/models";
 import { ProjectSchema } from "@/lib/validation/schemas";
 import { validateArrayAndRepair } from "./validation";
+import { getNamespacedKey } from "./keys";
 
 // ============================================
 // Types
@@ -38,9 +39,7 @@ export interface ImageArtifact {
 
 export interface ExportArtifact {
   type: "export";
-  format: ExportTarget;
-  fileUrl: string;
-  fileSize: number;
+  content: Array<{ format: string; fileUrl: string; fileSize: number }>;
   generatedAt: string;
 }
 
@@ -89,7 +88,13 @@ export interface ProjectChangeTracker {
   lastKBChangeAt?: string;
 }
 
-export type ProjectArtifact = TextArtifact | ImageArtifact | ExportArtifact;
+export interface MetaArtifact {
+  type: "meta";
+  content: unknown;
+  generatedAt: string;
+}
+
+export type ProjectArtifact = TextArtifact | ImageArtifact | ExportArtifact | MetaArtifact;
 
 export interface StoredProject {
   id: string;
@@ -186,11 +191,12 @@ function generateId(): string {
 
 export function listProjects(): StoredProject[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const key = getNamespacedKey(STORAGE_KEY);
+    const stored = localStorage.getItem(key);
     if (!stored) return [];
 
     const parsed = JSON.parse(stored);
-    return validateArrayAndRepair(STORAGE_KEY, parsed, ProjectSchema);
+    return validateArrayAndRepair(key, parsed, ProjectSchema) as StoredProject[];
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse projects from localStorage");
@@ -214,7 +220,7 @@ export function saveProject(project: StoredProject): void {
     projects.push(project);
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(projects));
 }
 
 export interface CreateProjectInput {
@@ -283,7 +289,7 @@ export function updateProject(id: string, partial: Partial<StoredProject>): Stor
   };
 
   projects[index] = updated;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(projects));
 
   return updated;
 }
@@ -294,7 +300,7 @@ export function deleteProject(id: string): boolean {
 
   if (filtered.length === projects.length) return false;
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(filtered));
   return true;
 }
 
@@ -363,6 +369,7 @@ export function canRunStage(project: StoredProject, stageName: ProjectStage): bo
     layout: "illustrations", // Needs illustrations
     cover: "layout",         // Needs layout
     export: "cover",         // Needs cover
+    completed: "export",     // Needs export
   };
 
   const dependency = stageDependencies[stageName];
@@ -474,7 +481,7 @@ export function seedDemoProjectIfEmpty(): void {
 // ============================================
 
 export function clearAllProjects(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(getNamespacedKey(STORAGE_KEY));
 }
 
 // ============================================
@@ -490,12 +497,21 @@ const DEMO_COVERS = [
 const DEMO_SPREADS = [
   "/demo/spreads/spread-1.png",
   "/demo/spreads/spread-2.png",
-  "/demo/spreads/spread-3.png",
 ];
 
 export interface ExportValidationResult {
   valid: boolean;
   errors: string[];
+}
+
+export function getArtifactContent<T>(project: StoredProject, stage: string): T | null {
+  const artifact = project.artifacts[stage];
+  if (!artifact) return null;
+
+  if ("content" in artifact) {
+    return artifact.content as T;
+  }
+  return null;
 }
 
 export function validateExportReadiness(project: StoredProject): ExportValidationResult {
@@ -565,7 +581,7 @@ export function generateExportPackage(
   }
 
   // Build manuscript content estimate
-  const chaptersArtifact = project.artifacts.chapters?.content as Array<{ wordCount?: number }> | undefined;
+  const chaptersArtifact = (project.artifacts.chapters as TextArtifact | undefined)?.content as Array<{ wordCount?: number }> | undefined;
   const totalWords = chaptersArtifact?.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) || 500;
   const manuscriptSize = (totalWords * 0.005).toFixed(1); // ~5KB per 1000 words
 

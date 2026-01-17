@@ -2,6 +2,7 @@
 // Interface for NanoBanana and mock image generation
 
 import { getAIConfig, isImageMockMode } from "../config";
+import { authenticatedFetch } from "@/lib/utils/api";
 
 // ============================================
 // Types
@@ -10,9 +11,12 @@ import { getAIConfig, isImageMockMode } from "../config";
 export interface ImageGenerationRequest {
   prompt: string;
   references?: string[]; // URLs to reference images (e.g., pose sheets)
-  style?: "realistic" | "cartoon" | "watercolor" | "flat";
+  style?: string;
   width?: number;
   height?: number;
+  stage: "illustrations" | "cover";
+  attemptId?: string;
+  count?: number;
 }
 
 export interface ImageGenerationResponse {
@@ -39,13 +43,26 @@ export interface ImageGenerationError {
 const DEMO_SPREADS = [
   "/demo/spreads/spread-1.png",
   "/demo/spreads/spread-2.png",
-  "/demo/spreads/spread-3.png",
 ];
 
+// Use spreads as fallback for illustrations since illustrations folder doesn't exist
 const DEMO_ILLUSTRATIONS = [
-  "/demo/illustrations/scene-1.png",
-  "/demo/illustrations/scene-2.png",
-  "/demo/illustrations/scene-3.png",
+  "/demo/spreads/spread-1.png",
+  "/demo/spreads/spread-2.png",
+];
+
+const DEMO_CHARACTERS = [
+  "/demo/characters/amira.png",
+  "/demo/characters/yusuf.png",
+  "/demo/characters/fatima.png",
+  "/demo/characters/omar.png",
+  "/demo/characters/layla.png",
+  "/demo/characters/zaid.png",
+];
+
+const DEMO_POSE_SHEETS = [
+  "/demo/pose-sheets/amira-poses.png",
+  "/demo/pose-sheets/yusuf-poses.png",
 ];
 
 // ============================================
@@ -58,8 +75,31 @@ async function mockImageGeneration(
   // Simulate processing time
   await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
 
-  // Pick a random demo image
-  const pool = request.style === "flat" ? DEMO_SPREADS : DEMO_ILLUSTRATIONS;
+  // Determine which pool to use based on request context
+  let pool: string[];
+
+  // Check if this is a character generation request (portrait, no references)
+  const isCharacterGeneration =
+    request.prompt.toLowerCase().includes("character reference sheet") ||
+    request.prompt.toLowerCase().includes("character design brief") ||
+    (request.height && request.width && request.height > request.width); // Portrait orientation
+
+  // Check if this is a pose sheet request (landscape, 12 poses)
+  const isPoseSheetGeneration =
+    request.prompt.toLowerCase().includes("pose sheet") ||
+    request.prompt.toLowerCase().includes("12 poses") ||
+    request.prompt.toLowerCase().includes("4x3 grid");
+
+  if (isCharacterGeneration) {
+    pool = DEMO_CHARACTERS;
+  } else if (isPoseSheetGeneration) {
+    pool = DEMO_POSE_SHEETS;
+  } else if (request.style === "flat") {
+    pool = DEMO_SPREADS;
+  } else {
+    pool = DEMO_ILLUSTRATIONS;
+  }
+
   const randomIndex = Math.floor(Math.random() * pool.length);
 
   return {
@@ -69,45 +109,153 @@ async function mockImageGeneration(
       prompt: request.prompt.substring(0, 100),
       style: request.style || "default",
       processingTime: Math.floor(800 + Math.random() * 700),
+      imageType: isCharacterGeneration ? "character" : isPoseSheetGeneration ? "pose_sheet" : "illustration",
     },
     provider: "mock",
   };
 }
 
 // ============================================
-// NanoBanana Provider (Stub)
+// NanoBanana Provider with Retry & Fallback
 // ============================================
 
+// Client-side retry config (server also has retry logic)
+const CLIENT_MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 4000, 8000]; // 2s, 4s, 8s exponential backoff
+
+// Active abort controller for cancellation support
+let _imageAbortController: AbortController | null = null;
+
+/**
+ * Cancel any in-progress image generation request
+ */
+export function cancelImageGeneration(): void {
+  if (_imageAbortController) {
+    _imageAbortController.abort();
+    _imageAbortController = null;
+  }
+}
+
+/**
+ * Sleep helper for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function nanobananaImageGeneration(
-  request: ImageGenerationRequest
+  request: ImageGenerationRequest,
+  retryCount = 0
 ): Promise<ImageGenerationResponse> {
   const config = getAIConfig();
 
-  // Make API call to server proxy
-  const response = await fetch(config.imageProxyUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prompt: request.prompt,
-      references: request.references,
-      style: request.style,
-      width: request.width,
-      height: request.height,
-    }),
-  });
+  // Create new abort controller for this request
+  _imageAbortController = new AbortController();
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+  try {
+    // Make API call to server proxy
+    const response = await authenticatedFetch(config.imageProxyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: request.prompt,
+        references: request.references,
+        style: request.style,
+        width: request.width,
+        height: request.height,
+        task: request.stage === "cover" ? "cover" : "illustration",
+        attemptId: request.attemptId,
+        count: request.count,
+      }),
+      signal: _imageAbortController.signal,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error: ImageGenerationError = {
+        error: "Image generation failed",
+        message: errorData.message || `HTTP ${response.status}`,
+        retryable: response.status >= 500,
+      };
+
+      // Retry on 5xx errors
+      if (error.retryable && retryCount < CLIENT_MAX_RETRIES) {
+        console.warn(`Image generation failed (attempt ${retryCount + 1}/${CLIENT_MAX_RETRIES}), retrying...`);
+        await sleep(RETRY_DELAYS[retryCount] || 8000);
+        return nanobananaImageGeneration(request, retryCount + 1);
+      }
+
+      throw error;
+    }
+
+    return await response.json();
+  } catch (error) {
+    // Handle abort
+    if (error instanceof Error && error.name === "AbortError") {
+      throw {
+        error: "Cancelled",
+        message: "Image generation was cancelled",
+        retryable: false,
+      } as ImageGenerationError;
+    }
+
+    // Handle network errors with retry
+    if (error instanceof TypeError && retryCount < CLIENT_MAX_RETRIES) {
+      console.warn(`Network error (attempt ${retryCount + 1}/${CLIENT_MAX_RETRIES}), retrying...`);
+      await sleep(RETRY_DELAYS[retryCount] || 8000);
+      return nanobananaImageGeneration(request, retryCount + 1);
+    }
+
+    // If already an ImageGenerationError, rethrow
+    if ((error as ImageGenerationError).error) {
+      throw error;
+    }
+
+    // Unknown error - wrap it
     throw {
       error: "Image generation failed",
-      message: errorData.message || `HTTP ${response.status}`,
-      retryable: response.status >= 500,
+      message: error instanceof Error ? error.message : "Unknown error",
+      retryable: false,
     } as ImageGenerationError;
+  } finally {
+    _imageAbortController = null;
   }
+}
 
-  return await response.json();
+/**
+ * Generate image with fallback to mock on failure
+ */
+async function nanobananaWithFallback(
+  request: ImageGenerationRequest
+): Promise<ImageGenerationResponse> {
+  try {
+    return await nanobananaImageGeneration(request);
+  } catch (error) {
+    const imgError = error as ImageGenerationError;
+
+    // Don't fallback on user cancellation
+    if (imgError.error === "Cancelled") {
+      throw error;
+    }
+
+    // Log failure for debugging
+    console.error("Image generation failed after retries, falling back to mock:", imgError);
+
+    // Fallback to mock with placeholder flag
+    const mockResponse = await mockImageGeneration(request);
+    return {
+      ...mockResponse,
+      provider: "mock-fallback",
+      providerMeta: {
+        ...mockResponse.providerMeta,
+        placeholder: true,
+        fallbackReason: imgError.message,
+        originalError: imgError.error,
+      },
+    };
+  }
 }
 
 // ============================================
@@ -121,7 +269,8 @@ export async function generateImage(
     return mockImageGeneration(request);
   }
 
-  return nanobananaImageGeneration(request);
+  // Use fallback wrapper for production resilience
+  return nanobananaWithFallback(request);
 }
 
 // ============================================
@@ -170,24 +319,72 @@ export interface CharacterPoseRequest {
   style?: ImageGenerationRequest["style"];
 }
 
+/**
+ * Build illustration prompt with character consistency enforcement.
+ * This is a simplified version for quick access; full compliance
+ * is handled in imagePrompts.ts with the compliance guard.
+ */
 export function buildIllustrationPrompt(
   sceneDescription: string,
   characterPoses: CharacterPoseRequest[],
   ageRange: string
 ): ImageGenerationRequest {
+  // Build detailed character context with immutable traits
   const characterContext = characterPoses
-    .map((cp) => `${cp.characterName} (see reference pose sheet)`)
-    .join(", ");
+    .map((cp, idx) => {
+      const lines = [
+        `${cp.characterName} (CHARACTER ${idx + 1})`,
+        `- MUST match reference pose sheet exactly`,
+        `- Maintain consistent appearance throughout`,
+      ];
+      return lines.join("\n");
+    })
+    .join("\n\n");
 
-  const prompt = `Children's book illustration for ages ${ageRange}:
-Scene: ${sceneDescription}
-Characters: ${characterContext}
-Style: Warm, inviting, culturally appropriate Islamic children's illustration.
-Important: Characters should be modestly dressed as shown in references.`;
+  // Build multi-character differentiation if needed
+  let multiCharGuide = "";
+  if (characterPoses.length > 1) {
+    multiCharGuide = `
+=== MULTI-CHARACTER REQUIREMENTS ===
+${characterPoses.length} characters in scene - each MUST be clearly distinguishable:
+${characterPoses.map((cp, i) => `- Character ${i + 1}: ${cp.characterName}`).join("\n")}
+Do NOT blend or merge character features between characters.
+`;
+  }
+
+  const prompt = `Islamic Children's Book Illustration
+Target audience: Ages ${ageRange}
+
+## SCENE
+${sceneDescription}
+
+## CHARACTERS (MUST MATCH REFERENCES EXACTLY)
+${characterContext}
+${multiCharGuide}
+
+## STYLE REQUIREMENTS
+- Warm, inviting children's book illustration
+- Soft lighting with gentle shadows
+- Vibrant but harmonious colors
+- Child-friendly expressions
+- Clear focal point
+
+## MODESTY REQUIREMENTS (MANDATORY)
+- All characters must be modestly dressed as shown in references
+- Characters with hijab MUST have hijab visible in every frame
+- No tight or revealing clothing
+
+## CRITICAL REQUIREMENTS
+- NO text, words, or letters in the image
+- Characters MUST match their reference images
+- Consistent art style throughout
+- Professional children's book quality`;
 
   return {
     prompt,
     references: characterPoses.map((cp) => cp.poseSheetUrl),
     style: characterPoses[0]?.style || "watercolor",
+    stage: "illustrations",
   };
 }
+

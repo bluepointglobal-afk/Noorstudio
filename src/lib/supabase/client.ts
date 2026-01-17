@@ -28,13 +28,16 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (!supabaseClient) {
     supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        persistSession: false, // No auth needed for public demo viewing
+        persistSession: true, // Enabled for auth support
+        autoRefreshToken: true,
       },
     });
   }
 
   return supabaseClient;
 }
+
+export const supabase = getSupabaseClient();
 
 // ============================================
 // Configuration Check

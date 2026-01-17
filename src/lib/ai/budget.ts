@@ -136,18 +136,13 @@ export function enforceBudget(
   };
 }
 
-/**
- * Get the maximum chapters that can be generated per run
- */
-export function getMaxChaptersPerRun(): number {
-  return getAIConfig().maxChaptersPerRun;
-}
+import { GLOBAL_LIMITS } from "./tokenBudget";
 
 /**
  * Calculate batch plan for chapter generation
  */
 export function planChapterBatches(totalChapters: number): number[][] {
-  const maxPerRun = getMaxChaptersPerRun();
+  const maxPerRun = GLOBAL_LIMITS.maxChaptersPerRun;
   const batches: number[][] = [];
 
   for (let i = 0; i < totalChapters; i += maxPerRun) {

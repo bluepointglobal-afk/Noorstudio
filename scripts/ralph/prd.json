@@ -1,0 +1,177 @@
+{
+  "project": "NoorStudio",
+  "branchName": "ralph/nanobanana-image-generation",
+  "description": "Replace mock image provider with real NanoBanana API integration for character reference sheets, book illustrations, and covers",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Server Proxy for NanoBanana API",
+      "description": "As a developer, I want all NanoBanana API calls routed through the Express server so that API keys remain secure and rate limiting is enforced.",
+      "acceptanceCriteria": [
+        "New route POST /api/ai/image accepts image generation requests",
+        "Server validates JWT auth before processing",
+        "Server injects NANOBANANA_API_KEY from environment",
+        "Request/response logged to ai_usage table",
+        "Rate limiting applied (15 req/10min per IP)",
+        "Typecheck passes",
+        "Test with curl returns expected response structure"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Verified: POST /api/ai/image route, JWT auth, NANOBANANA_API_KEY injection, ai_usage logging, 15 req/10min rate limiting. Typecheck passes."
+    },
+    {
+      "id": "US-002",
+      "title": "NanoBanana Provider Implementation",
+      "description": "As a developer, I want a NanoBanana provider that replaces the mock so that real images are generated.",
+      "acceptanceCriteria": [
+        "Implement nanobananaProvider in src/lib/ai/providers/imageProvider.ts",
+        "Provider calls server proxy (not direct API)",
+        "Supports pixar-3d-v1 model",
+        "Accepts prompt, negative_prompt, dimensions, count, seed",
+        "Returns array of image URLs",
+        "Provider selection via VITE_AI_IMAGE_PROVIDER env var",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented nanobananaImageGeneration() calling server proxy at config.imageProxyUrl. Provider selection via VITE_AI_IMAGE_PROVIDER. Typecheck passes."
+    },
+    {
+      "id": "US-003",
+      "title": "Error Handling and Retry Logic",
+      "description": "As a developer, I want graceful error handling so that temporary API failures don't break the user experience.",
+      "acceptanceCriteria": [
+        "Automatic retry with exponential backoff (3 attempts: 2s, 4s, 8s)",
+        "Retry on 5xx errors and network failures only",
+        "After retries exhausted, fall back to mock with placeholder flag",
+        "Failed requests logged for debugging",
+        "Cancel token support via AbortController",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Added CLIENT_MAX_RETRIES=3 with RETRY_DELAYS=[2s,4s,8s]. Retries on 5xx/network errors. nanobananaWithFallback() returns mock with placeholder:true on exhaustion. cancelImageGeneration() uses AbortController. Typecheck passes."
+    },
+    {
+      "id": "US-004",
+      "title": "Character Pose Prompt Templates",
+      "description": "As a developer, I want prompt templates for all 12 character poses so that reference sheets are generated consistently.",
+      "acceptanceCriteria": [
+        "Update buildCharacterPosePrompt() in src/lib/ai/imagePrompts.ts",
+        "Include character visual DNA in every prompt",
+        "Include modesty rules (hijab, long sleeves, loose clothing)",
+        "Include style guide (Pixar 3D, Watercolor, etc.)",
+        "Create templates for all 12 poses: Front, Side, 3/4, Walking, Running, Sitting, Reading, Praying, Smiling, Surprised, Pointing, Thinking",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Character Reference Sheet Generation",
+      "description": "As an author, I want to generate a 12-pose character reference sheet so that my character looks consistent across all book illustrations.",
+      "acceptanceCriteria": [
+        "Add poseImages field to character store with url, selected, alternatives",
+        "Create generateCharacterReferenceSheet() function",
+        "Generate 3 alternatives per pose (36 total images)",
+        "Use consistent seed for character",
+        "Store generated poses in character record",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Character Reference Sheet UI",
+      "description": "As an author, I want to view and select poses in the Character Detail page so that I can curate my character's reference sheet.",
+      "acceptanceCriteria": [
+        "Add Generate Reference Sheet button to CharacterDetailPage",
+        "Show generation progress (0/12 poses)",
+        "Display pose grid in 4x3 layout",
+        "Click pose to see 3 alternatives in modal",
+        "Select alternative as primary pose",
+        "Add Regenerate Pose button for individual poses",
+        "Typecheck passes",
+        "Verify in browser: generate sheet, select poses, confirm persistence"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Book Illustration Generation",
+      "description": "As an author, I want to generate illustrations for my book scenes so that my story has visual content.",
+      "acceptanceCriteria": [
+        "Create buildIllustrationPrompt() with scene description and character references",
+        "Update illustration stage in stageRunner.ts to use real provider",
+        "Generate 3 variants per illustration",
+        "Show variants in ProjectWorkspacePage with selection UI",
+        "Store selected illustration in chapter artifacts",
+        "Typecheck passes",
+        "Verify in browser: run illustration stage, see images, select variant"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Cover Generation",
+      "description": "As an author, I want to generate front and back cover images so that my book has professional covers.",
+      "acceptanceCriteria": [
+        "Create buildCoverPrompt() for front cover (title, character, mood)",
+        "Create buildCoverPrompt() for back cover (simpler, synopsis space)",
+        "Implement cover stage in stageRunner.ts",
+        "Generate at portrait dimensions (1024x1536)",
+        "Show cover previews in ProjectWorkspacePage",
+        "Allow individual cover regeneration",
+        "Typecheck passes",
+        "Verify in browser: run cover stage, see front/back covers"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Dimension Selection UI",
+      "description": "As an author, I want to choose image dimensions so that illustrations fit my book layout needs.",
+      "acceptanceCriteria": [
+        "Create DimensionPicker component in src/components/shared/",
+        "Presets: Square (1024x1024), Landscape (1536x1024), Portrait (1024x1536)",
+        "Custom option with width/height inputs (min 512, max 2048, step 64)",
+        "Add dimension picker to illustration and cover generation UI",
+        "Store selected dimensions in project settings",
+        "Typecheck passes",
+        "Verify in browser: change dimensions, confirm in generated images"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Credit Integration",
+      "description": "As a user, I want image generation to consume credits appropriately so that usage is tracked and limited.",
+      "acceptanceCriteria": [
+        "Add IMAGE_CREDITS constants: characterSheet=8, illustration=2, cover=2, poseAlternative=1",
+        "Pre-flight credit check before generation starts",
+        "Show confirmation modal with credit cost",
+        "Deduct credits only on successful generation",
+        "Insufficient credits shows upgrade prompt",
+        "Update billing page to show image credits in ledger",
+        "Typecheck passes",
+        "Verify in browser: check balance, generate, confirm deduction"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

@@ -1,10 +1,8 @@
-// Prompt Assembly for AI Engine
-// Builds deterministic prompts for each stage
-
 import { StoredProject } from "@/lib/storage/projectsStore";
 import { StoredCharacter } from "@/lib/storage/charactersStore";
 import { KBRulesSummary } from "@/lib/storage/knowledgeBaseStore";
 import { clampTextLength, clampTextsProportionally } from "./budget";
+import { AIContextCharacter, AIContextKB } from "./types";
 
 // ============================================
 // Output Types (Structured JSON)
@@ -43,12 +41,12 @@ export interface HumanizeOutput {
 // Character Summary Builder
 // ============================================
 
-function buildCharacterSummary(characters: StoredCharacter[]): string {
+function buildCharacterSummary(characters: AIContextCharacter[]): string {
   if (characters.length === 0) return "No characters provided.";
 
   return characters
     .map((char) => {
-      const traits = char.traits?.join(", ") || "kind, curious";
+      const traits = char.traits.join(", ") || "kind, curious";
       const speakingStyle = char.speakingStyle || "friendly and warm";
       return `- ${char.name} (${char.role}): ${traits}. Speaking style: ${speakingStyle}`;
     })
@@ -59,7 +57,7 @@ function buildCharacterSummary(characters: StoredCharacter[]): string {
 // KB Rules Summary Builder
 // ============================================
 
-function buildKBRulesSummary(kbSummary: KBRulesSummary | null): string {
+function buildKBRulesSummary(kbSummary: AIContextKB | null): string {
   if (!kbSummary) return "No knowledge base rules provided.";
 
   const sections: string[] = [];
@@ -67,21 +65,21 @@ function buildKBRulesSummary(kbSummary: KBRulesSummary | null): string {
   if (kbSummary.faithRules.length > 0) {
     sections.push(
       "FAITH RULES (must follow):\n" +
-        kbSummary.faithRules.map((r) => `- ${r}`).join("\n")
+      kbSummary.faithRules.map((r) => `- ${r}`).join("\n")
     );
   }
 
   if (kbSummary.vocabularyRules.length > 0) {
     sections.push(
       "VOCABULARY RULES (language guidelines):\n" +
-        kbSummary.vocabularyRules.map((r) => `- ${r}`).join("\n")
+      kbSummary.vocabularyRules.map((r) => `- ${r}`).join("\n")
     );
   }
 
   if (kbSummary.illustrationRules.length > 0) {
     sections.push(
       "ILLUSTRATION RULES (for scene descriptions):\n" +
-        kbSummary.illustrationRules.map((r) => `- ${r}`).join("\n")
+      kbSummary.illustrationRules.map((r) => `- ${r}`).join("\n")
     );
   }
 
@@ -94,8 +92,8 @@ function buildKBRulesSummary(kbSummary: KBRulesSummary | null): string {
 
 export function buildOutlinePrompt(
   project: StoredProject,
-  characters: StoredCharacter[],
-  kbSummary: KBRulesSummary | null
+  characters: AIContextCharacter[],
+  kbSummary: AIContextKB | null
 ): { system: string; prompt: string } {
   const system = `You are an expert Islamic children's book author. You create engaging, age-appropriate stories that teach Islamic values through compelling narratives.
 
@@ -165,8 +163,8 @@ export interface ChapterContext {
 export function buildChapterPrompt(
   project: StoredProject,
   chapterContext: ChapterContext,
-  characters: StoredCharacter[],
-  kbSummary: KBRulesSummary | null
+  characters: AIContextCharacter[],
+  kbSummary: AIContextKB | null
 ): { system: string; prompt: string } {
   const system = `You are an expert Islamic children's book author writing engaging chapter content.
 
@@ -231,7 +229,7 @@ export function buildHumanizePrompt(
   project: StoredProject,
   chapterNumber: number,
   chapterText: string,
-  kbSummary: KBRulesSummary | null
+  kbSummary: AIContextKB | null
 ): { system: string; prompt: string } {
   const system = `You are an expert editor specializing in Islamic children's literature. Your job is to humanize and polish AI-generated text while preserving its meaning and Islamic content.
 

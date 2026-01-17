@@ -1,0 +1,24 @@
+# Progress Log
+
+## Codebase Patterns
+- Server auth middleware in `server/index.ts` checks for Bearer token first, then validates with Supabase (bypasses in dev mode if no Supabase configured)
+- Rate limiting is path-based, configured in `RATE_LIMITS` object in `server/index.ts`
+- AI usage logging goes to `ai_usage` table via `logAIUsage()` helper in `server/routes/ai.ts`
+- Token budgets are defined in `src/lib/ai/tokenBudget.ts` and imported by server for enforcement
+- Run `npx tsc --noEmit` for typecheck (no npm script defined)
+
+---
+
+## 2026-01-17 - US-001
+- What was implemented: Server Proxy for NanoBanana API (was already implemented in working tree)
+- Files changed:
+  - `server/routes/ai.ts` - Image generation endpoint with NanoBanana provider
+  - `server/index.ts` - Auth middleware, rate limiting, credit middleware
+  - `server/env.ts` - NANOBANANA_API_KEY env var
+  - `src/lib/ai/tokenBudget.ts` - Token budget definitions for AI stages
+- **Learnings for future iterations:**
+  - The /api/ai/image endpoint already exists and is fully featured
+  - Server validates JWT via `authMiddleware` before any /api/ai routes
+  - Rate limit for images is 15 req/10min per IP (see `RATE_LIMITS["/api/ai/image"]`)
+  - NanoBanana provider is already implemented in `nanobananaImageGeneration()` function
+---

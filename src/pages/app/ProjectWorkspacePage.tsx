@@ -13,12 +13,22 @@ import {
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
+  OutlineArtifactContent,
+  ChaptersArtifactContent,
+  HumanizeArtifactContent,
+  IllustrationArtifactContent,
+  LayoutArtifactContent,
+  CoverArtifactContent,
+  ExportArtifactContent
+} from "@/lib/types/artifacts";
+import {
   ArrowLeft,
   Play,
   Check,
+  CheckCircle2,
   Loader2,
   FileText,
-  Image,
+  Image as ImageIcon,
   Layout,
   BookOpen,
   Download,
@@ -33,9 +43,21 @@ import {
   AlertTriangle,
   Clock,
   X,
-  Zap,
   Share2,
   Copy,
+  AlertCircle,
+  RefreshCw,
+  Sparkles,
+  Lock,
+  Trash2,
+  ChevronRight,
+  ChevronLeft,
+  History,
+  Heart,
+  Palette,
+  Eraser,
+  MessageSquareText,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
@@ -55,8 +77,8 @@ import {
 } from "@/lib/ai";
 import { ProjectStage, PIPELINE_STAGES } from "@/lib/models";
 import {
-  getProject,
   updateProject,
+  getProject,
   addArtifact,
   updatePipelineStage,
   StoredProject,
@@ -70,6 +92,7 @@ import {
   isExportStale,
   ExportPackage,
   ExportFile,
+  getArtifactContent,
 } from "@/lib/storage/projectsStore";
 import {
   getCharacter,
@@ -91,7 +114,6 @@ import { copyShareUrl } from "@/lib/demo/demoStore";
 const DEMO_SPREADS = [
   "/demo/spreads/spread-1.png",
   "/demo/spreads/spread-2.png",
-  "/demo/spreads/spread-3.png",
 ];
 
 const DEMO_COVERS = [
@@ -168,7 +190,7 @@ function generateDemoIllustrations(project: StoredProject) {
       chapterNumber: 3,
       scene: "Acts of kindness and sharing",
       characterIds: project.characterIds,
-      imageUrl: DEMO_SPREADS[2],
+      imageUrl: DEMO_SPREADS[0], // Alternate back to first image
       status: "approved",
     },
     {
@@ -176,7 +198,7 @@ function generateDemoIllustrations(project: StoredProject) {
       chapterNumber: 4,
       scene: "Evening reflection under the stars",
       characterIds: project.characterIds,
-      imageUrl: DEMO_SPREADS[0],
+      imageUrl: DEMO_SPREADS[1], // Use second image
       status: "draft",
     },
   ];
@@ -205,6 +227,49 @@ function generateDemoExport(project: StoredProject) {
   }));
 }
 
+// Parse Error Banner Component
+function ParseErrorBanner({
+  onRetry,
+  onShowRaw,
+  onRegenerate,
+  stageLabel
+}: {
+  onRetry: () => void;
+  onShowRaw: () => void;
+  onRegenerate: () => void;
+  stageLabel: string;
+}) {
+  return (
+    <div className="mb-6 p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <h3 className="font-semibold text-orange-700 dark:text-orange-400 mb-1">
+            Generation succeeded but output could not be parsed
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            The AI generated content, but it wasn't in the expected format. You can try to repair it without spending more credits, or check the raw output.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={onRetry} className="bg-orange-500 hover:bg-orange-600 text-white border-none">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry Parse
+            </Button>
+            <Button size="sm" variant="outline" onClick={onShowRaw}>
+              <FileJson className="w-4 h-4 mr-2" />
+              Open Raw Output
+            </Button>
+            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onRegenerate}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Regenerate Stage
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectWorkspacePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -218,6 +283,7 @@ export default function ProjectWorkspacePage() {
   const [showReExportModal, setShowReExportModal] = useState(false);
   const [previewFile, setPreviewFile] = useState<ExportFile | null>(null);
   const [activeArtifactTab, setActiveArtifactTab] = useState<string>("outline");
+  const [rawOutput, setRawOutput] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [cancelToken, setCancelToken] = useState<CancelToken | null>(null);
   const [aiUsage, setAiUsage] = useState<AIUsageStats | null>(null);
@@ -314,6 +380,8 @@ export default function ProjectWorkspacePage() {
     const stageId = showCreditModal as ProjectStage;
     const creditCost = STAGE_CREDIT_COSTS[stageId] || 3;
 
+    console.log(`[ProjectWorkspace] Confirming run stage: ${stageId}, Cost: ${creditCost}`);
+
     // Check credits BEFORE running (but don't consume yet)
     if (!hasEnoughCredits("book", creditCost)) {
       toast({
@@ -330,6 +398,8 @@ export default function ProjectWorkspacePage() {
       setShowCreditModal(null);
       return;
     }
+
+    console.log(`[ProjectWorkspace] Attempting to run stage: ${stageId} for project: ${project.id}`);
 
     // NOTE: Credits are consumed AFTER successful completion, not before
     // This ensures we don't charge for failed attempts
@@ -361,189 +431,338 @@ export default function ProjectWorkspacePage() {
       refreshProject();
     };
 
-    let success = false;
-    let artifactData: unknown = null;
-    let errorMessage: string | undefined;
+    // START TOP-LEVEL TRY CATCH to ensure no silent failures
+    try {
+      let success = false;
+      let errorMessage: string | undefined;
+      let artifactData: unknown = null;
 
-    // Check if this is an AI stage
-    if (isAIStage(stageId)) {
-      try {
-        if (stageId === "outline") {
-          const result = await runOutlineStage(project, characters, kbRules, onAIProgress, token);
-          if (result.success && result.data) {
-            success = true;
-            // Transform to display format
-            artifactData = {
-              chapters: result.data.chapters.map((ch, idx) =>
-                `Chapter ${idx + 1}: ${ch.title} - ${ch.goal}`
-              ),
-              synopsis: result.data.one_liner,
-              kbApplied: kbRules?.kbName || null,
-              // Store the full structured data for chapters stage
-              _structured: result.data,
-            };
-          } else {
-            errorMessage = result.error;
-            if (result.needsReview && result.rawText) {
-              artifactData = { _rawText: result.rawText, _needsReview: true };
-            }
-          }
-        } else if (stageId === "chapters") {
-          // Get outline from previous stage
-          const outlineArtifact = project.artifacts.outline?.content as { _structured?: OutlineOutput } | undefined;
-          const outline = outlineArtifact?._structured;
+      console.log(`[ProjectWorkspace] Executing stage logic for: ${stageId}`);
 
-          if (!outline) {
-            errorMessage = "Outline must be generated first";
-          } else {
-            const result = await runChaptersStage(project, outline, characters, kbRules, onAIProgress, token);
+      // Check if this is an AI stage
+      if (isAIStage(stageId)) {
+        try {
+          if (stageId === "outline") {
+            const result = await runOutlineStage(project, characters, kbRules, onAIProgress, token);
             if (result.success && result.data) {
               success = true;
               // Transform to display format
-              artifactData = result.data.chapters.map((ch) => ({
-                chapterNumber: ch.chapter_number,
-                title: ch.chapter_title,
-                content: ch.text,
-                wordCount: ch.text.split(/\s+/).length,
-                vocabularyNotes: ch.vocabulary_notes,
-                islamicAdabChecks: ch.islamic_adab_checks,
-                // Store structured data
-                _structured: ch,
-              }));
-            } else {
-              errorMessage = result.error;
-            }
-          }
-        } else if (stageId === "humanize") {
-          // Get chapters from previous stage
-          const chaptersArtifact = project.artifacts.chapters?.content as Array<{ _structured?: ChapterOutput }> | undefined;
-          const chapters = chaptersArtifact?.map(ch => ch._structured).filter((ch): ch is ChapterOutput => !!ch);
-
-          if (!chapters || chapters.length === 0) {
-            errorMessage = "Chapters must be generated first";
-          } else {
-            const result = await runHumanizeStage(project, chapters, kbRules, onAIProgress, token);
-            if (result.success && result.data) {
-              success = true;
               artifactData = {
-                humanized: true,
-                reviewedAt: new Date().toISOString(),
-                chapters: result.data.chapters.map((ch) => ({
-                  chapterNumber: ch.chapter_number,
-                  title: ch.chapter_title,
-                  editedText: ch.edited_text,
-                  changesMade: ch.changes_made,
-                })),
+                chapters: result.data.chapters.map((ch, idx) =>
+                  `Chapter ${idx + 1}: ${ch.title} - ${ch.goal}`
+                ),
+                synopsis: result.data.one_liner,
+                kbApplied: kbRules?.kbName || null,
+                // Store the full structured data for chapters stage
+                _structured: result.data,
               };
             } else {
               errorMessage = result.error;
+              if (result.needsReview && result.rawText) {
+                artifactData = { _rawText: result.rawText, _needsReview: true };
+              }
+            }
+          } else if (stageId === "chapters") {
+            // Get outline from previous stage
+            const outlineContent = getArtifactContent<{ _structured?: OutlineOutput }>(project, "outline");
+            const outline = outlineContent?._structured;
+
+            if (!outline) {
+              errorMessage = "Outline must be generated first";
+            } else {
+              const result = await runChaptersStage(project, outline, characters, kbRules, onAIProgress, token);
+              if (result.success && result.data) {
+                success = true;
+                // Transform to display format
+                artifactData = result.data.chapters.map((ch) => ({
+                  chapterNumber: ch.chapter_number,
+                  title: ch.chapter_title,
+                  content: ch.text,
+                  wordCount: ch.text.split(/\s+/).length,
+                  vocabularyNotes: ch.vocabulary_notes,
+                  islamicAdabChecks: ch.islamic_adab_checks,
+                  // Store structured data
+                  _structured: ch,
+                }));
+              } else {
+                errorMessage = result.error;
+                if (result.needsReview && result.rawText) {
+                  artifactData = { _rawText: result.rawText, _needsReview: true };
+                }
+              }
+            }
+          } else if (stageId === "humanize") {
+            // Get chapters from previous stage
+            const chaptersContent = getArtifactContent<Array<{ _structured?: ChapterOutput }>>(project, "chapters");
+            const chapters = chaptersContent?.map(ch => ch._structured).filter((ch): ch is ChapterOutput => !!ch);
+
+            if (!chapters || chapters.length === 0) {
+              errorMessage = "Chapters must be generated first";
+            } else {
+              const result = await runHumanizeStage(project, chapters, kbRules, onAIProgress, token);
+              if (result.success && result.data) {
+                success = true;
+                artifactData = {
+                  humanized: true,
+                  reviewedAt: new Date().toISOString(),
+                  chapters: result.data.chapters.map((ch) => ({
+                    chapterNumber: ch.chapter_number,
+                    title: ch.chapter_title,
+                    editedText: ch.edited_text,
+                    changesMade: ch.changes_made,
+                  })),
+                };
+              } else {
+                errorMessage = result.error;
+                if (result.needsReview && result.rawText) {
+                  artifactData = { _rawText: result.rawText, _needsReview: true };
+                }
+              }
             }
           }
+        } catch (error: unknown) {
+          const err = error as { message?: string; cancelled?: boolean };
+          if (err.cancelled) {
+            errorMessage = "Stage cancelled by user";
+          } else {
+            throw err; // Re-throw to be caught by top-level catch
+          }
         }
-      } catch (error: unknown) {
-        const err = error as { message?: string; cancelled?: boolean };
-        if (err.cancelled) {
-          errorMessage = "Stage cancelled by user";
+      } else {
+        // Non-AI stages: use mock job runner
+        const result = await mockJobRunner.runStage(
+          stageId,
+          (event: JobProgressEvent) => {
+            updatePipelineStage(project.id, stageId, {
+              status: event.status as PipelineStageState["status"],
+              progress: event.progress,
+              message: event.message,
+            });
+            refreshProject();
+          }
+        );
+
+        if (result.success) {
+          success = true;
+          switch (stageId) {
+            case "illustrations":
+              artifactData = generateDemoIllustrations(project);
+              break;
+            case "layout":
+              artifactData = generateDemoLayout(project);
+              break;
+            case "cover":
+              artifactData = generateDemoCover();
+              break;
+            case "export": {
+              const characterNames = characters.map((c) => c.name);
+              const kbName = kbRules?.kbName || project.knowledgeBaseName || "Unknown KB";
+              const exportPkg = generateExportPackage(project, characterNames, kbName);
+              saveExportPackage(project.id, exportPkg);
+              artifactData = generateDemoExport(project);
+              break;
+            }
+            default:
+              artifactData = result.data;
+          }
         } else {
-          errorMessage = err.message || "Unknown error during AI generation";
+          console.error(`[ProjectWorkspace] Stage failed: ${result.error}`);
+          errorMessage = result.error;
         }
       }
-    } else {
-      // Non-AI stages: use mock job runner
-      const result = await mockJobRunner.runStage(
-        stageId,
-        (event: JobProgressEvent) => {
-          updatePipelineStage(project.id, stageId, {
-            status: event.status as PipelineStageState["status"],
-            progress: event.progress,
-            message: event.message,
-          });
-          refreshProject();
+
+      setRunningStage(null);
+      setCancelToken(null);
+      setStageSubProgress(null);
+
+      if (success && artifactData) {
+        // CREDIT CHARGING: Only consume credits AFTER successful completion
+        const consumeResult = consumeCredits({
+          type: "book",
+          amount: creditCost,
+          reason: `Pipeline stage: ${PIPELINE_STAGES.find((s) => s.id === stageId)?.label || stageId}`,
+          entityType: "project",
+          entityId: project.id,
+          meta: { stage: stageId, projectTitle: project.title },
+        });
+
+        if (!consumeResult.success) {
+          // Credit consumption failed after success - log but don't block
         }
-      );
+
+        // Store the artifact
+        addArtifact(project.id, stageId, {
+          type: stageId as "outline" | "chapters",
+          content: artifactData,
+          generatedAt: new Date().toISOString(),
+        });
+
+        // Mark stage as completed
+        updatePipelineStage(project.id, stageId, {
+          status: "completed",
+          progress: 100,
+          completedAt: new Date().toISOString(),
+        });
+
+        refreshProject();
+
+        toast({
+          title: "Stage completed",
+          description: `${PIPELINE_STAGES.find((s) => s.id === stageId)?.label} has been completed successfully.`,
+        });
+
+        setStageSubProgress(null);
+        // Wait for React to update state before switching tab
+        setTimeout(() => {
+          setActiveArtifactTab(stageId);
+        }, 0);
+      } else {
+        // IMPORTANT: No credits consumed on failure
+
+        // Keep artifact if we have it (e.g. raw text for review)
+        if (artifactData) {
+          addArtifact(project.id, stageId, {
+            type: stageId as "outline" | "chapters" | "humanize",
+            content: artifactData,
+            generatedAt: new Date().toISOString(),
+          });
+
+          // Auto-switch to tab to show error banner
+          setTimeout(() => {
+            setActiveArtifactTab(stageId);
+          }, 0);
+        }
+
+        // Mark stage as error
+        updatePipelineStage(project.id, stageId, {
+          status: "error",
+          message: errorMessage,
+        });
+        refreshProject();
+
+      }
+    } catch (error) {
+      console.error(`[ProjectWorkspace] CRITICAL STAGE FAILURE:`, error);
+      const msg = error instanceof Error ? error.message : "Unknown critical error";
+
+      updatePipelineStage(project.id, stageId, {
+        status: "error",
+        progress: 0,
+        message: msg,
+      });
+      refreshProject();
+
+      toast({
+        title: "Stage Execution Failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      // Ensure specific cleanup happens
+      if (runningStage === stageId) {
+        setRunningStage(null);
+        setCancelToken(null);
+      }
+    }
+  };
+
+  const handleRetryParse = async (stageId: string, rawText: string) => {
+    // Basic client-side retry for now - in a real app this might use a lighter AI model
+    // or just re-run the parser with different parameters.
+    // For this implementation, we'll just try to parse the JSON again.
+
+    try {
+      // Import here to avoid circular dependencies if moved
+      const { parseJSONResponse } = await import("@/lib/ai/providers/textProvider");
+      const { OUTLINE_SCHEMA, CHAPTER_SCHEMA, HUMANIZE_SCHEMA } = await import("@/lib/ai/prompts");
+
+      // Determine expected schema/format based on stage
+      let parsedData: OutlineOutput | ChapterOutput | ChapterOutput[] | null = null;
+      let success = false;
+
+      const result = parseJSONResponse(rawText);
 
       if (result.success) {
         success = true;
-        switch (stageId) {
-          case "illustrations":
-            artifactData = generateDemoIllustrations(project);
-            break;
-          case "layout":
-            artifactData = generateDemoLayout(project);
-            break;
-          case "cover":
-            artifactData = generateDemoCover();
-            break;
-          case "export":
-            const characterNames = characters.map((c) => c.name);
-            const kbName = kbRules?.kbName || project.knowledgeBaseName || "Unknown KB";
-            const exportPkg = generateExportPackage(project, characterNames, kbName);
-            saveExportPackage(project.id, exportPkg);
-            artifactData = generateDemoExport(project);
-            break;
-          default:
-            artifactData = result.data;
-        }
+        parsedData = result.data as OutlineOutput | ChapterOutput | ChapterOutput[];
       } else {
-        errorMessage = result.error;
-      }
-    }
-
-    setRunningStage(null);
-    setCancelToken(null);
-    setStageSubProgress(null);
-
-    if (success && artifactData) {
-      // CREDIT CHARGING: Only consume credits AFTER successful completion
-      const consumeResult = consumeCredits({
-        type: "book",
-        amount: creditCost,
-        reason: `Pipeline stage: ${PIPELINE_STAGES.find((s) => s.id === stageId)?.label || stageId}`,
-        entityType: "project",
-        entityId: project.id,
-        meta: { stage: stageId, projectTitle: project.title },
-      });
-
-      if (!consumeResult.success) {
-        // Credit consumption failed after success - log but don't block
+        toast({
+          title: "Parse Failed",
+          description: "Could not parse the raw output. You may need to regenerate.",
+          variant: "destructive"
+        });
+        return;
       }
 
-      // Store the artifact
-      addArtifact(project.id, stageId, {
-        type: stageId as "outline" | "chapters",
-        content: artifactData,
-        generatedAt: new Date().toISOString(),
-      });
+      if (success && parsedData) {
+        // Transform based on stage (duplicating logic from confirmRunStage - could be refactored)
+        let artifactData: OutlineArtifactContent | ChaptersArtifactContent | null = null;
 
-      // Mark stage as completed
-      updatePipelineStage(project.id, stageId, {
-        status: "completed",
-        progress: 100,
-        completedAt: new Date().toISOString(),
-      });
+        if (stageId === "outline") {
+          const outline = parsedData as OutlineOutput;
+          artifactData = {
+            chapters: outline.chapters.map((ch, idx: number) =>
+              `Chapter ${idx + 1}: ${ch.title} - ${ch.goal}`
+            ),
+            synopsis: outline.one_liner,
+            kbApplied: kbRules?.kbName || null,
+            _structured: parsedData,
+          };
+        } else if (stageId === "chapters") {
+          // Verify it's a chapter or chapters
+          // Handle both single chapter and array
+          const chaptersArr = Array.isArray(parsedData) ? parsedData : [parsedData as ChapterOutput];
+          artifactData = chaptersArr.map((ch) => ({
+            chapterNumber: ch.chapter_number,
+            title: ch.chapter_title,
+            content: ch.text,
+            wordCount: ch.text.split(/\s+/).length,
+            vocabularyNotes: ch.vocabulary_notes,
+            islamicAdabChecks: ch.islamic_adab_checks,
+            _structured: ch,
+          }));
+        }
 
-      refreshProject();
+        // Update project with fixed artifact
+        addArtifact(project.id, stageId, {
+          type: stageId as "outline" | "chapters",
+          content: artifactData,
+          generatedAt: new Date().toISOString(),
+        });
 
+        // Mark as completed
+        updatePipelineStage(project.id, stageId as ProjectStage, {
+          status: "completed",
+          progress: 100,
+          completedAt: new Date().toISOString(),
+          message: "Completed (after retry)"
+        });
+
+        // Consume credits now that it succeeded? 
+        // Logic says "Ensure this is consistent... credits not deducted unless stage completes successfully"
+        // Since we are recovering a failed stage that didn't charge, we SHOULD charge now.
+        const creditCost = STAGE_CREDIT_COSTS[stageId as ProjectStage] || 3;
+        consumeCredits({
+          type: "book",
+          amount: creditCost,
+          reason: `Pipeline stage (Retry): ${stageId}`,
+          entityType: "project",
+          entityId: project.id,
+          meta: { stage: stageId, projectTitle: project.title },
+        });
+
+        refreshProject();
+        toast({
+          title: "Recovery Successful",
+          description: "Output parsed and saved successfully.",
+        });
+      }
+    } catch (e) {
+      console.error("Retry parse error", e);
       toast({
-        title: "Stage completed",
-        description: `${PIPELINE_STAGES.find((s) => s.id === stageId)?.label} has been completed successfully.`,
-      });
-
-      // Auto-switch to the new artifact tab
-      setActiveArtifactTab(stageId);
-    } else {
-      // IMPORTANT: No credits consumed on failure
-      // Mark stage as error
-      updatePipelineStage(project.id, stageId, {
-        status: "error",
-        message: errorMessage,
-      });
-      refreshProject();
-
-      toast({
-        title: "Stage failed",
-        description: errorMessage || "An error occurred during processing.",
-        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred during retry.",
+        variant: "destructive"
       });
     }
   };
@@ -578,7 +797,7 @@ export default function ProjectWorkspacePage() {
       case "humanize":
         return FileText;
       case "illustrations":
-        return Image;
+        return ImageIcon;
       case "layout":
       case "cover":
         return Layout;
@@ -646,32 +865,54 @@ export default function ProjectWorkspacePage() {
 
   // Get artifacts for rendering - with robust type handling
   // Check if artifact exists (has content property)
-  const hasOutline = !!project.artifacts.outline?.content;
-  const hasChapters = !!project.artifacts.chapters?.content;
-  const hasIllustrations = !!project.artifacts.illustrations?.content;
-  const hasHumanize = !!project.artifacts.humanize?.content;
-  const hasLayout = !!project.artifacts.layout?.content;
-  const hasCover = !!project.artifacts.cover?.content;
-  const hasExport = !!project.artifacts.export?.content;
+  const hasOutline = !!getArtifactContent(project, "outline");
+  const hasChapters = !!getArtifactContent(project, "chapters");
+  const hasIllustrations = !!getArtifactContent(project, "illustrations");
+  const hasHumanize = !!getArtifactContent(project, "humanize");
+  const hasLayout = !!getArtifactContent(project, "layout");
+  const hasCover = !!getArtifactContent(project, "cover");
+  // Export doesn't use content property
+  const hasExport = !!getArtifactContent(project, "export");
+
+  // Check for parse errors
+  const outlineContent = getArtifactContent<OutlineArtifactContent>(project, "outline");
+  const outlineNeedsReview = outlineContent?._needsReview;
+
+  const chaptersContent = getArtifactContent<ChaptersArtifactContent>(project, "chapters");
+  const chaptersNeedsReview = chaptersContent?._needsReview;
+
+  const humanizeContent = getArtifactContent<HumanizeArtifactContent>(project, "humanize");
+  const humanizeNeedsReview = humanizeContent?._needsReview;
+
 
   // Type-safe artifact extraction with fallbacks
-  const outlineArtifact = hasOutline
-    ? project.artifacts.outline!.content as { chapters: string[]; synopsis: string; kbApplied?: string | null }
+  const outlineArtifact = hasOutline && !outlineNeedsReview
+    ? outlineContent!
     : undefined;
-  const chaptersArtifact = hasChapters
-    ? project.artifacts.chapters!.content as Array<{ chapterNumber: number; title: string; content: string; wordCount: number }>
+  const outlineRaw = outlineNeedsReview ? outlineContent?._rawText : null;
+
+  const chaptersArtifact = hasChapters && !chaptersNeedsReview
+    ? chaptersContent!
     : undefined;
+  const chaptersRaw = chaptersNeedsReview ? chaptersContent?._rawText : null;
+
   const illustrationsArtifact = hasIllustrations
-    ? project.artifacts.illustrations!.content as Array<{ id: string; chapterNumber: number; scene: string; imageUrl?: string; status: string }>
+    ? getArtifactContent<Array<{ id: string; chapterNumber: number; scene: string; imageUrl?: string; status: string }>>(project, "illustrations")
     : undefined;
+
+  const humanizeArtifact = hasHumanize && !humanizeNeedsReview
+    ? humanizeContent!
+    : undefined;
+  const humanizeRaw = humanizeNeedsReview ? humanizeContent?._rawText : null;
+
   const layoutArtifact = hasLayout
-    ? project.artifacts.layout!.content as { pageCount: number }
+    ? getArtifactContent<{ pageCount: number }>(project, "layout")
     : undefined;
   const coverArtifact = hasCover
-    ? project.artifacts.cover!.content as { frontCoverUrl?: string; backCoverUrl?: string }
+    ? getArtifactContent<{ frontCoverUrl?: string; backCoverUrl?: string }>(project, "cover")
     : undefined;
   const exportArtifact = hasExport
-    ? project.artifacts.export!.content as Array<{ format: string; fileUrl: string; fileSize: number }>
+    ? getArtifactContent<Array<{ format: string; fileUrl: string; fileSize: number }>>(project, "export")
     : undefined;
 
   // No-op for now
@@ -834,7 +1075,7 @@ export default function ProjectWorkspacePage() {
                           stage.status === "running"
                         }
                         onClick={() =>
-                          stage.status === "completed"
+                          (stage.status === "completed" || stage.status === "error")
                             ? viewArtifact(stage.name)
                             : handleRunStage(stage.name)
                         }
@@ -843,6 +1084,11 @@ export default function ProjectWorkspacePage() {
                           <>
                             <Eye className="w-4 h-4 mr-1" />
                             View
+                          </>
+                        ) : stage.status === "error" && project.artifacts[stage.name as ProjectStage]?.content ? (
+                          <>
+                            <AlertTriangle className="w-4 h-4 mr-1" />
+                            Review
                           </>
                         ) : stage.status === "running" ? (
                           <>
@@ -1042,451 +1288,500 @@ export default function ProjectWorkspacePage() {
         </div>
       </div>
 
+
+      {/* Raw Output Dialog */}
+      < Dialog open={!!rawOutput
+      } onOpenChange={(open) => !open && setRawOutput(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Raw AI Output</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden relative border rounded-md bg-muted/30">
+            <ScrollArea className="h-[60vh] p-4 font-mono text-sm whitespace-pre-wrap">
+              {rawOutput}
+            </ScrollArea>
+            <Button
+              size="icon"
+              variant="outline"
+              className="absolute top-2 right-2 h-8 w-8 bg-background/80 backdrop-blur-sm"
+              onClick={() => {
+                if (rawOutput) {
+                  navigator.clipboard.writeText(rawOutput);
+                  toast({ title: "Copied to clipboard" });
+                }
+              }}
+            >
+              <Copy className="w-4 h-4" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog >
+
+
       {/* Generated Content Preview */}
       {/* Filter out internal artifacts like _aiUsage */}
-      {Object.keys(project.artifacts).filter(k => !k.startsWith("_")).length > 0 && (
-        <div className="mt-8" ref={artifactsRef}>
-          <Tabs value={activeArtifactTab} onValueChange={setActiveArtifactTab}>
-            <TabsList>
-              {hasOutline && <TabsTrigger value="outline">Outline</TabsTrigger>}
-              {hasChapters && <TabsTrigger value="chapters">Chapters</TabsTrigger>}
-              {hasIllustrations && <TabsTrigger value="illustrations">Illustrations</TabsTrigger>}
-              {hasHumanize && <TabsTrigger value="humanize">Humanize</TabsTrigger>}
-              {hasLayout && <TabsTrigger value="layout">Layout</TabsTrigger>}
-              {hasCover && <TabsTrigger value="cover">Cover</TabsTrigger>}
-              {hasExport && <TabsTrigger value="export">Export</TabsTrigger>}
-            </TabsList>
+      {
+        Object.keys(project.artifacts).filter(k => !k.startsWith("_")).length > 0 && (
+          <div className="mt-8" ref={artifactsRef}>
+            <Tabs value={activeArtifactTab} onValueChange={setActiveArtifactTab}>
+              <TabsList>
+                {hasOutline && <TabsTrigger value="outline">Outline</TabsTrigger>}
+                {hasChapters && <TabsTrigger value="chapters">Chapters</TabsTrigger>}
+                {hasIllustrations && <TabsTrigger value="illustrations">Illustrations</TabsTrigger>}
+                {hasHumanize && <TabsTrigger value="humanize">Humanize</TabsTrigger>}
+                {hasLayout && <TabsTrigger value="layout">Layout</TabsTrigger>}
+                {hasCover && <TabsTrigger value="cover">Cover</TabsTrigger>}
+                {hasExport && <TabsTrigger value="export">Export</TabsTrigger>}
+              </TabsList>
 
-            {/* Outline Tab */}
-            <TabsContent value="outline" className="card-glow p-6 mt-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Book Outline</h3>
-                {outlineArtifact?.kbApplied && (
-                  <Badge variant="secondary" className="text-xs">
-                    KB: {outlineArtifact.kbApplied}
-                  </Badge>
+
+              {/* Outline Tab */}
+              <TabsContent value="outline" className="card-glow p-6 mt-4">
+                {outlineNeedsReview && (
+                  <ParseErrorBanner
+                    onRetry={() => handleRetryParse("outline", outlineRaw)}
+                    onShowRaw={() => setRawOutput(outlineRaw)}
+                    onRegenerate={() => handleRunStage("outline")}
+                    stageLabel="Outline"
+                  />
                 )}
-              </div>
-              {outlineArtifact && (
-                <>
-                  <p className="text-sm text-muted-foreground mb-4">{outlineArtifact.synopsis}</p>
-                  <ul className="space-y-2">
-                    {outlineArtifact.chapters.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-3">
-                        <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <span className="text-sm">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </TabsContent>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Book Outline</h3>
+                  {outlineArtifact?.kbApplied && (
+                    <Badge variant="secondary" className="text-xs">
+                      KB: {outlineArtifact.kbApplied}
+                    </Badge>
+                  )}
+                </div>
+                {outlineArtifact && (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-4">{outlineArtifact.synopsis}</p>
+                    <ul className="space-y-2">
+                      {outlineArtifact.chapters.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </TabsContent>
 
-            {/* Chapters Tab */}
-            <TabsContent value="chapters" className="card-glow p-6 mt-4">
-              <h3 className="font-semibold mb-4">Chapter Preview</h3>
-              {chaptersArtifact && (
-                <ScrollArea className="h-[400px]">
-                  <div className="space-y-6">
-                    {chaptersArtifact.map((chapter) => (
-                      <div key={chapter.chapterNumber} className="pb-6 border-b last:border-0">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-semibold">
-                            Chapter {chapter.chapterNumber}: {chapter.title}
-                          </h4>
+              {/* Chapters Tab */}
+              <TabsContent value="chapters" className="card-glow p-6 mt-4">
+                {chaptersNeedsReview && (
+                  <ParseErrorBanner
+                    onRetry={() => handleRetryParse("chapters", chaptersRaw)}
+                    onShowRaw={() => setRawOutput(chaptersRaw)}
+                    onRegenerate={() => handleRunStage("chapters")}
+                    stageLabel="Chapters"
+                  />
+                )}
+                <h3 className="font-semibold mb-4">Chapter Preview</h3>
+                {chaptersArtifact && (
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-6">
+                      {chaptersArtifact.map((chapter) => (
+                        <div key={chapter.chapterNumber} className="pb-6 border-b last:border-0">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-semibold">
+                              Chapter {chapter.chapterNumber}: {chapter.title}
+                            </h4>
+                            <Badge variant="outline" className="text-xs">
+                              {chapter.wordCount} words
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            {chapter.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </TabsContent>
+
+              {/* Illustrations Tab */}
+              <TabsContent value="illustrations" className="card-glow p-6 mt-4">
+                <h3 className="font-semibold mb-4">Illustration Scenes</h3>
+                {illustrationsArtifact && (
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    {illustrationsArtifact.map((ill) => (
+                      <div key={ill.id} className="p-4 rounded-lg bg-muted/50 border border-border">
+                        <div className="aspect-video bg-gradient-subtle rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                          {ill.imageUrl ? (
+                            <img
+                              src={ill.imageUrl}
+                              alt={ill.scene}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                          )}
+                        </div>
+                        <p className="text-sm font-medium mb-1">{ill.scene}</p>
+                        <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs">
-                            {chapter.wordCount} words
+                            Ch. {ill.chapterNumber}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              ill.status === "approved" && "bg-primary/10 text-primary border-primary/30"
+                            )}
+                          >
+                            {ill.status}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                          {chapter.content}
-                        </p>
                       </div>
                     ))}
                   </div>
-                </ScrollArea>
-              )}
-            </TabsContent>
+                )}
+              </TabsContent>
 
-            {/* Illustrations Tab */}
-            <TabsContent value="illustrations" className="card-glow p-6 mt-4">
-              <h3 className="font-semibold mb-4">Illustration Scenes</h3>
-              {illustrationsArtifact && (
-                <div className="grid sm:grid-cols-3 gap-4">
-                  {illustrationsArtifact.map((ill) => (
-                    <div key={ill.id} className="p-4 rounded-lg bg-muted/50 border border-border">
-                      <div className="aspect-video bg-gradient-subtle rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                        {ill.imageUrl ? (
+              {/* Humanize Tab */}
+              <TabsContent value="humanize" className="card-glow p-6 mt-4">
+                <h3 className="font-semibold mb-4">Content Review</h3>
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+                    <Check className="w-8 h-8 text-primary" />
+                  </div>
+                  <p className="text-lg font-semibold text-foreground mb-2">Content Reviewed</p>
+                  <p className="text-sm text-muted-foreground">
+                    The AI-generated content has been humanized and polished for publication.
+                  </p>
+                </div>
+              </TabsContent>
+
+              {/* Layout Tab */}
+              <TabsContent value="layout" className="card-glow p-6 mt-4">
+                <h3 className="font-semibold mb-4">Book Layout</h3>
+                {layoutArtifact && (
+                  <div className="text-center py-8">
+                    <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/10 mb-4">
+                      <Layout className="w-12 h-12 text-primary" />
+                    </div>
+                    <p className="text-2xl font-bold text-foreground mb-2">
+                      {layoutArtifact.pageCount} Pages
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Layout generated and ready for review
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Cover Tab */}
+              <TabsContent value="cover" className="card-glow p-6 mt-4">
+                <h3 className="font-semibold mb-4">Cover Design</h3>
+                {coverArtifact && (
+                  <div className="grid sm:grid-cols-2 gap-6">
+                    <div className="text-center">
+                      <p className="text-sm font-medium mb-3">Front Cover</p>
+                      <div className="aspect-[3/4] bg-gradient-subtle rounded-lg overflow-hidden">
+                        {coverArtifact.frontCoverUrl ? (
                           <img
-                            src={ill.imageUrl}
-                            alt={ill.scene}
+                            src={coverArtifact.frontCoverUrl}
+                            alt="Front Cover"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               (e.target as HTMLImageElement).style.display = "none";
                             }}
                           />
                         ) : (
-                          <Image className="w-8 h-8 text-muted-foreground" />
+                          <div className="w-full h-full flex items-center justify-center">
+                            <BookOpen className="w-12 h-12 text-muted-foreground" />
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm font-medium mb-1">{ill.scene}</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          Ch. {ill.chapterNumber}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs",
-                            ill.status === "approved" && "bg-primary/10 text-primary border-primary/30"
-                          )}
-                        >
-                          {ill.status}
-                        </Badge>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Humanize Tab */}
-            <TabsContent value="humanize" className="card-glow p-6 mt-4">
-              <h3 className="font-semibold mb-4">Content Review</h3>
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-                  <Check className="w-8 h-8 text-primary" />
-                </div>
-                <p className="text-lg font-semibold text-foreground mb-2">Content Reviewed</p>
-                <p className="text-sm text-muted-foreground">
-                  The AI-generated content has been humanized and polished for publication.
-                </p>
-              </div>
-            </TabsContent>
-
-            {/* Layout Tab */}
-            <TabsContent value="layout" className="card-glow p-6 mt-4">
-              <h3 className="font-semibold mb-4">Book Layout</h3>
-              {layoutArtifact && (
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/10 mb-4">
-                    <Layout className="w-12 h-12 text-primary" />
-                  </div>
-                  <p className="text-2xl font-bold text-foreground mb-2">
-                    {layoutArtifact.pageCount} Pages
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Layout generated and ready for review
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Cover Tab */}
-            <TabsContent value="cover" className="card-glow p-6 mt-4">
-              <h3 className="font-semibold mb-4">Cover Design</h3>
-              {coverArtifact && (
-                <div className="grid sm:grid-cols-2 gap-6">
-                  <div className="text-center">
-                    <p className="text-sm font-medium mb-3">Front Cover</p>
-                    <div className="aspect-[3/4] bg-gradient-subtle rounded-lg overflow-hidden">
-                      {coverArtifact.frontCoverUrl ? (
-                        <img
-                          src={coverArtifact.frontCoverUrl}
-                          alt="Front Cover"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <BookOpen className="w-12 h-12 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium mb-3">Back Cover</p>
-                    <div className="aspect-[3/4] bg-gradient-subtle rounded-lg overflow-hidden">
-                      {coverArtifact.backCoverUrl ? (
-                        <img
-                          src={coverArtifact.backCoverUrl}
-                          alt="Back Cover"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <BookOpen className="w-12 h-12 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Export Tab - Enhanced */}
-            <TabsContent value="export" className="space-y-6 mt-4">
-              {project.exportPackage ? (
-                <>
-                  {/* Header */}
-                  <div className="card-glow p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                          <Package className="w-6 h-6 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-lg">Book Package Ready</h3>
-                          <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <Clock className="w-3 h-3" />
-                            {new Date(project.exportPackage.generatedAt).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">v{project.exportPackage.version}</Badge>
-                        {isExportStale(project) && (
-                          <Badge variant="destructive" className="flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Stale
-                          </Badge>
+                    <div className="text-center">
+                      <p className="text-sm font-medium mb-3">Back Cover</p>
+                      <div className="aspect-[3/4] bg-gradient-subtle rounded-lg overflow-hidden">
+                        {coverArtifact.backCoverUrl ? (
+                          <img
+                            src={coverArtifact.backCoverUrl}
+                            alt="Back Cover"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <BookOpen className="w-12 h-12 text-muted-foreground" />
+                          </div>
                         )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowReExportModal(true)}
-                        >
-                          <RotateCcw className="w-4 h-4 mr-1" />
-                          Re-export
-                        </Button>
                       </div>
                     </div>
+                  </div>
+                )}
+              </TabsContent>
 
-                    {/* Stale Warning */}
-                    {isExportStale(project) && (
-                      <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm mb-4">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
+              {/* Export Tab - Enhanced */}
+              <TabsContent value="export" className="space-y-6 mt-4">
+                {project.exportPackage ? (
+                  <>
+                    {/* Header */}
+                    <div className="card-glow p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                            <Package className="w-6 h-6 text-primary" />
+                          </div>
                           <div>
-                            <p className="font-medium text-destructive">Project changed since last export</p>
-                            <p className="text-destructive/80">Re-export to include the latest changes.</p>
+                            <h3 className="font-semibold text-lg">Book Package Ready</h3>
+                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                              <Clock className="w-3 h-3" />
+                              {new Date(project.exportPackage.generatedAt).toLocaleString()}
+                            </p>
                           </div>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">v{project.exportPackage.version}</Badge>
+                          {isExportStale(project) && (
+                            <Badge variant="destructive" className="flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Stale
+                            </Badge>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowReExportModal(true)}
+                          >
+                            <RotateCcw className="w-4 h-4 mr-1" />
+                            Re-export
+                          </Button>
+                        </div>
                       </div>
-                    )}
 
-                    {/* Export Summary */}
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="p-3 rounded-lg bg-muted/50">
-                        <p className="text-xs text-muted-foreground mb-1">Layout Style</p>
-                        <p className="font-medium capitalize text-sm">{project.exportPackage.layoutStyle.replace(/-/g, " ")}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50">
-                        <p className="text-xs text-muted-foreground mb-1">Trim Size</p>
-                        <p className="font-medium text-sm">{project.exportPackage.trimSize}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50">
-                        <p className="text-xs text-muted-foreground mb-1">Age Range</p>
-                        <p className="font-medium text-sm">{project.exportPackage.ageRange}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-muted/50">
-                        <p className="text-xs text-muted-foreground mb-1">Knowledge Base</p>
-                        <p className="font-medium text-sm truncate">{project.exportPackage.kbName}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Interior Layout Preview */}
-                  <div className="card-glow p-6">
-                    <h4 className="font-semibold mb-4 flex items-center gap-2">
-                      <Layout className="w-4 h-4" />
-                      Interior Layout Preview
-                      <Badge variant="outline" className="ml-2 text-xs capitalize">
-                        {project.exportPackage.layoutStyle.replace(/-/g, " ")}
-                      </Badge>
-                    </h4>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                      {project.exportPackage.files.interiorPreview.map((page, idx) => (
-                        <div
-                          key={idx}
-                          className="relative group cursor-pointer"
-                          onClick={() => setPreviewFile(page)}
-                        >
-                          <div className={cn(
-                            "aspect-[3/4] rounded-lg overflow-hidden border-2 border-border transition-all",
-                            "group-hover:border-primary group-hover:shadow-lg"
-                          )}>
-                            {page.previewUrl ? (
-                              <img
-                                src={page.previewUrl}
-                                alt={`Page ${idx + 1}`}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "https://placehold.co/300x400/f1f5f9/64748b?text=Page+" + (idx + 1);
-                                }}
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-subtle flex items-center justify-center">
-                                <FileImage className="w-6 h-6 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-xs text-center mt-1 text-muted-foreground">Page {idx + 1}</p>
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                            <Eye className="w-5 h-5 text-white" />
+                      {/* Stale Warning */}
+                      {isExportStale(project) && (
+                        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm mb-4">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
+                            <div>
+                              <p className="font-medium text-destructive">Project changed since last export</p>
+                              <p className="text-destructive/80">Re-export to include the latest changes.</p>
+                            </div>
                           </div>
                         </div>
-                      ))}
+                      )}
+
+                      {/* Export Summary */}
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Layout Style</p>
+                          <p className="font-medium capitalize text-sm">{project.exportPackage.layoutStyle.replace(/-/g, " ")}</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Trim Size</p>
+                          <p className="font-medium text-sm">{project.exportPackage.trimSize}</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Age Range</p>
+                          <p className="font-medium text-sm">{project.exportPackage.ageRange}</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Knowledge Base</p>
+                          <p className="font-medium text-sm truncate">{project.exportPackage.kbName}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* File List */}
-                  <div className="card-glow p-6">
-                    <h4 className="font-semibold mb-4 flex items-center gap-2">
-                      <File className="w-4 h-4" />
-                      Package Files
-                    </h4>
-
-                    {/* Covers */}
-                    <div className="mb-6">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Covers</p>
-                      <div className="space-y-2">
-                        {[project.exportPackage.files.coverFront, project.exportPackage.files.coverBack].map((file, idx) => (
-                          <ExportFileRow
+                    {/* Interior Layout Preview */}
+                    <div className="card-glow p-6">
+                      <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <Layout className="w-4 h-4" />
+                        Interior Layout Preview
+                        <Badge variant="outline" className="ml-2 text-xs capitalize">
+                          {project.exportPackage.layoutStyle.replace(/-/g, " ")}
+                        </Badge>
+                      </h4>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                        {project.exportPackage.files.interiorPreview.map((page, idx) => (
+                          <div
                             key={idx}
-                            file={file}
-                            onPreview={() => setPreviewFile(file)}
+                            className="relative group cursor-pointer"
+                            onClick={() => setPreviewFile(page)}
+                          >
+                            <div className={cn(
+                              "aspect-[3/4] rounded-lg overflow-hidden border-2 border-border transition-all",
+                              "group-hover:border-primary group-hover:shadow-lg"
+                            )}>
+                              {page.previewUrl ? (
+                                <img
+                                  src={page.previewUrl}
+                                  alt={`Page ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "https://placehold.co/300x400/f1f5f9/64748b?text=Page+" + (idx + 1);
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-subtle flex items-center justify-center">
+                                  <FileImage className="w-6 h-6 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-xs text-center mt-1 text-muted-foreground">Page {idx + 1}</p>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                              <Eye className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* File List */}
+                    <div className="card-glow p-6">
+                      <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <File className="w-4 h-4" />
+                        Package Files
+                      </h4>
+
+                      {/* Covers */}
+                      <div className="mb-6">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Covers</p>
+                        <div className="space-y-2">
+                          {[project.exportPackage.files.coverFront, project.exportPackage.files.coverBack].map((file, idx) => (
+                            <ExportFileRow
+                              key={idx}
+                              file={file}
+                              onPreview={() => setPreviewFile(file)}
+                              onDownload={() => toast({
+                                title: "Download Prepared",
+                                description: `${file.filename} is ready. (Demo - no actual file)`,
+                              })}
+                              disabled={isExportStale(project)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Manuscript & Metadata */}
+                      <div className="mb-6">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Documents</p>
+                        <div className="space-y-2">
+                          <ExportFileRow
+                            file={project.exportPackage.files.manuscript}
+                            onPreview={() => setPreviewFile(project.exportPackage!.files.manuscript)}
                             onDownload={() => toast({
                               title: "Download Prepared",
-                              description: `${file.filename} is ready. (Demo - no actual file)`,
+                              description: `Manuscript is ready. (Demo - no actual file)`,
                             })}
                             disabled={isExportStale(project)}
                           />
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Manuscript & Metadata */}
-                    <div className="mb-6">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Documents</p>
-                      <div className="space-y-2">
-                        <ExportFileRow
-                          file={project.exportPackage.files.manuscript}
-                          onPreview={() => setPreviewFile(project.exportPackage!.files.manuscript)}
-                          onDownload={() => toast({
-                            title: "Download Prepared",
-                            description: `Manuscript is ready. (Demo - no actual file)`,
-                          })}
-                          disabled={isExportStale(project)}
-                        />
-                        <ExportFileRow
-                          file={project.exportPackage.files.metadata}
-                          onPreview={() => setPreviewFile(project.exportPackage!.files.metadata)}
-                          onDownload={() => toast({
-                            title: "Download Prepared",
-                            description: `Metadata is ready. (Demo - no actual file)`,
-                          })}
-                          disabled={isExportStale(project)}
-                        />
-                        <ExportFileRow
-                          file={project.exportPackage.files.license}
-                          onPreview={() => setPreviewFile(project.exportPackage!.files.license)}
-                          onDownload={() => toast({
-                            title: "Download Prepared",
-                            description: `License is ready. (Demo - no actual file)`,
-                          })}
-                          disabled={isExportStale(project)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Export Formats */}
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Export Formats</p>
-                      <div className="flex gap-3">
-                        {project.exportPackage.exportTargets.map((format) => (
-                          <Button
-                            key={format}
-                            variant="outline"
-                            className="flex-1"
-                            disabled={isExportStale(project)}
-                            onClick={() => toast({
-                              title: "Download Started",
-                              description: `Your ${format.toUpperCase()} file is being prepared. (Demo - no actual file)`,
+                          <ExportFileRow
+                            file={project.exportPackage.files.metadata}
+                            onPreview={() => setPreviewFile(project.exportPackage!.files.metadata)}
+                            onDownload={() => toast({
+                              title: "Download Prepared",
+                              description: `Metadata is ready. (Demo - no actual file)`,
                             })}
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download {format.toUpperCase()}
-                          </Button>
-                        ))}
+                            disabled={isExportStale(project)}
+                          />
+                          <ExportFileRow
+                            file={project.exportPackage.files.license}
+                            onPreview={() => setPreviewFile(project.exportPackage!.files.license)}
+                            onDownload={() => toast({
+                              title: "Download Prepared",
+                              description: `License is ready. (Demo - no actual file)`,
+                            })}
+                            disabled={isExportStale(project)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Export History */}
-                  {project.exportHistory && project.exportHistory.length > 1 && (
-                    <div className="card-glow p-6">
-                      <h4 className="font-semibold mb-4 flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        Export History
-                      </h4>
-                      <div className="space-y-2">
-                        {[...project.exportHistory].reverse().map((history, idx) => (
-                          <div
-                            key={idx}
-                            className={cn(
-                              "flex items-center justify-between p-3 rounded-lg",
-                              idx === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/50"
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Badge variant={idx === 0 ? "default" : "outline"} className="text-xs">
-                                v{history.version}
-                              </Badge>
-                              <span className="text-sm">
-                                {new Date(history.generatedAt).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex gap-1">
-                              {history.exportTargets.map((t) => (
-                                <Badge key={t} variant="secondary" className="text-xs uppercase">
-                                  {t}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+                      {/* Export Formats */}
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Export Formats</p>
+                        <div className="flex gap-3">
+                          {project.exportPackage.exportTargets.map((format) => (
+                            <Button
+                              key={format}
+                              variant="outline"
+                              className="flex-1"
+                              disabled={isExportStale(project)}
+                              onClick={() => toast({
+                                title: "Download Started",
+                                description: `Your ${format.toUpperCase()} file is being prepared. (Demo - no actual file)`,
+                              })}
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              Download {format.toUpperCase()}
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  )}
-                </>
-              ) : !canExport().allowed ? (
-                <UpgradeBanner
-                  title="Export Locked"
-                  description={`Export is available on Author and Studio plans. Upgrade to download your book as PDF or EPUB. You're currently on the ${getPlanInfo().name} plan.`}
-                />
-              ) : (
-                <div className="card-glow p-6 text-center py-12">
-                  <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-                    <Package className="w-8 h-8 text-muted-foreground" />
+
+                    {/* Export History */}
+                    {project.exportHistory && project.exportHistory.length > 1 && (
+                      <div className="card-glow p-6">
+                        <h4 className="font-semibold mb-4 flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          Export History
+                        </h4>
+                        <div className="space-y-2">
+                          {[...project.exportHistory].reverse().map((history, idx) => (
+                            <div
+                              key={idx}
+                              className={cn(
+                                "flex items-center justify-between p-3 rounded-lg",
+                                idx === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/50"
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Badge variant={idx === 0 ? "default" : "outline"} className="text-xs">
+                                  v{history.version}
+                                </Badge>
+                                <span className="text-sm">
+                                  {new Date(history.generatedAt).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex gap-1">
+                                {history.exportTargets.map((t) => (
+                                  <Badge key={t} variant="secondary" className="text-xs uppercase">
+                                    {t}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : !canExport().allowed ? (
+                  <UpgradeBanner
+                    title="Export Locked"
+                    description={`Export is available on Author and Studio plans. Upgrade to download your book as PDF or EPUB. You're currently on the ${getPlanInfo().name} plan.`}
+                  />
+                ) : (
+                  <div className="card-glow p-6 text-center py-12">
+                    <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                      <Package className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-semibold mb-2">No Export Package Yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Run the Export stage to generate your book package.
+                    </p>
                   </div>
-                  <h3 className="font-semibold mb-2">No Export Package Yet</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Run the Export stage to generate your book package.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-      )}
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        )
+      }
 
       <CreditConfirmModal
         open={!!showCreditModal}
@@ -1612,7 +1907,7 @@ follows Islamic guidelines for children's content.
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </AppLayout >
   );
 }
 

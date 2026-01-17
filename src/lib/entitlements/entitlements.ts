@@ -8,17 +8,27 @@
 const DEMO_MODE_KEY = "noorstudio.demo_mode.v1";
 
 export function isDemoMode(): boolean {
+  // STRICT: Demo mode is ONLY allowed in development environments.
+  // This prevents trivial entitlement bypasses in production via localStorage.
+  if (!import.meta.env.DEV) {
+    return false;
+  }
+
   try {
     const stored = localStorage.getItem(DEMO_MODE_KEY);
     if (stored !== null) return stored === "true";
-  } catch { }
+  } catch {
+    // Ignore storage errors
+  }
 
-  // Default to true in development, false otherwise
-  return !!import.meta.env.DEV;
+  return true;
 }
 
 export function setDemoMode(enabled: boolean): void {
-  localStorage.setItem(DEMO_MODE_KEY, enabled ? "true" : "false");
+  // Only allow setting demo mode in development
+  if (import.meta.env.DEV) {
+    localStorage.setItem(DEMO_MODE_KEY, enabled ? "true" : "false");
+  }
 }
 
 // ============================================

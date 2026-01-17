@@ -6,6 +6,8 @@
 import { CreditType, PlanTier } from "@/lib/models";
 import { CreditBalancesSchema, CreditLedgerEntrySchema } from "@/lib/validation/schemas";
 import { validateAndRepair, validateArrayAndRepair } from "./validation";
+import { getNamespacedKey } from "./keys";
+import { supabase } from "@/lib/supabase/client";
 
 // ============================================
 // Types
@@ -61,14 +63,12 @@ function generateId(): string {
 
 export function getBalances(): CreditBalances {
   try {
-    const stored = localStorage.getItem(BALANCES_KEY);
-    if (!stored) {
-      seedDefaultBalancesIfEmpty();
-      return DEFAULT_BALANCES;
-    }
+    const key = getNamespacedKey(BALANCES_KEY);
+    const stored = localStorage.getItem(key);
+    if (!stored) return DEFAULT_BALANCES;
 
     const parsed = JSON.parse(stored);
-    return validateAndRepair(BALANCES_KEY, parsed, CreditBalancesSchema, DEFAULT_BALANCES);
+    return validateAndRepair(key, parsed, CreditBalancesSchema, DEFAULT_BALANCES);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse credit balances from localStorage");
@@ -78,13 +78,13 @@ export function getBalances(): CreditBalances {
 }
 
 export function setBalances(balances: CreditBalances): void {
-  localStorage.setItem(BALANCES_KEY, JSON.stringify(balances));
+  localStorage.setItem(getNamespacedKey(BALANCES_KEY), JSON.stringify(balances));
 }
 
 export function seedDefaultBalancesIfEmpty(): void {
-  const existing = localStorage.getItem(BALANCES_KEY);
+  const existing = localStorage.getItem(getNamespacedKey(BALANCES_KEY));
   if (!existing) {
-    localStorage.setItem(BALANCES_KEY, JSON.stringify(DEFAULT_BALANCES));
+    localStorage.setItem(getNamespacedKey(BALANCES_KEY), JSON.stringify(DEFAULT_BALANCES));
   }
 }
 
@@ -98,17 +98,22 @@ export function getPlanLimits(plan: PlanTier): { characterCredits: number; bookC
 
 export function getLedger(): CreditLedgerEntry[] {
   try {
-    const stored = localStorage.getItem(LEDGER_KEY);
+    const key = getNamespacedKey(LEDGER_KEY);
+    const stored = localStorage.getItem(key);
     if (!stored) return [];
 
     const parsed = JSON.parse(stored);
-    return validateArrayAndRepair(LEDGER_KEY, parsed, CreditLedgerEntrySchema);
+    return validateArrayAndRepair(key, parsed, CreditLedgerEntrySchema);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse credit ledger from localStorage");
     }
     return [];
   }
+}
+
+export function setLedger(ledger: CreditLedgerEntry[]): void {
+  localStorage.setItem(getNamespacedKey(LEDGER_KEY), JSON.stringify(ledger.slice(0, 500))); // Cap at 500
 }
 
 export function addLedgerEntry(entry: Omit<CreditLedgerEntry, "id" | "ts">): CreditLedgerEntry {
@@ -121,13 +126,13 @@ export function addLedgerEntry(entry: Omit<CreditLedgerEntry, "id" | "ts">): Cre
   };
 
   ledger.unshift(newEntry); // Add to beginning (most recent first)
-  localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger));
+  setLedger(ledger);
 
   return newEntry;
 }
 
 export function clearLedger(): void {
-  localStorage.removeItem(LEDGER_KEY);
+  localStorage.removeItem(getNamespacedKey(LEDGER_KEY));
 }
 
 // ============================================
@@ -259,6 +264,34 @@ export function changePlan(newPlan: PlanTier): CreditBalances {
   return updatedBalances;
 }
 
+export async function syncCreditsWithServer(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('character_credits, book_credits, plan')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile && !error) {
+      setBalances({
+        characterCredits: profile.character_credits,
+        bookCredits: profile.book_credits,
+        plan: (profile.plan as PlanTier) || 'author'
+      });
+
+      // Trigger a storage event for other tabs/hooks
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.error("Failed to sync credits with server:", err);
+    }
+  }
+}
+
 // ============================================
 // Ledger Filtering
 // ============================================
@@ -344,7 +377,7 @@ export function getCreditStats(): CreditStats {
 // ============================================
 
 export function resetCredits(): void {
-  localStorage.removeItem(BALANCES_KEY);
-  localStorage.removeItem(LEDGER_KEY);
+  localStorage.removeItem(getNamespacedKey(BALANCES_KEY));
+  localStorage.removeItem(getNamespacedKey(LEDGER_KEY));
   seedDefaultBalancesIfEmpty();
 }

@@ -1,9 +1,21 @@
 // Image Prompt Construction for NanoBanana
 // Builds deterministic prompts for illustrations and covers
+// NOW WITH COMPLIANCE GUARD INTEGRATION for reduced hallucinations
 
 import { StoredProject } from "@/lib/storage/projectsStore";
 import { StoredCharacter } from "@/lib/storage/charactersStore";
 import { KBRulesSummary } from "@/lib/storage/knowledgeBaseStore";
+import {
+  buildCoverComplianceRules,
+  buildIllustrationComplianceRules,
+  enforceComplianceCoverPrompt,
+  enforceComplianceIllustrationPrompt,
+  buildCharacterIdentityBlock,
+  buildCoverNegativePrompt,
+  buildIllustrationNegativePrompt,
+  preflightCoverGeneration,
+  validateSceneCharacters,
+} from "./complianceGuard";
 
 // ============================================
 // Types
@@ -17,12 +29,60 @@ export interface IllustrationPromptInput {
   kbSummary: KBRulesSummary | null;
 }
 
+const STYLE_PROMPTS: Record<string, string> = {
+  "pixar-3d": "Pixar-style 3D children's book illustration with soft lighting, rounded features, expressive eyes, like Disney/Pixar films",
+  "watercolor": "Soft, varying watercolor style children's book illustration with gentle color bleeding, organic textures, classic children's book art",
+  "anime": "Vibrant Anime/Manga style children's book illustration with expressive large eyes, clean linework, Studio Ghibli inspired",
+  "2d-vector": "Clean, modern 2D vector art children's book illustration with flat colors, bold outlines, contemporary aesthetic",
+  "paper-cutout": "Textured paper cutout collage style children's book illustration with visible paper grain, Eric Carle inspired",
+};
+
+// Extended style descriptions for better consistency
+const STYLE_TECHNICAL_DETAILS: Record<string, string> = {
+  "pixar-3d": `
+- 3D CGI rendering with subsurface scattering on skin
+- Soft global illumination with warm fill lights
+- Rounded, appealing character proportions
+- Large expressive eyes with catchlights
+- Smooth skin textures without pores
+- Cloth simulation for natural fabric draping`,
+  "watercolor": `
+- Traditional wet-on-wet watercolor technique
+- Visible paper texture beneath colors
+- Soft color gradients with natural bleeding
+- Delicate linework for details
+- White of paper showing through in highlights
+- Organic, hand-painted feel`,
+  "anime": `
+- Clean vector-like linework
+- Cel-shaded coloring with defined shadows
+- Large expressive eyes with detailed iris
+- Dynamic hair with individual strand groups
+- Simplified nose and mouth
+- Bright, saturated colors`,
+  "2d-vector": `
+- Flat color fills without gradients
+- Bold consistent outline weight
+- Geometric shape simplification
+- Limited color palette per element
+- Clean edges without anti-aliasing artifacts
+- Modern minimalist aesthetic`,
+  "paper-cutout": `
+- Visible paper texture and grain
+- Layered cut-paper effect with shadows
+- Hand-torn or scissors-cut edges
+- Textured fills suggesting craft paper
+- Collage-style composition
+- Tactile, handmade appearance`,
+};
+
 export interface CoverPromptInput {
   project: StoredProject;
   characters: StoredCharacter[];
   kbSummary: KBRulesSummary | null;
   coverType: "front" | "back";
   moral?: string;
+  authorName?: string;
 }
 
 export interface ImagePromptResult {
@@ -30,190 +90,366 @@ export interface ImagePromptResult {
   references: string[];
   style: string;
   negativePrompt: string;
+  complianceWarnings?: string[];
+  complianceErrors?: string[];
 }
 
 // ============================================
-// Character Description Builder
+// Character Description Builder (Enhanced)
 // ============================================
 
-function buildCharacterDescription(char: StoredCharacter): string {
+/**
+ * Build a detailed, immutable character description.
+ * This description captures traits that MUST remain consistent.
+ */
+function buildCharacterDescription(
+  char: StoredCharacter,
+  index: number,
+  total: number
+): string {
   const parts: string[] = [];
 
-  // Basic identity
-  parts.push(`${char.name}`);
-
-  // Age and appearance
-  if (char.ageRange) {
-    parts.push(`(${char.ageRange})`);
+  // Character identifier for multi-character scenes
+  if (total > 1) {
+    parts.push(`[CHARACTER ${index + 1}/${total}]`);
   }
 
-  // Visual DNA
+  // Name and role
+  parts.push(`${char.name} (${char.role})`);
+
+  // Age appearance
+  if (char.ageRange) {
+    parts.push(`Age appearance: ${char.ageRange} years old`);
+  }
+
+  // IMMUTABLE Visual DNA - these traits are locked
   if (char.visualDNA) {
     if (char.visualDNA.skinTone) {
-      parts.push(`${char.visualDNA.skinTone} skin`);
+      parts.push(`SKIN: ${char.visualDNA.skinTone} (EXACT - do not change)`);
     }
     if (char.visualDNA.hairOrHijab) {
-      parts.push(char.visualDNA.hairOrHijab);
+      parts.push(`HEAD/HAIR: ${char.visualDNA.hairOrHijab} (EXACT - do not change)`);
+    }
+    if (char.visualDNA.outfitRules) {
+      parts.push(`OUTFIT: ${char.visualDNA.outfitRules}`);
+    }
+    if (char.visualDNA.accessories) {
+      parts.push(`ACCESSORIES: ${char.visualDNA.accessories}`);
     }
   }
 
-  // Modesty rules
+  // Modesty requirements - MANDATORY
   if (char.modestyRules) {
-    if (char.modestyRules.hijabStyle && char.modestyRules.hijabStyle !== "none") {
-      parts.push(`wearing ${char.modestyRules.hijabStyle} hijab`);
+    const modestyParts: string[] = [];
+    if (char.modestyRules.hijabAlways) {
+      modestyParts.push("HIJAB MANDATORY - must cover all hair completely");
     }
-    if (char.modestyRules.outfitLength) {
-      parts.push(`${char.modestyRules.outfitLength} modest clothing`);
+    if (char.modestyRules.longSleeves) {
+      modestyParts.push("long sleeves required");
+    }
+    if (char.modestyRules.looseClothing) {
+      modestyParts.push("loose modest clothing only");
+    }
+    if (modestyParts.length > 0) {
+      parts.push(`MODESTY: ${modestyParts.join(", ")}`);
     }
   }
 
-  return parts.join(", ");
+  // Color palette
+  if (char.colorPalette && char.colorPalette.length > 0) {
+    parts.push(`Colors: ${char.colorPalette.slice(0, 3).join(", ")}`);
+  }
+
+  return parts.join("\n   ");
 }
 
-// ============================================
-// Islamic Modesty Constraints
-// ============================================
+/**
+ * Build a character differentiation guide for multi-character scenes.
+ */
+function buildMultiCharacterGuide(characters: StoredCharacter[]): string {
+  if (characters.length <= 1) return "";
 
-function buildModestyConstraints(kbSummary: KBRulesSummary | null): string {
-  const constraints: string[] = [
-    "Islamic modesty standards",
-    "appropriate dress for Muslim children's book",
-    "no revealing clothing",
+  const guide = [
+    "\n## MULTI-CHARACTER DIFFERENTIATION GUIDE",
+    "CRITICAL: Each character MUST be clearly distinguishable. Do NOT blend features.",
+    "",
   ];
 
-  if (kbSummary?.illustrationRules) {
-    constraints.push(...kbSummary.illustrationRules);
+  // Create comparison table
+  guide.push("| Character | Skin | Hair/Hijab | Distinguishing Feature |");
+  guide.push("|-----------|------|------------|------------------------|");
+
+  for (const char of characters) {
+    const skin = char.visualDNA?.skinTone || "N/A";
+    const hair = char.visualDNA?.hairOrHijab || "N/A";
+    const feature = char.visualDNA?.accessories || char.role || "N/A";
+    guide.push(`| ${char.name} | ${skin} | ${hair} | ${feature} |`);
   }
 
-  return constraints.join(", ");
+  guide.push("");
+  guide.push("Relative positions: Older/taller characters should be proportionally larger.");
+  guide.push("Each character must be recognizable from their reference images.");
+
+  return guide.join("\n");
 }
 
 // ============================================
-// Illustration Prompt Builder
+// Islamic Modesty Constraints (Enhanced)
+// ============================================
+
+function buildModestyConstraints(
+  characters: StoredCharacter[],
+  kbSummary: KBRulesSummary | null
+): string {
+  const constraints: string[] = [
+    "MANDATORY MODESTY GUIDELINES:",
+    "- All clothing must be loose-fitting and non-revealing",
+    "- No tight or form-fitting clothes on any character",
+    "- Appropriate Islamic dress code for all characters",
+  ];
+
+  // Check if any character requires hijab
+  const hijabRequired = characters.some((c) => c.modestyRules?.hijabAlways);
+  if (hijabRequired) {
+    constraints.push("- Characters with hijab: MUST have hijab visible covering ALL hair in EVERY frame");
+  }
+
+  // Add KB-specific rules
+  if (kbSummary?.illustrationRules && kbSummary.illustrationRules.length > 0) {
+    constraints.push("");
+    constraints.push("KNOWLEDGE BASE ILLUSTRATION RULES:");
+    constraints.push(...kbSummary.illustrationRules.map((r) => `- ${r}`));
+  }
+
+  return constraints.join("\n");
+}
+
+// ============================================
+// Illustration Prompt Builder (Enhanced)
 // ============================================
 
 export function buildIllustrationPrompt(input: IllustrationPromptInput): ImagePromptResult {
   const { project, chapterNumber, sceneDescription, characters, kbSummary } = input;
 
-  // Character descriptions
+  // Pre-validate scene characters
+  const validation = validateSceneCharacters(characters, sceneDescription);
+
+  // Build compliance rules
+  const complianceRules = buildIllustrationComplianceRules({
+    project,
+    characters,
+    kbSummary,
+  });
+
+  // Character descriptions with full detail
   const characterDescriptions = characters
-    .map(buildCharacterDescription)
-    .join("; ");
+    .map((char, idx) => buildCharacterDescription(char, idx, characters.length))
+    .join("\n\n   ");
 
-  // Build the main prompt
-  const promptParts: string[] = [
-    "Pixar-style 3D children's book illustration",
-    `for ages ${project.ageRange}`,
-    "",
-    `Scene: ${sceneDescription}`,
-    "",
-    `Characters: ${characterDescriptions}`,
-    "",
-    "Style requirements:",
-    "- Warm, inviting lighting",
-    "- Soft shadows",
-    "- Vibrant but not harsh colors",
-    "- Child-friendly expressions",
-    "- Clear focal point",
-    "",
-    "Cultural requirements:",
-    `- ${buildModestyConstraints(kbSummary)}`,
-    "- Culturally appropriate Islamic setting",
-    "",
-    "Technical requirements:",
-    "- High detail on character faces",
-    "- Consistent character design with reference images",
-    "- No text or words in the image",
-    "- Professional children's book quality",
-  ];
+  // Determine style from characters (use first character's style or default)
+  const primaryStyleId = characters[0]?.visualDNA?.style || "pixar-3d";
+  const stylePrompt = STYLE_PROMPTS[primaryStyleId] || STYLE_PROMPTS["pixar-3d"];
+  const styleTechnical = STYLE_TECHNICAL_DETAILS[primaryStyleId] || STYLE_TECHNICAL_DETAILS["pixar-3d"];
 
-  // Gather pose sheet references
-  const references = characters
-    .filter(c => c.poseSheetUrl)
-    .map(c => c.poseSheetUrl as string);
+  // Build multi-character guide if needed
+  const multiCharGuide = buildMultiCharacterGuide(characters);
+
+  // Build the main prompt with compliance enhancement
+  const basePrompt = `${stylePrompt}
+Target audience: Ages ${project.ageRange}
+
+## SCENE DESCRIPTION
+Chapter ${chapterNumber}: "${sceneDescription}"
+
+## CHARACTERS IN THIS SCENE
+${characterDescriptions}
+${multiCharGuide}
+
+## ART STYLE TECHNICAL REQUIREMENTS
+Style: ${primaryStyleId}
+${styleTechnical}
+
+## SCENE COMPOSITION
+- Warm, inviting lighting with soft ambient fill
+- Soft shadows that don't obscure faces
+- Vibrant but harmonious colors
+- Child-friendly, approachable expressions
+- Clear focal point with all characters visible
+- Appropriate setting that matches the story
+
+## CULTURAL & MODESTY REQUIREMENTS
+${buildModestyConstraints(characters, kbSummary)}
+
+## TECHNICAL REQUIREMENTS
+- High detail on character faces (eyes, expressions)
+- Consistent character design matching reference images
+- NO text, words, or letters anywhere in image
+- Professional children's book quality
+- 4:3 landscape orientation for spread layout`;
+
+  // Apply compliance enforcement
+  const complianceResult = enforceComplianceIllustrationPrompt(
+    basePrompt,
+    complianceRules,
+    characters.map((c) => c.id)
+  );
+
+  // Gather pose sheet references (priority) and fallback to character images
+  const references: string[] = [];
+  for (const char of characters) {
+    if (char.poseSheetUrl) {
+      references.push(char.poseSheetUrl);
+    } else if (char.imageUrl) {
+      references.push(char.imageUrl);
+    }
+  }
 
   return {
-    prompt: promptParts.join("\n"),
+    prompt: complianceResult.correctedPrompt || basePrompt,
     references,
-    style: "pixar-3d",
-    negativePrompt: "text, words, letters, watermark, signature, blurry, distorted, low quality, scary, violent, inappropriate, revealing clothing",
+    style: primaryStyleId,
+    negativePrompt: buildIllustrationNegativePrompt(),
+    complianceWarnings: [
+      ...complianceResult.warnings,
+      ...validation.issues,
+    ],
+    complianceErrors: complianceResult.errors,
   };
 }
 
 // ============================================
-// Cover Prompt Builder
+// Cover Prompt Builder (Enhanced with Compliance)
 // ============================================
 
 export function buildCoverPrompt(input: CoverPromptInput): ImagePromptResult {
-  const { project, characters, kbSummary, coverType, moral } = input;
+  const { project, characters, kbSummary, coverType, moral, authorName } = input;
 
-  // Character descriptions for main characters only (max 2)
+  // Run preflight check
+  const preflight = preflightCoverGeneration(
+    { project, characters, kbSummary },
+    coverType
+  );
+
+  // Build compliance rules
+  const complianceRules = buildCoverComplianceRules({
+    project,
+    characters,
+    kbSummary,
+  });
+
+  // Character descriptions for main characters only (max 2 for cover clarity)
   const mainCharacters = characters.slice(0, 2);
   const characterDescriptions = mainCharacters
-    .map(buildCharacterDescription)
-    .join("; ");
+    .map((char, idx) => buildCharacterDescription(char, idx, mainCharacters.length))
+    .join("\n\n   ");
 
-  const promptParts: string[] = [];
+  // Get style info
+  const primaryStyleId = characters[0]?.visualDNA?.style || "pixar-3d";
+  const stylePrompt = STYLE_PROMPTS[primaryStyleId] || STYLE_PROMPTS["pixar-3d"];
+  const styleTechnical = STYLE_TECHNICAL_DETAILS[primaryStyleId] || STYLE_TECHNICAL_DETAILS["pixar-3d"];
+
+  let basePrompt: string;
 
   if (coverType === "front") {
-    promptParts.push(
-      "Pixar-style 3D children's book FRONT COVER illustration",
-      `Title: "${project.title}"`,
-      `for ages ${project.ageRange}`,
-      "",
-      `Main characters: ${characterDescriptions}`,
-      "",
-      "Cover composition:",
-      "- Characters prominently featured",
-      "- Eye-catching, dynamic pose",
-      "- Warm, inviting atmosphere",
-      "- Space at top for title text (leave blank)",
-      "- Vibrant, appealing colors",
-      "",
-      `Setting hint: ${project.setting || "Islamic/Middle Eastern inspired"}`,
-      "",
-      "Requirements:",
-      `- ${buildModestyConstraints(kbSummary)}`,
-      "- Professional book cover quality",
-      "- No text or words - title will be added separately",
-      "- Vertical portrait orientation (2:3 ratio)",
-    );
+    basePrompt = `CHILDREN'S BOOK FRONT COVER ILLUSTRATION
+${stylePrompt}
+Target audience: Ages ${project.ageRange}
+
+## COVER METADATA (FOR REFERENCE ONLY - DO NOT RENDER AS TEXT)
+Title: "${project.title}" - DO NOT RENDER THIS TEXT
+${authorName ? `Author: "${authorName}" - DO NOT RENDER THIS TEXT` : ""}
+Age Range: ${project.ageRange} - DO NOT RENDER THIS TEXT
+
+## MAIN CHARACTERS FOR COVER
+${characterDescriptions}
+
+## FRONT COVER COMPOSITION REQUIREMENTS
+- Characters prominently featured in center/foreground
+- Eye-catching, dynamic pose suggesting adventure/emotion
+- Warm, inviting atmosphere with appealing colors
+- BLANK SPACE at TOP (15-20% of image) for title - LEAVE EMPTY, DO NOT FILL
+- BLANK SPACE at BOTTOM (10% of image) for author name - LEAVE EMPTY
+- Vibrant, child-appealing color palette
+- Setting hint: ${project.setting || "Islamic/Middle Eastern inspired environment"}
+
+## ART STYLE (MUST MATCH EXACTLY)
+Style: ${primaryStyleId}
+${styleTechnical}
+
+## CULTURAL & MODESTY REQUIREMENTS
+${buildModestyConstraints(mainCharacters, kbSummary)}
+
+## CRITICAL OUTPUT REQUIREMENTS
+- Vertical PORTRAIT orientation (2:3 aspect ratio, e.g., 1024x1536)
+- NO TEXT: Do not generate any text, letters, words, or symbols
+- NO TITLE: Leave designated space blank for post-processing
+- Professional children's book cover quality
+- Characters MUST match their reference images exactly
+- Background should complement but not overpower characters`;
   } else {
-    promptParts.push(
-      "Pixar-style 3D children's book BACK COVER illustration",
-      `for ages ${project.ageRange}`,
-      "",
-      "Back cover composition:",
-      "- Softer, complementary scene",
-      "- Can show secondary moment or setting",
-      "- Space in center for synopsis text (leave blank)",
-      "- Cohesive with front cover style",
-      "",
-      `Theme: ${moral || project.learningObjective || "Islamic values"}`,
-      "",
-      "Requirements:",
-      `- ${buildModestyConstraints(kbSummary)}`,
-      "- Professional book cover quality",
-      "- No text or words",
-      "- Vertical portrait orientation (2:3 ratio)",
-    );
+    // Back cover
+    basePrompt = `CHILDREN'S BOOK BACK COVER ILLUSTRATION
+${stylePrompt}
+Target audience: Ages ${project.ageRange}
+
+## BOOK THEME (FOR COMPOSITION REFERENCE ONLY - DO NOT RENDER AS TEXT)
+Theme/Moral: "${moral || project.learningObjective || "Islamic values and kindness"}"
+
+## BACK COVER COMPOSITION REQUIREMENTS
+- Softer, complementary scene to front cover
+- Can show secondary moment, setting, or atmospheric scene
+- LARGE BLANK SPACE in CENTER (40-50% of image) for synopsis text - CRITICAL
+- Cohesive visual style matching front cover exactly
+- May include subtle environmental elements
+- Calmer, more reflective mood than front
+
+## ART STYLE (MUST MATCH FRONT COVER EXACTLY)
+Style: ${primaryStyleId}
+${styleTechnical}
+
+## CULTURAL & MODESTY REQUIREMENTS
+${buildModestyConstraints(mainCharacters, kbSummary)}
+
+## CRITICAL OUTPUT REQUIREMENTS  
+- Vertical PORTRAIT orientation (2:3 aspect ratio, e.g., 1024x1536)
+- NO TEXT: Do not generate any text, letters, words, or symbols
+- LARGE BLANK CENTER AREA: Leave space for synopsis overlay
+- NO barcode placeholders - these are added in print prep
+- Professional back cover quality
+- Visual continuity with front cover`;
   }
 
-  // Gather pose sheet references
+  // Apply compliance enforcement
+  const complianceResult = enforceComplianceCoverPrompt(
+    basePrompt,
+    complianceRules,
+    coverType
+  );
+
+  // Gather references
   const references = mainCharacters
-    .filter(c => c.poseSheetUrl)
-    .map(c => c.poseSheetUrl as string);
+    .filter((c) => c.poseSheetUrl || c.imageUrl)
+    .map((c) => c.poseSheetUrl || c.imageUrl)
+    .filter((url): url is string => !!url);
 
   return {
-    prompt: promptParts.join("\n"),
+    prompt: complianceResult.correctedPrompt || basePrompt,
     references,
-    style: "pixar-3d",
-    negativePrompt: "text, words, letters, watermark, signature, blurry, distorted, low quality, scary, violent, inappropriate, revealing clothing, horizontal",
+    style: primaryStyleId,
+    negativePrompt: buildCoverNegativePrompt(),
+    complianceWarnings: [
+      ...complianceResult.warnings,
+      ...preflight.warnings,
+    ],
+    complianceErrors: [
+      ...complianceResult.errors,
+      ...preflight.blockers,
+    ],
   };
 }
 
 // ============================================
-// Scene Description Generator
+// Scene Description Generator (Enhanced)
 // ============================================
 
 export function generateSceneDescriptionFromChapter(
@@ -228,16 +464,23 @@ export function generateSceneDescriptionFromChapter(
 
   // Extract a meaningful scene from the chapter text
   // Look for action or descriptive sentences
-  const sentences = chapterText.split(/[.!?]+/).filter(s => s.trim().length > 20);
+  const sentences = chapterText.split(/[.!?]+/).filter((s) => s.trim().length > 20);
 
   // Prefer sentences with visual elements
-  const visualKeywords = ["looked", "saw", "watched", "smiled", "walked", "ran", "sat", "stood", "held", "opened"];
-  const visualSentences = sentences.filter(s =>
-    visualKeywords.some(kw => s.toLowerCase().includes(kw))
+  const visualKeywords = [
+    "looked", "saw", "watched", "smiled", "walked", "ran", "sat", "stood",
+    "held", "opened", "reached", "hugged", "pointed", "gazed", "glanced",
+    "jumped", "played", "danced", "prayed", "reading"
+  ];
+  const visualSentences = sentences.filter((s) =>
+    visualKeywords.some((kw) => s.toLowerCase().includes(kw))
   );
 
   if (visualSentences.length > 0) {
-    return visualSentences[0].trim();
+    // Return the most descriptive visual sentence
+    return visualSentences
+      .sort((a, b) => b.length - a.length)[0]
+      .trim();
   }
 
   // Fall back to first substantial sentence
@@ -246,4 +489,76 @@ export function generateSceneDescriptionFromChapter(
   }
 
   return `Scene from ${chapterTitle}`;
+}
+
+// ============================================
+// Batch Generation Helpers
+// ============================================
+
+export interface IllustrationBatchInput {
+  project: StoredProject;
+  chapters: Array<{
+    chapterNumber: number;
+    title: string;
+    keyScene?: string;
+    text?: string;
+  }>;
+  characters: StoredCharacter[];
+  kbSummary: KBRulesSummary | null;
+}
+
+/**
+ * Generate prompts for all illustrations in a book.
+ * Each chapter gets one illustration.
+ */
+export function buildIllustrationBatch(
+  input: IllustrationBatchInput
+): ImagePromptResult[] {
+  const { project, chapters, characters, kbSummary } = input;
+
+  return chapters.map((chapter) => {
+    const sceneDescription = generateSceneDescriptionFromChapter(
+      chapter.text || "",
+      chapter.title,
+      chapter.keyScene
+    );
+
+    return buildIllustrationPrompt({
+      project,
+      chapterNumber: chapter.chapterNumber,
+      sceneDescription,
+      characters,
+      kbSummary,
+    });
+  });
+}
+
+/**
+ * Generate prompts for both front and back covers.
+ */
+export function buildCoverBatch(
+  project: StoredProject,
+  characters: StoredCharacter[],
+  kbSummary: KBRulesSummary | null,
+  moral?: string,
+  authorName?: string
+): { front: ImagePromptResult; back: ImagePromptResult } {
+  return {
+    front: buildCoverPrompt({
+      project,
+      characters,
+      kbSummary,
+      coverType: "front",
+      moral,
+      authorName,
+    }),
+    back: buildCoverPrompt({
+      project,
+      characters,
+      kbSummary,
+      coverType: "back",
+      moral,
+      authorName,
+    }),
+  };
 }

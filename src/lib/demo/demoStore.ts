@@ -6,6 +6,7 @@ import { StoredProject, getProject } from "@/lib/storage/projectsStore";
 import { StoredCharacter, getCharacter } from "@/lib/storage/charactersStore";
 import { KBRulesSummary, getKBRulesSummary } from "@/lib/storage/knowledgeBaseStore";
 import { isSupabaseConfigured, getSharedProject } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/utils/api";
 
 // ============================================
 // Types
@@ -97,8 +98,8 @@ export function sanitizeProjectForShare(
             return rest;
           }),
         };
-      } else if (typeof content === "object") {
-        const { _structured, _rawText, _needsReview, ...rest } = content;
+      } else if (typeof content === "object" && content !== null) {
+        const { _structured, _rawText, _needsReview, ...rest } = content as Record<string, unknown>;
         sanitizedArtifacts[key] = { ...artifact, content: rest };
       } else {
         sanitizedArtifacts[key] = artifact;
@@ -111,7 +112,7 @@ export function sanitizeProjectForShare(
     id: char.id,
     name: char.name,
     role: char.role,
-    thumbnailUrl: char.thumbnailUrl,
+    thumbnailUrl: char.imageUrl,
     traits: char.traits,
   }));
 
@@ -252,9 +253,30 @@ export async function loadProjectForDemo(
         id: c.id,
         name: c.name,
         role: c.role,
-        thumbnailUrl: c.thumbnailUrl,
-        traits: c.traits,
+        imageUrl: c.thumbnailUrl || "",
+        traits: c.traits || [],
         status: "locked" as const,
+        ageRange: "",
+        version: 1,
+        speakingStyle: "",
+        visualDNA: {
+          style: "pixar-3d",
+          skinTone: "",
+          hairOrHijab: "",
+          outfitRules: "",
+          accessories: "",
+          paletteNotes: "",
+        },
+        modestyRules: {
+          hijabAlways: false,
+          longSleeves: false,
+          looseClothing: false,
+          notes: "",
+        },
+        colorPalette: [],
+        poses: [],
+        poseSheetGenerated: false,
+        versions: [],
         createdAt: "",
         updatedAt: "",
       }));
@@ -361,7 +383,7 @@ interface ServerShareResponse {
  */
 async function isShareServerConfigured(): Promise<boolean> {
   try {
-    const res = await fetch("/api/share/status");
+    const res = await authenticatedFetch("/api/share/status");
     if (!res.ok) return false;
     const data = await res.json();
     return data.configured === true;
@@ -399,7 +421,7 @@ export async function shareProjectToCloud(
     const payload = JSON.stringify(sanitized);
 
     // Call server endpoint (server uses service_role key)
-    const response = await fetch(SHARE_API_URL, {
+    const response = await authenticatedFetch(SHARE_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

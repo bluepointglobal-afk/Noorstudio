@@ -127,6 +127,31 @@ export const DEFAULT_POSES: Omit<Pose, "thumbnailUrl">[] = [
 ];
 
 // ============================================
+// Character Styles
+// ============================================
+
+export type CharacterStyle =
+  | "pixar-3d"
+  | "watercolor"
+  | "anime"
+  | "2d-vector"
+  | "paper-cutout";
+
+export interface StyleOption {
+  id: CharacterStyle;
+  label: string;
+  description: string;
+}
+
+export const CHARACTER_STYLES: StyleOption[] = [
+  { id: "pixar-3d", label: "Pixar 3D", description: "High-quality 3D render with soft lighting" },
+  { id: "watercolor", label: "Soft Watercolor", description: "Gentle, artistic watercolor style" },
+  { id: "anime", label: "Anime / Manga", description: "Vibrant Japanese animation style" },
+  { id: "2d-vector", label: "2D Vector", description: "Clean, flat modern illustration" },
+  { id: "paper-cutout", label: "Paper Cutout", description: "Textured paper collage style" },
+];
+
+// ============================================
 // Book Project
 // ============================================
 

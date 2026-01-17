@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreditCard, Users, BookOpen, TrendingUp, Zap, Calendar, Filter, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,15 +46,15 @@ export default function BillingPage() {
   const [filters, setFilters] = useState<LedgerFilters>({});
   const [stats, setStats] = useState(getCreditStats());
 
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     setCredits(getBalances());
     setLedger(filters.type || filters.entityType ? getFilteredLedger(filters) : getLedger());
     setStats(getCreditStats());
-  };
+  }, [filters]);
 
   useEffect(() => {
     refreshData();
-  }, [filters]);
+  }, [refreshData]);
 
   const plan = planDetails[credits.plan];
   const limits = getPlanLimits(credits.plan);

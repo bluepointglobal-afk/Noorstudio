@@ -1,10 +1,11 @@
 // Character Store - localStorage persistence for Character Studio
 // Key: noorstudio.characters.v1
 
-import { AssetStatus } from "@/lib/models";
+import { AssetStatus, CharacterStyle } from "@/lib/models";
 import { generateImage, ImageGenerationRequest } from "@/lib/ai/providers/imageProvider";
 import { CharacterSchema } from "@/lib/validation/schemas";
 import { validateArrayAndRepair } from "./validation";
+import { getNamespacedKey } from "./keys";
 
 // ============================================
 // Types (Extended for full Character Studio)
@@ -35,6 +36,7 @@ export interface CharacterVersion {
 }
 
 export interface VisualDNA {
+  style: CharacterStyle;
   skinTone: string;
   hairOrHijab: string;
   outfitRules: string;
@@ -153,11 +155,12 @@ function getRandomDemoImage(): string {
 
 export function getCharacters(): StoredCharacter[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const key = getNamespacedKey(STORAGE_KEY);
+    const stored = localStorage.getItem(key);
     if (!stored) return [];
 
     const parsed = JSON.parse(stored);
-    return validateArrayAndRepair(STORAGE_KEY, parsed, CharacterSchema);
+    return validateArrayAndRepair(key, parsed, CharacterSchema);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse characters from localStorage");
@@ -181,7 +184,7 @@ export function saveCharacter(character: StoredCharacter): void {
     characters.push(character);
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(characters));
 }
 
 export function updateCharacter(id: string, partial: Partial<StoredCharacter>): StoredCharacter | null {
@@ -197,7 +200,7 @@ export function updateCharacter(id: string, partial: Partial<StoredCharacter>): 
   };
 
   characters[index] = updated;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(characters));
 
   return updated;
 }
@@ -208,7 +211,7 @@ export function deleteCharacter(id: string): boolean {
 
   if (filtered.length === characters.length) return false;
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+  localStorage.setItem(getNamespacedKey(STORAGE_KEY), JSON.stringify(filtered));
   return true;
 }
 
@@ -226,6 +229,7 @@ export interface CreateCharacterInput {
   modestyRules: ModestyRules;
   colorPalette: string[];
   universeId?: string;
+  style?: CharacterStyle; // Optional for backward compatibility in input
 }
 
 export function createCharacter(input: CreateCharacterInput): StoredCharacter {
@@ -238,7 +242,7 @@ export function createCharacter(input: CreateCharacterInput): StoredCharacter {
     ageRange: input.ageRange,
     status: "draft",
     version: 1,
-    imageUrl: getRandomDemoImage(), // Will be replaced when pose sheet generates
+    imageUrl: "", // Empty until AI generates the character image
 
     traits: input.traits,
     speakingStyle: input.speakingStyle,
@@ -262,111 +266,312 @@ export function createCharacter(input: CreateCharacterInput): StoredCharacter {
 }
 
 // ============================================
-// Pose Generation Prompt Builder
+// Art Style Descriptions for AI Prompts
 // ============================================
 
-const ALTERNATIVES_PER_POSE = 3;
+const STYLE_DESCRIPTIONS: Record<string, string> = {
+  "pixar-3d": "Pixar-style 3D CGI render with soft lighting, subsurface scattering on skin, rounded features, expressive eyes, high-quality render like Disney/Pixar animated films",
+  "watercolor": "Soft traditional watercolor illustration with gentle color bleeding, organic textures, delicate brushstrokes, dreamy quality like classic children's book art",
+  "anime": "Vibrant Japanese anime/manga style with expressive large eyes, dynamic poses, clean linework, cel-shaded coloring, inspired by Studio Ghibli",
+  "2d-vector": "Clean modern 2D vector illustration with flat colors, bold outlines, geometric simplification, contemporary children's book aesthetic",
+  "paper-cutout": "Textured paper collage style with visible paper grain, layered cut-paper shapes, handcrafted feel, Eric Carle inspired",
+};
 
-function buildPosePrompt(character: StoredCharacter, poseName: string, variation: number = 0): string {
-  const { visualDNA, modestyRules, name, ageRange, role } = character;
+// ============================================
+// Character Generation Prompt Builder
+// ============================================
 
-  // Add slight variation hints for different alternatives
-  const variationHints = [
-    "", // First alternative - standard
-    " Add subtle expression variation.", // Second alternative
-    " Slight angle or gesture variation.", // Third alternative
-  ];
+/**
+ * Build prompt for initial character generation (front-facing hero image).
+ * This creates the base reference that all poses will be based on.
+ * ENHANCED with identity anchoring to establish immutable traits.
+ */
+export function buildCharacterPrompt(character: StoredCharacter | CreateCharacterInput & { name: string; role: string; ageRange: string; traits: string[]; colorPalette: string[] }): string {
+  const { visualDNA, modestyRules, name, role, ageRange, traits, colorPalette } = character;
 
-  return `Children's book character pose illustration:
-Character: ${name}, ${role}, age ${ageRange}
-Pose: ${poseName}
-Visual details: ${visualDNA.skinTone} skin, ${visualDNA.hairOrHijab}, ${visualDNA.outfitRules}
-Accessories: ${visualDNA.accessories}
-Style notes: ${visualDNA.paletteNotes}
-${modestyRules.hijabAlways ? "Always wears hijab." : ""}
-${modestyRules.longSleeves ? "Long sleeves required." : ""}
-${modestyRules.looseClothing ? "Loose, modest clothing." : ""}
-Style: Warm, inviting Islamic children's illustration. Consistent character appearance.
-IMPORTANT: Generate the SAME character shown in the reference image, in a ${poseName.toLowerCase()} pose.${variationHints[variation] || ""}`;
+  const styleDescription = STYLE_DESCRIPTIONS[visualDNA.style] || STYLE_DESCRIPTIONS["pixar-3d"];
+
+  // Build personality/expression guidance from traits
+  const traitGuidance = traits.length > 0
+    ? `Personality: ${traits.join(", ")} - reflect this in facial expression and posture.`
+    : "";
+
+  // Build color guidance
+  const colorGuidance = colorPalette.length > 0
+    ? `Primary color palette for clothing: ${colorPalette.slice(0, 3).join(", ")}`
+    : "";
+
+  // Build comprehensive modesty rules with strong enforcement language
+  const modestyGuidelines = [
+    modestyRules.hijabAlways
+      ? "!!! HIJAB MANDATORY !!! - Must wear hijab covering ALL hair completely"
+      : "",
+    modestyRules.longSleeves ? "Long sleeves REQUIRED - no bare arms visible" : "",
+    modestyRules.looseClothing ? "Loose-fitting modest clothing ONLY - no tight or form-fitting" : "",
+    modestyRules.notes ? `Custom requirements: ${modestyRules.notes}` : "",
+  ].filter(Boolean).join("\n- ");
+
+  return `## CHARACTER DESIGN BRIEF: "${name}"
+This is a REFERENCE IMAGE that will be used for all future illustrations.
+The traits established here become LOCKED and IMMUTABLE.
+
+=== ART STYLE (LOCKED) ===
+${styleDescription}
+Art Style ID: ${visualDNA.style}
+This exact style will be used in all poses and illustrations.
+
+=== CHARACTER IDENTITY DOCUMENT ===
+| Trait | Value | Lock Status |
+|-------|-------|-------------|
+| Name | ${name} | 🔒 LOCKED |
+| Role | ${role} | 🔒 LOCKED |
+| Age | ${ageRange} years old | 🔒 LOCKED |
+| Skin Tone | ${visualDNA.skinTone} | 🔒 LOCKED |
+| Head/Hair | ${visualDNA.hairOrHijab} | 🔒 LOCKED |
+| Outfit Style | ${visualDNA.outfitRules} | 🔒 LOCKED |
+| Accessories | ${visualDNA.accessories || "None"} | 🔒 LOCKED |
+${colorGuidance ? `| Color Palette | ${colorPalette.slice(0, 3).join(", ")} | 🔒 LOCKED |` : ""}
+
+${traitGuidance}
+
+=== MODESTY REQUIREMENTS (MANDATORY - NON-NEGOTIABLE) ===
+${modestyGuidelines || "- Modest, culturally appropriate Islamic children's illustration style"}
+
+=== OUTPUT SPECIFICATIONS ===
+- FRONT-FACING full-body character portrait
+- Clean solid color or simple gradient background
+- Character centered in frame, well-lit from front
+- Warm, friendly, approachable expression
+- Professional children's book character quality
+- High detail on face and distinguishing features
+
+=== CRITICAL NO-TEXT RULE ===
+!!! DO NOT add any text, labels, names, or words to the image !!!
+The character's name is "${name}" but do NOT render it.
+This is a VISUAL reference only.
+
+=== QUALITY CHECKLIST ===
+Before finalizing, verify:
+□ Face is distinctive and memorable
+□ Skin tone matches: ${visualDNA.skinTone}
+□ Hair/hijab clearly shows: ${visualDNA.hairOrHijab}
+${modestyRules.hijabAlways ? "□ Hijab is visible and covers all hair" : ""}
+□ Clothing is modest and matches description
+□ Art style is clearly ${visualDNA.style}
+□ No text or labels anywhere
+□ Character is appealing to young Muslim children`.trim();
 }
+
+
+// ============================================
+// Pose Sheet Generation Prompt Builder
+// ============================================
+
+/**
+ * Build prompt for pose sheet generation.
+ * This generates all 12 poses in a SINGLE grid image, referencing the approved character.
+ * ENHANCED with strict identity lock to prevent character drift across poses.
+ */
+export function buildPoseSheetPrompt(character: StoredCharacter): string {
+  const { visualDNA, modestyRules, name, role, ageRange, traits, colorPalette } = character;
+
+  const styleDescription = STYLE_DESCRIPTIONS[visualDNA.style] || STYLE_DESCRIPTIONS["pixar-3d"];
+
+  // Build personality/expression guidance from traits
+  const traitGuidance = traits.length > 0
+    ? `Character personality: ${traits.join(", ")}`
+    : "";
+
+  // Build color guidance
+  const colorGuidance = colorPalette.length > 0
+    ? `Color palette for clothing: ${colorPalette.join(", ")}`
+    : "";
+
+  // Build comprehensive modesty rules with strong enforcement
+  const modestyGuidelines = [
+    modestyRules.hijabAlways
+      ? "!!! HIJAB MANDATORY !!! - Must cover ALL hair completely in EVERY pose"
+      : "",
+    modestyRules.longSleeves ? "Long sleeves REQUIRED in every pose" : "",
+    modestyRules.looseClothing ? "Loose modest clothing ONLY - no tight/form-fitting" : "",
+    modestyRules.notes ? modestyRules.notes : "",
+  ].filter(Boolean).join("\n- ");
+
+  const poseList = DEFAULT_POSE_NAMES.map((pose, i) => `${i + 1}. ${pose}`).join("\n");
+
+  return `## CRITICAL: CHARACTER IDENTITY LOCK
+!!! THIS CHARACTER'S APPEARANCE IS LOCKED - DO NOT CHANGE ANY FEATURES !!!
+
+Create a CHARACTER POSE SHEET with 12 poses for "${name}".
+
+## IMMUTABLE CHARACTER TRAITS (CANNOT BE CHANGED)
+The following traits are LOCKED and MUST appear IDENTICALLY in all 12 poses:
+| Trait | Value | Notes |
+|-------|-------|-------|
+| Name | ${name} | This exact character |
+| Age | ${ageRange} years old | Same proportions in all poses |
+| Skin | ${visualDNA.skinTone} | EXACT skin tone - no variation |
+| Head | ${visualDNA.hairOrHijab} | Same style in every pose |
+| Outfit | ${visualDNA.outfitRules} | Consistent clothing design |
+| Accessories | ${visualDNA.accessories || "None"} | Same items in every pose |
+${colorGuidance ? `| Colors | ${colorPalette.slice(0, 3).join(", ")} | Use these exact colors |` : ""}
+
+${traitGuidance}
+
+## ART STYLE (LOCKED - MUST MATCH REFERENCE)
+${styleDescription}
+
+## MODESTY REQUIREMENTS (ENFORCED IN ALL POSES)
+${modestyGuidelines || "- Modest Islamic children's illustration style"}
+
+## 12 REQUIRED POSES (4x3 GRID)
+${poseList}
+
+## OUTPUT FORMAT SPECIFICATIONS
+- SINGLE IMAGE output with 4 columns × 3 rows grid layout
+- Each cell contains exactly one pose
+- CHARACTER MUST BE IDENTICAL across all 12 poses:
+  * Same face structure and features
+  * Same body proportions  
+  * Same skin tone (${visualDNA.skinTone})
+  * Same hair/hijab style (${visualDNA.hairOrHijab})
+  * Same clothing colors and design
+- Clean white or light gray background in each cell
+- Character centered and same scale in every cell
+- Consistent lighting across all poses
+
+## NO TEXT RULE
+Do NOT add any text, labels, numbers, or words to the image.
+Pose names are for your reference only - do not render them.
+
+## QUALITY CHECKLIST (AI MUST VERIFY)
+Before finalizing, verify each pose has:
+□ Correct face matching reference (same ${name})
+□ Correct skin tone (${visualDNA.skinTone})
+□ Correct hair/hijab (${visualDNA.hairOrHijab})
+□ Correct clothing style and colors
+${modestyRules.hijabAlways ? "□ Hijab visible and covering all hair" : ""}
+□ Consistent proportions
+□ No text or labels`.trim();
+}
+
 
 // ============================================
 // Pose Management
 // ============================================
 
 /**
- * Generate pose sheet for a character using AI image generation.
- * Generates 3 alternatives per pose for user selection.
- * Uses the character's main image as a reference to maintain visual consistency.
+ * Generate the initial character image (hero/reference image).
+ * This is a SINGLE API call that creates the base character design.
+ * User must approve this before generating poses.
  */
-export async function generatePoseSheet(
+export async function generateCharacterImage(
   characterId: string,
-  onProgress?: (completed: number, total: number, poseName: string) => void
+  onProgress?: (status: string) => void
 ): Promise<StoredCharacter | null> {
   const character = getCharacter(characterId);
   if (!character) return null;
 
-  const updatedPoses: CharacterPose[] = [];
-  const totalGenerations = DEFAULT_POSE_NAMES.length * ALTERNATIVES_PER_POSE;
-  let completedGenerations = 0;
+  onProgress?.("Generating character...");
 
-  // Generate each pose with 3 alternatives
-  for (let idx = 0; idx < DEFAULT_POSE_NAMES.length; idx++) {
-    const poseName = DEFAULT_POSE_NAMES[idx];
-    const alternatives: PoseAlternative[] = [];
+  try {
+    const request: ImageGenerationRequest = {
+      prompt: buildCharacterPrompt(character),
+      style: character.visualDNA.style || "pixar-3d",
+      width: 768,
+      height: 1024, // Portrait orientation for character
+      stage: "illustrations",
+    };
 
-    // Generate 3 alternatives for each pose
-    for (let altIdx = 0; altIdx < ALTERNATIVES_PER_POSE; altIdx++) {
-      onProgress?.(completedGenerations, totalGenerations, `${poseName} (${altIdx + 1}/${ALTERNATIVES_PER_POSE})`);
+    const response = await generateImage(request);
 
-      try {
-        const request: ImageGenerationRequest = {
-          prompt: buildPosePrompt(character, poseName, altIdx),
-          references: character.imageUrl ? [character.imageUrl] : undefined,
-          style: "watercolor",
-          width: 512,
-          height: 512,
-        };
+    onProgress?.("Character generated!");
 
-        const response = await generateImage(request);
-
-        alternatives.push({
-          id: altIdx + 1,
-          imageUrl: response.imageUrl,
-          selected: altIdx === 0, // First alternative is selected by default
-          createdAt: new Date().toISOString(),
-        });
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error(`Failed to generate pose "${poseName}" alternative ${altIdx + 1}:`, error);
-        }
-        // Skip failed alternatives
-      }
-
-      completedGenerations++;
-    }
-
-    // Use first successful alternative as the main image
-    const selectedAlt = alternatives.find(a => a.selected) || alternatives[0];
-
-    updatedPoses.push({
-      id: idx + 1,
-      name: poseName,
-      status: "draft" as AssetStatus,
-      imageUrl: selectedAlt?.imageUrl,
-      alternatives,
-      selectedAlternative: 0,
-      updatedAt: new Date().toISOString(),
+    return updateCharacter(characterId, {
+      imageUrl: response.imageUrl,
+      status: "draft", // Still draft until user approves
     });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error("Failed to generate character image:", error);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Approve the character design.
+ * This marks the character as ready for pose sheet generation.
+ */
+export function approveCharacterDesign(characterId: string): StoredCharacter | null {
+  return updateCharacter(characterId, {
+    status: "approved",
+  });
+}
+
+/**
+ * Generate pose sheet for an APPROVED character using AI image generation.
+ * This is a SINGLE API call that generates all 12 poses in a grid image.
+ * The character's approved image is used as reference for consistency.
+ */
+export async function generatePoseSheet(
+  characterId: string,
+  onProgress?: (status: string) => void
+): Promise<StoredCharacter | null> {
+  const character = getCharacter(characterId);
+  if (!character) return null;
+
+  // Ensure character is approved before generating poses
+  if (character.status !== "approved" && !character.imageUrl) {
+    throw new Error("Character must have an approved image before generating pose sheet.");
   }
 
-  onProgress?.(totalGenerations, totalGenerations, "Complete");
+  onProgress?.("Generating 12-pose sheet...");
 
-  return updateCharacter(characterId, {
-    poses: updatedPoses,
-    poseSheetGenerated: true,
-    poseSheetUrl: updatedPoses[0]?.imageUrl,
-  });
+  try {
+    // SINGLE API CALL for the entire pose sheet (12 poses in a grid)
+    const request: ImageGenerationRequest = {
+      prompt: buildPoseSheetPrompt(character),
+      references: character.imageUrl ? [character.imageUrl] : undefined,
+      style: character.visualDNA.style || "pixar-3d",
+      width: 2048,  // 4 columns
+      height: 1536, // 3 rows (4:3 aspect for 4x3 grid)
+      stage: "illustrations",
+    };
+
+    const response = await generateImage(request);
+
+    onProgress?.("Pose sheet complete!");
+
+    const now = new Date().toISOString();
+
+    // Create pose entries (all from the same grid image)
+    const updatedPoses: CharacterPose[] = DEFAULT_POSE_NAMES.map((name, idx) => ({
+      id: idx + 1,
+      name,
+      status: "draft" as AssetStatus,
+      imageUrl: response.imageUrl, // All point to same grid image initially
+      alternatives: [{
+        id: 1,
+        imageUrl: response.imageUrl,
+        selected: true,
+        createdAt: now,
+      }],
+      selectedAlternative: 0,
+      updatedAt: now,
+    }));
+
+    return updateCharacter(characterId, {
+      poses: updatedPoses,
+      poseSheetGenerated: true,
+      poseSheetUrl: response.imageUrl,
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error("Failed to generate pose sheet:", error);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -430,7 +635,7 @@ export async function regeneratePose(
       const request: ImageGenerationRequest = {
         prompt: buildPosePrompt(character, pose.name, altIdx),
         references: character.imageUrl ? [character.imageUrl] : undefined,
-        style: "watercolor",
+        style: character.visualDNA.style || "pixar-3d",
         width: 512,
         height: 512,
       };
@@ -503,7 +708,7 @@ export async function regenerateAllPoses(
         const request: ImageGenerationRequest = {
           prompt: buildPosePrompt(character, poseName, altIdx),
           references: character.imageUrl ? [character.imageUrl] : undefined,
-          style: "watercolor",
+          style: character.visualDNA.style || "pixar-3d",
           width: 512,
           height: 512,
         };
@@ -712,6 +917,7 @@ export function seedDemoCharactersIfEmpty(): void {
       traits: ["curious", "brave", "kind"],
       speakingStyle: "Enthusiastic and questioning",
       visualDNA: {
+        style: "pixar-3d",
         skinTone: "Warm olive",
         hairOrHijab: "Pink hijab with floral pattern",
         outfitRules: "Bright orange dress with modest neckline",
@@ -753,6 +959,7 @@ export function seedDemoCharactersIfEmpty(): void {
       traits: ["helpful", "gentle", "patient"],
       speakingStyle: "Soft and encouraging",
       visualDNA: {
+        style: "pixar-3d",
         skinTone: "Light brown",
         hairOrHijab: "Short dark hair with striped kufi cap",
         outfitRules: "Blue thobe, comfortable fit",
@@ -794,11 +1001,12 @@ export function seedDemoCharactersIfEmpty(): void {
       traits: ["wise", "patient", "nurturing"],
       speakingStyle: "Calm and instructive",
       visualDNA: {
+        style: "watercolor",
         skinTone: "Medium brown",
         hairOrHijab: "Gray hijab, professional style",
         outfitRules: "Professional modest dress, glasses",
         accessories: "Reading glasses, occasionally a book",
-        paletteNotes: "Neutral grays and blues, professional",
+        paletteNotes: "Calm purples and grays",
       },
       modestyRules: {
         hijabAlways: true,
@@ -956,5 +1164,5 @@ export function canLockCharacter(character: StoredCharacter): boolean {
 }
 
 export function clearAllCharacters(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(getNamespacedKey(STORAGE_KEY));
 }

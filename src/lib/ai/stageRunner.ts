@@ -24,47 +24,19 @@ import {
   generateTextWithJSONRetry,
   CancelToken,
 } from "./providers/textProvider";
+import { buildStageContext } from "./context";
+import { GLOBAL_LIMITS } from "./tokenBudget";
+import { AIUsageStats, StageRunnerProgress, StageRunnerResult } from "./types";
+
+function generateAttemptId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+}
 
 // ============================================
 // Types
 // ============================================
 
-export interface AIUsageStats {
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  callCount: number;
-  lastRunAt: string;
-  provider: string;
-  stages: Record<string, {
-    inputTokens: number;
-    outputTokens: number;
-    callCount: number;
-  }>;
-}
-
-export interface StageRunnerProgress {
-  stage: string;
-  status: "running" | "completed" | "error";
-  progress: number;
-  message: string;
-  subProgress?: {
-    current: number;
-    total: number;
-    label: string;
-  };
-}
-
-export interface StageRunnerResult<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-  };
-  needsReview?: boolean;
-  rawText?: string;
-}
+// Types are imported from ./types.ts
 
 type ProgressCallback = (progress: StageRunnerProgress) => void;
 
@@ -73,7 +45,11 @@ type ProgressCallback = (progress: StageRunnerProgress) => void;
 // ============================================
 
 export function getProjectAIUsage(project: StoredProject): AIUsageStats | null {
-  return (project.artifacts._aiUsage?.content as AIUsageStats) || null;
+  const artifact = project.artifacts._aiUsage;
+  if (artifact && 'content' in artifact) {
+    return artifact.content as AIUsageStats;
+  }
+  return null;
 }
 
 export function updateProjectAIUsage(
@@ -142,7 +118,9 @@ export async function runOutlineStage(
   });
 
   try {
-    const { system, prompt } = buildOutlinePrompt(project, characters, kbSummary);
+    const attemptId = generateAttemptId();
+    const context = buildStageContext("outline", project, characters, kbSummary);
+    const { system, prompt } = buildOutlinePrompt(project, context.activeCharacters, context.kb);
 
     onProgress({
       stage: "outline",
@@ -157,6 +135,8 @@ export async function runOutlineStage(
         prompt,
         maxOutputTokens: 1200,
         stage: "outline",
+        attemptId,
+        projectId: project.id,
       },
       (rawText) => buildJsonRepairPrompt(rawText, OUTLINE_SCHEMA),
       cancelToken
@@ -276,19 +256,24 @@ export async function runChaptersStage(
           previousChapterSummary: previousSummary,
         };
 
+        const attemptId = generateAttemptId();
+        const context = buildStageContext("chapters", project, characters, kbSummary);
+
         const { system, prompt } = buildChapterPrompt(
           project,
           chapterContext,
-          characters,
-          kbSummary
+          context.activeCharacters,
+          context.kb
         );
 
         const result = await generateTextWithJSONRetry<ChapterOutput>(
           {
             system,
             prompt,
-            maxOutputTokens: 1600,
+            maxOutputTokens: 2500,
             stage: "chapters",
+            attemptId,
+            projectId: project.id,
           },
           (rawText) => buildJsonRepairPrompt(rawText, CHAPTER_SCHEMA),
           cancelToken
@@ -328,7 +313,7 @@ export async function runChaptersStage(
       usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
     };
   } catch (error: unknown) {
-    const errorObj = error as { message?: string; cancelled?: boolean };
+    const errorObj = error as { message?: string; cancelled?: boolean; rawText?: string };
 
     // If we have some chapters, return partial success
     if (generatedChapters.length > 0) {
@@ -353,6 +338,15 @@ export async function runChaptersStage(
       progress: 0,
       message: errorObj.message || "Failed to generate chapters",
     });
+
+    if (errorObj.rawText) {
+      return {
+        success: false,
+        error: errorObj.message,
+        needsReview: true,
+        rawText: errorObj.rawText,
+      };
+    }
 
     return {
       success: false,
@@ -409,19 +403,24 @@ export async function runHumanizeStage(
         },
       });
 
+      const attemptId = generateAttemptId();
+      const context = buildStageContext("humanize", project, [], kbSummary);
+
       const { system, prompt } = buildHumanizePrompt(
         project,
         chapterNum,
         chapter.text,
-        kbSummary
+        context.kb
       );
 
       const result = await generateTextWithJSONRetry<HumanizeOutput>(
         {
           system,
           prompt,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 2500,
           stage: "humanize",
+          attemptId,
+          projectId: project.id,
         },
         (rawText) => buildJsonRepairPrompt(rawText, HUMANIZE_SCHEMA),
         cancelToken
@@ -457,7 +456,7 @@ export async function runHumanizeStage(
       usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
     };
   } catch (error: unknown) {
-    const errorObj = error as { message?: string };
+    const errorObj = error as { message?: string; rawText?: string };
 
     // If we have some chapters, return partial success
     if (humanizedChapters.length > 0) {
@@ -475,6 +474,15 @@ export async function runHumanizeStage(
       progress: 0,
       message: errorObj.message || "Failed to humanize chapters",
     });
+
+    if (errorObj.rawText) {
+      return {
+        success: false,
+        error: errorObj.message,
+        needsReview: true,
+        rawText: errorObj.rawText,
+      };
+    }
 
     return {
       success: false,

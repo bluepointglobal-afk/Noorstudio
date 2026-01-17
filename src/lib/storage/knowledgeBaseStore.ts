@@ -3,6 +3,7 @@
 
 import { KnowledgeBaseSchema, KnowledgeBaseItemSchema } from "@/lib/validation/schemas";
 import { validateArrayAndRepair } from "./validation";
+import { getNamespacedKey } from "./keys";
 
 // ============================================
 // Types
@@ -60,7 +61,7 @@ function generateId(prefix: string): string {
 }
 
 function getItemsKey(kbId: string): string {
-  return `${KB_ITEMS_PREFIX}${kbId}`;
+  return getNamespacedKey(`${KB_ITEMS_PREFIX}${kbId}`);
 }
 
 // ============================================
@@ -69,11 +70,12 @@ function getItemsKey(kbId: string): string {
 
 export function listKnowledgeBases(): KnowledgeBase[] {
   try {
-    const stored = localStorage.getItem(KB_LIST_KEY);
+    const key = getNamespacedKey(KB_LIST_KEY);
+    const stored = localStorage.getItem(key);
     if (!stored) return [];
 
     const parsed = JSON.parse(stored);
-    return validateArrayAndRepair(KB_LIST_KEY, parsed, KnowledgeBaseSchema);
+    return validateArrayAndRepair(key, parsed, KnowledgeBaseSchema);
   } catch {
     if (import.meta.env.DEV) {
       console.error("Failed to parse knowledge bases from localStorage");
@@ -99,7 +101,7 @@ export function createKnowledgeBase(name: string, description: string = ""): Kno
 
   const kbs = listKnowledgeBases();
   kbs.push(kb);
-  localStorage.setItem(KB_LIST_KEY, JSON.stringify(kbs));
+  localStorage.setItem(getNamespacedKey(KB_LIST_KEY), JSON.stringify(kbs));
 
   // Initialize empty items array for this KB
   localStorage.setItem(getItemsKey(kb.id), JSON.stringify([]));
@@ -119,7 +121,7 @@ export function renameKnowledgeBase(id: string, name: string, description?: stri
     updatedAt: new Date().toISOString(),
   };
 
-  localStorage.setItem(KB_LIST_KEY, JSON.stringify(kbs));
+  localStorage.setItem(getNamespacedKey(KB_LIST_KEY), JSON.stringify(kbs));
   return kbs[index];
 }
 
@@ -128,7 +130,7 @@ export function deleteKnowledgeBase(id: string): boolean {
   const filtered = kbs.filter((kb) => kb.id !== id);
   if (filtered.length === kbs.length) return false;
 
-  localStorage.setItem(KB_LIST_KEY, JSON.stringify(filtered));
+  localStorage.setItem(getNamespacedKey(KB_LIST_KEY), JSON.stringify(filtered));
   // Also remove all items for this KB
   localStorage.removeItem(getItemsKey(id));
   return true;
@@ -348,7 +350,7 @@ export function seedDefaultKBIfEmpty(): void {
     updatedAt: now,
   };
 
-  localStorage.setItem(KB_LIST_KEY, JSON.stringify([defaultKB, ksKB]));
+  localStorage.setItem(getNamespacedKey(KB_LIST_KEY), JSON.stringify([defaultKB, ksKB]));
 
   // Default KB Items
   const defaultItems: KnowledgeBaseItem[] = [
@@ -479,5 +481,5 @@ export function seedDefaultKBIfEmpty(): void {
 export function clearAllKnowledgeBases(): void {
   const kbs = listKnowledgeBases();
   kbs.forEach((kb) => localStorage.removeItem(getItemsKey(kb.id)));
-  localStorage.removeItem(KB_LIST_KEY);
+  localStorage.removeItem(getNamespacedKey(KB_LIST_KEY));
 }

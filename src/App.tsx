@@ -12,11 +12,14 @@ import CharactersPage from "./pages/app/CharactersPage";
 import CharacterDetailPage from "./pages/app/CharacterDetailPage";
 import CharacterCreatePage from "./pages/app/CharacterCreatePage";
 import UniversesPage from "./pages/app/UniversesPage";
+import UniverseDetailPage from "./pages/app/UniverseDetailPage";
 import KnowledgeBasePage from "./pages/app/KnowledgeBasePage";
 import BookBuilderPage from "./pages/app/BookBuilderPage";
 import ProjectWorkspacePage from "./pages/app/ProjectWorkspacePage";
 import BillingPage from "./pages/app/BillingPage";
 import DemoViewerPage from "./pages/DemoViewerPage";
+import AuthPage from "./pages/AuthPage";
+import { AuthGuard } from "./components/auth/AuthGuard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,24 +38,35 @@ const App = () => (
           <Route path="/product" element={<HomePage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/faq" element={<HomePage />} />
+          <Route path="/auth" element={<AuthPage />} />
 
           {/* Demo Routes (public) */}
           <Route path="/demo/:id" element={<DemoViewerPage />} />
 
-          {/* App Routes */}
-          <Route path="/app/dashboard" element={<DashboardPage />} />
-          <Route path="/app/universes" element={<UniversesPage />} />
-          <Route path="/app/characters" element={<CharactersPage />} />
-          <Route path="/app/characters/new" element={<CharacterCreatePage />} />
-          <Route path="/app/characters/:id" element={<CharacterDetailPage />} />
-          <Route path="/app/knowledge-base" element={<KnowledgeBasePage />} />
-          <Route path="/app/books/new" element={<BookBuilderPage />} />
-          <Route path="/app/projects" element={<DashboardPage />} />
-          <Route path="/app/projects/:id" element={<ProjectWorkspacePage />} />
-          <Route path="/app/billing" element={<BillingPage />} />
-          <Route path="/app/settings" element={<DashboardPage />} />
-          <Route path="/app/help" element={<DashboardPage />} />
-          
+          {/* App Routes (Protected) */}
+          <Route
+            path="/app/*"
+            element={
+              <AuthGuard>
+                <Routes>
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="universes" element={<UniversesPage />} />
+                  <Route path="universes/:id" element={<UniverseDetailPage />} />
+                  <Route path="characters" element={<CharactersPage />} />
+                  <Route path="characters/new" element={<CharacterCreatePage />} />
+                  <Route path="characters/:id" element={<CharacterDetailPage />} />
+                  <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="books/new" element={<BookBuilderPage />} />
+                  <Route path="projects" element={<DashboardPage />} />
+                  <Route path="projects/:id" element={<ProjectWorkspacePage />} />
+                  <Route path="billing" element={<BillingPage />} />
+                  <Route path="settings" element={<DashboardPage />} />
+                  <Route path="help" element={<DashboardPage />} />
+                </Routes>
+              </AuthGuard>
+            }
+          />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

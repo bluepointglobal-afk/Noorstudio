@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Globe, BookOpen, Type, Users, Layout, Check, Lock, Database, FileText, Download, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { getNamespacedKey } from "@/lib/storage/keys";
 import {
   getCharacters,
   StoredCharacter,
@@ -78,7 +79,8 @@ interface AutosaveData {
 
 function loadAutosave(): AutosaveData | null {
   try {
-    const stored = localStorage.getItem(AUTOSAVE_KEY);
+    const key = getNamespacedKey(AUTOSAVE_KEY);
+    const stored = localStorage.getItem(key);
     if (!stored) return null;
     return JSON.parse(stored) as AutosaveData;
   } catch {
@@ -88,7 +90,7 @@ function loadAutosave(): AutosaveData | null {
 
 function saveAutosave(data: AutosaveData): void {
   try {
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(getNamespacedKey(AUTOSAVE_KEY), JSON.stringify(data));
   } catch (error) {
     if (import.meta.env.DEV) {
       console.error("Failed to save autosave:", error);
@@ -97,7 +99,7 @@ function saveAutosave(data: AutosaveData): void {
 }
 
 function clearAutosave(): void {
-  localStorage.removeItem(AUTOSAVE_KEY);
+  localStorage.removeItem(getNamespacedKey(AUTOSAVE_KEY));
 }
 
 const LAYOUT_STYLES: { id: LayoutStyle; name: string; description: string }[] = [
@@ -211,14 +213,9 @@ export default function BookBuilderPage() {
   };
 
   const handleCharacterToggle = (charId: string, character: StoredCharacter) => {
-    // Only allow locked characters
-    if (character.status !== "locked") {
-      toast({
-        title: "Character not locked",
-        description: "Lock the pose sheet first to ensure visual consistency across the book.",
-        variant: "destructive",
-      });
-      return;
+    // Relaxed check: Allow any character, but warn if not locked
+    if (character.status !== "locked" && character.status !== "approved") {
+      // Optional: could show a non-blocking toast here
     }
 
     setFormData((prev) => ({
@@ -607,13 +604,13 @@ export default function BookBuilderPage() {
             </div>
 
             {/* Info Box */}
-            <div className="p-4 rounded-lg bg-gold-50 border border-gold-200 text-sm">
+            <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm">
               <div className="flex items-start gap-2">
-                <Lock className="w-4 h-4 text-gold-600 mt-0.5 flex-shrink-0" />
+                <Users className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-medium text-gold-800">Only locked characters can be used</p>
-                  <p className="text-gold-600">
-                    Characters must have their pose sheet locked to ensure visual consistency across book illustrations.
+                  <p className="font-medium text-blue-800">Select characters for your story</p>
+                  <p className="text-blue-600">
+                    It is recommended to use "locked" characters for best consistency, but you can start with drafts.
                   </p>
                 </div>
               </div>
@@ -633,9 +630,7 @@ export default function BookBuilderPage() {
                         "p-4 rounded-xl border-2 cursor-pointer transition-all",
                         isSelected
                           ? "border-primary bg-primary/5"
-                          : isLocked
-                            ? "border-border hover:border-primary/50"
-                            : "border-border/50 opacity-60"
+                          : "border-border hover:border-primary/50"
                       )}
                       onClick={() => handleCharacterToggle(char.id, char)}
                     >
@@ -667,7 +662,7 @@ export default function BookBuilderPage() {
                             {char.status}
                           </Badge>
                         </div>
-                        <Checkbox checked={isSelected} disabled={!isLocked} />
+                        <Checkbox checked={isSelected} />
                       </div>
                     </div>
                   );
@@ -695,18 +690,18 @@ export default function BookBuilderPage() {
               </div>
             )}
 
-            {/* Warning if no locked characters */}
-            {lockedCharacters.length === 0 && characters.length > 0 && (
-              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-sm">
-                <p className="font-medium text-destructive">No locked characters available</p>
-                <p className="text-destructive/80">
-                  You need to lock at least one character's pose sheet before creating a book.{" "}
+            {/* Warning if no characters */}
+            {characters.length === 0 && (
+              <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
+                <p className="font-medium text-yellow-800">No characters available</p>
+                <p className="text-yellow-700">
+                  You need to create at least one character first.{" "}
                   <Button
                     variant="link"
-                    className="p-0 h-auto text-destructive underline"
-                    onClick={() => navigate("/app/characters")}
+                    className="p-0 h-auto text-yellow-800 underline"
+                    onClick={() => navigate("/app/characters/new")}
                   >
-                    Go to Character Studio
+                    Create Character
                   </Button>
                 </p>
               </div>

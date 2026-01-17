@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 const createLocalStorageMock = () => {
     let store: Record<string, string> = {};
 
-    const handler: ProxyHandler<any> = {
+    const handler: ProxyHandler<object> = {
         get(target, prop) {
             if (prop === 'getItem') return (key: string) => store[key] || null;
             if (prop === 'setItem') return (key: string, value: string) => { store[key] = value.toString(); };

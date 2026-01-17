@@ -1,27 +1,17 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-// Must be before other imports that might use it
-vi.mock('@/lib/entitlements/entitlements', async (importOriginal) => {
-    const actual: any = await importOriginal();
-    return {
-        ...actual,
-        isDemoMode: vi.fn(() => false),
-    };
-});
-
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
     canExport,
     canCreateKBItem,
     canCreateProject,
     setCurrentPlan,
-    isDemoMode
+    setDemoMode
 } from '@/lib/entitlements/entitlements';
 
 describe('Entitlements - Creator Plan Limits', () => {
     beforeEach(() => {
         localStorage.clear();
         setCurrentPlan('creator');
-        vi.mocked(isDemoMode).mockReturnValue(false);
+        setDemoMode(false); // Explicitly disable demo mode for testing limits
     });
 
     it('blocks Export stage on Creator plan', () => {

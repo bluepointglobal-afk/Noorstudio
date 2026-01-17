@@ -24,7 +24,7 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -103,11 +103,20 @@ export default function KnowledgeBasePage() {
     tags: "",
   });
 
+  // Define loadKnowledgeBases BEFORE using it in useEffect
+  const loadKnowledgeBases = useCallback(() => {
+    const kbs = listKnowledgeBases();
+    setKnowledgeBases(kbs);
+    if (kbs.length > 0 && !selectedKBId) {
+      setSelectedKBId(kbs[0].id);
+    }
+  }, [selectedKBId]);
+
   // Load knowledge bases on mount
   useEffect(() => {
     seedDefaultKBIfEmpty();
     loadKnowledgeBases();
-  }, []);
+  }, [loadKnowledgeBases]);
 
   // Load items when KB changes
   useEffect(() => {
@@ -117,14 +126,6 @@ export default function KnowledgeBasePage() {
       setItems([]);
     }
   }, [selectedKBId]);
-
-  const loadKnowledgeBases = () => {
-    const kbs = listKnowledgeBases();
-    setKnowledgeBases(kbs);
-    if (kbs.length > 0 && !selectedKBId) {
-      setSelectedKBId(kbs[0].id);
-    }
-  };
 
   const refreshItems = () => {
     if (selectedKBId) {

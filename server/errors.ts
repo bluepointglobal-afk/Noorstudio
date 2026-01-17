@@ -11,9 +11,9 @@ export type ErrorCode =
 export class AppError extends Error {
     public readonly code: ErrorCode;
     public readonly statusCode: number;
-    public readonly details?: any;
+    public readonly details?: unknown;
 
-    constructor(code: ErrorCode, message: string, statusCode: number = 500, details?: any) {
+    constructor(code: ErrorCode, message: string, statusCode: number = 500, details?: unknown) {
         super(message);
         this.name = this.constructor.name;
         this.code = code;
@@ -24,13 +24,13 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-    constructor(message: string, details?: any) {
+    constructor(message: string, details?: unknown) {
         super("VALIDATION_ERROR", message, 400, details);
     }
 }
 
 export class RateLimitError extends AppError {
-    constructor(message: string, details?: any) {
+    constructor(message: string, details?: unknown) {
         super("RATE_LIMIT_EXCEEDED", message, 429, details);
     }
 }
@@ -40,6 +40,8 @@ export class UnauthorizedError extends AppError {
         super("UNAUTHORIZED", message, 401);
     }
 }
+
+export class AuthError extends UnauthorizedError { }
 
 export class ForbiddenError extends AppError {
     constructor(message: string = "Access forbidden") {
@@ -54,7 +56,7 @@ export class NotFoundError extends AppError {
 }
 
 export class AIServiceError extends AppError {
-    constructor(message: string, details?: any) {
+    constructor(message: string, details?: unknown) {
         super("AI_SERVICE_ERROR", message, 502, details);
     }
 }

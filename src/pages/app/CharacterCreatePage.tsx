@@ -7,15 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { AGE_RANGES } from "@/lib/models";
+import { AGE_RANGES, CHARACTER_STYLES, CharacterStyle } from "@/lib/models";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, User, Palette, Sparkles, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, User, Palette, Sparkles, Check, RefreshCw, Image, ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
 import { useToast } from "@/hooks/use-toast";
 import {
   createCharacter,
+  generateCharacterImage,
+  approveCharacterDesign,
   generatePoseSheet,
   StoredCharacter,
   DEFAULT_POSE_NAMES,
@@ -34,7 +36,8 @@ import { UpgradeModal } from "@/components/shared/UpgradeModal";
 const steps = [
   { id: 1, title: "Persona", icon: User, description: "Name, role, traits" },
   { id: 2, title: "Visual DNA", icon: Palette, description: "Appearance & modesty" },
-  { id: 3, title: "Pose Sheet", icon: Sparkles, description: "Generate poses" },
+  { id: 3, title: "Character", icon: Sparkles, description: "Generate & approve" },
+  { id: 4, title: "Pose Sheet", icon: Sparkles, description: "Generate 12 poses" },
 ];
 
 const traitOptions = [
@@ -43,7 +46,9 @@ const traitOptions = [
   "adventurous", "caring", "cheerful", "determined",
 ];
 
-const POSE_SHEET_COST = 10;
+// Credit costs
+const CHARACTER_GENERATION_COST = 2;  // Single character image
+const POSE_SHEET_COST = 8;            // 12-pose sheet (single API call)
 
 export default function CharacterCreatePage() {
   const navigate = useNavigate();
@@ -72,6 +77,7 @@ export default function CharacterCreatePage() {
     speakingStyle: "",
 
     // Visual DNA
+    style: "pixar-3d" as CharacterStyle,
     skinTone: "",
     hairOrHijab: "",
     outfitRules: "",
@@ -108,6 +114,9 @@ export default function CharacterCreatePage() {
       case 2:
         return formData.skinTone.trim() && formData.hairOrHijab.trim() && formData.outfitRules.trim();
       case 3:
+        // Can proceed to pose sheet only if character is approved (has image)
+        return createdCharacter?.imageUrl && createdCharacter.status === "approved";
+      case 4:
         return true;
       default:
         return false;
@@ -128,6 +137,7 @@ export default function CharacterCreatePage() {
 
   const handleCreateCharacter = (): StoredCharacter => {
     const visualDNA: VisualDNA = {
+      style: formData.style,
       skinTone: formData.skinTone,
       hairOrHijab: formData.hairOrHijab,
       outfitRules: formData.outfitRules,
@@ -156,6 +166,98 @@ export default function CharacterCreatePage() {
     return character;
   };
 
+  // Step 3: Generate initial character image
+  const handleGenerateCharacter = async () => {
+    // Check credits first
+    if (!hasEnoughCredits("character", CHARACTER_GENERATION_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${CHARACTER_GENERATION_COST} character credits to generate a character.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Create character record if not already created
+    let character = createdCharacter;
+    if (!character) {
+      character = handleCreateCharacter();
+      setCreatedCharacter(character);
+    }
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: CHARACTER_GENERATION_COST,
+      reason: `Generate character image for ${character.name}`,
+      entityType: "character",
+      entityId: character.id,
+      meta: { step: "character_generation" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to generate character",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Generate the character image using AI (SINGLE API CALL)
+      const updatedCharacter = await generateCharacterImage(character.id, (status) => {
+        // Could show status in UI if needed
+        console.log("Character generation:", status);
+      });
+
+      if (updatedCharacter) {
+        setCreatedCharacter(updatedCharacter);
+      }
+
+      setIsGenerating(false);
+      setCredits(getBalances());
+
+      toast({
+        title: "Character generated!",
+        description: `${character.name} has been generated. Review and approve to continue.`,
+      });
+    } catch (error) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to generate character",
+        description: "An error occurred during character generation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Step 3: Approve character design
+  const handleApproveCharacter = () => {
+    if (!createdCharacter) return;
+
+    const approved = approveCharacterDesign(createdCharacter.id);
+    if (approved) {
+      setCreatedCharacter(approved);
+      toast({
+        title: "Character approved!",
+        description: `${approved.name} is ready for pose sheet generation.`,
+      });
+      // Auto-advance to pose sheet step
+      setCurrentStep(4);
+    }
+  };
+
+  // Step 3: Regenerate character (try again)
+  const handleRegenerateCharacter = async () => {
+    if (!createdCharacter) return;
+    await handleGenerateCharacter();
+  };
+
+  // Step 4: Generate pose sheet
   const handleGeneratePoses = () => {
     // Check credits first
     if (!hasEnoughCredits("character", POSE_SHEET_COST)) {
@@ -171,22 +273,17 @@ export default function CharacterCreatePage() {
   };
 
   const confirmGeneratePoses = async () => {
-    setIsGenerating(true);
+    if (!createdCharacter) return;
 
-    // Create character first if not already created
-    let character = createdCharacter;
-    if (!character) {
-      character = handleCreateCharacter();
-      setCreatedCharacter(character);
-    }
+    setIsGenerating(true);
 
     // Consume credits
     const result = consumeCredits({
       type: "character",
       amount: POSE_SHEET_COST,
-      reason: `Generate 12-pose sheet for ${character!.name}`,
+      reason: `Generate 12-pose sheet for ${createdCharacter.name}`,
       entityType: "character",
-      entityId: character!.id,
+      entityId: createdCharacter.id,
       meta: { poseCount: 12 },
     });
 
@@ -202,35 +299,40 @@ export default function CharacterCreatePage() {
     }
 
     try {
-      // Generate the pose sheet using AI
-      await generatePoseSheet(character!.id);
+      // Generate the pose sheet using AI (SINGLE API CALL for all 12 poses)
+      const updatedCharacter = await generatePoseSheet(createdCharacter.id, (status) => {
+        console.log("Pose sheet generation:", status);
+      });
 
       setIsGenerating(false);
       setShowGenerateModal(false);
       setCredits(getBalances());
 
       toast({
-        title: "Character created!",
-        description: `${character!.name} has been created with a 12-pose sheet. ${POSE_SHEET_COST} credits used.`,
+        title: "Pose sheet created!",
+        description: `${createdCharacter.name} now has a 12-pose sheet. ${POSE_SHEET_COST} credits used.`,
       });
 
-      navigate(`/app/characters/${character!.id}`);
+      navigate(`/app/characters/${createdCharacter.id}`);
     } catch (error) {
       setIsGenerating(false);
       setShowGenerateModal(false);
       toast({
         title: "Failed to generate poses",
-        description: "An error occurred during pose generation",
+        description: "An error occurred during pose sheet generation",
         variant: "destructive",
       });
     }
   };
 
-  const handleSaveWithoutPoses = () => {
-    const character = handleCreateCharacter();
+  const handleSaveAsDraft = () => {
+    let character = createdCharacter;
+    if (!character) {
+      character = handleCreateCharacter();
+    }
     toast({
       title: "Character saved",
-      description: `${character.name} has been saved as a draft. Generate poses to complete the character.`,
+      description: `${character.name} has been saved as a draft.`,
     });
     navigate(`/app/characters/${character.id}`);
   };
@@ -269,8 +371,8 @@ export default function CharacterCreatePage() {
                   currentStep > step.id
                     ? "bg-primary text-primary-foreground"
                     : currentStep === step.id
-                    ? "bg-primary/20 text-primary border-2 border-primary"
-                    : "bg-muted text-muted-foreground"
+                      ? "bg-primary/20 text-primary border-2 border-primary"
+                      : "bg-muted text-muted-foreground"
                 )}
               >
                 {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
@@ -388,6 +490,28 @@ export default function CharacterCreatePage() {
               <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
                 Appearance
               </h3>
+
+              <div className="space-y-2">
+                <Label htmlFor="style">Art Style *</Label>
+                <Select
+                  value={formData.style}
+                  onValueChange={(v) => updateForm("style", v as CharacterStyle)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select art style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHARACTER_STYLES.map((style) => (
+                      <SelectItem key={style.id} value={style.id}>
+                        <div className="flex flex-col items-start py-1">
+                          <span className="font-medium">{style.label}</span>
+                          <span className="text-xs text-muted-foreground">{style.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -535,16 +659,16 @@ export default function CharacterCreatePage() {
           </div>
         )}
 
-        {/* Step 3: Pose Sheet */}
+        {/* Step 3: Generate & Approve Character */}
         {currentStep === 3 && (
           <div className="space-y-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-primary" />
+                <Image className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Generate Pose Sheet</h2>
-                <p className="text-muted-foreground">Create a 12-pose character sheet</p>
+                <h2 className="text-xl font-semibold">Generate Character</h2>
+                <p className="text-muted-foreground">Create and approve your character design</p>
               </div>
             </div>
 
@@ -565,8 +689,18 @@ export default function CharacterCreatePage() {
                   <span className="font-medium">{formData.ageRange}</span>
                 </div>
                 <div>
+                  <span className="text-muted-foreground">Art Style: </span>
+                  <span className="font-medium">
+                    {CHARACTER_STYLES.find((s) => s.id === formData.style)?.label || formData.style}
+                  </span>
+                </div>
+                <div>
                   <span className="text-muted-foreground">Skin Tone: </span>
                   <span className="font-medium">{formData.skinTone}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Head/Hair: </span>
+                  <span className="font-medium">{formData.hairOrHijab}</span>
                 </div>
               </div>
               {formData.traits.length > 0 && (
@@ -590,9 +724,169 @@ export default function CharacterCreatePage() {
               </div>
             </div>
 
+            {/* Character Preview / Generation Area */}
+            <div className="space-y-4">
+              {createdCharacter?.imageUrl ? (
+                <>
+                  {/* Generated Character Image */}
+                  <div className="relative">
+                    <div className="aspect-[3/4] max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-border bg-muted">
+                      <img
+                        src={createdCharacter.imageUrl}
+                        alt={createdCharacter.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    {createdCharacter.status === "approved" && (
+                      <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
+                        <Check className="w-4 h-4" />
+                        Approved
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Approval Actions */}
+                  {createdCharacter.status !== "approved" && (
+                    <div className="flex flex-col gap-3 max-w-sm mx-auto">
+                      <Button
+                        variant="hero"
+                        size="lg"
+                        onClick={handleApproveCharacter}
+                        className="w-full"
+                      >
+                        <ThumbsUp className="w-4 h-4 mr-2" />
+                        Approve & Continue
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleRegenerateCharacter}
+                        disabled={isGenerating || !hasEnoughCredits("character", CHARACTER_GENERATION_COST)}
+                        className="w-full"
+                      >
+                        <RefreshCw className={cn("w-4 h-4 mr-2", isGenerating && "animate-spin")} />
+                        Regenerate ({CHARACTER_GENERATION_COST} credits)
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Placeholder before generation */}
+                  <div className="aspect-[3/4] max-w-sm mx-auto rounded-xl border-2 border-dashed border-border bg-muted/50 flex flex-col items-center justify-center gap-4">
+                    <Image className="w-16 h-16 text-muted-foreground/50" />
+                    <p className="text-muted-foreground text-center px-4">
+                      Generate your character to see a preview
+                    </p>
+                  </div>
+
+                  {/* Credit Info */}
+                  <div className="p-4 rounded-lg bg-gold-50 border border-gold-200 max-w-sm mx-auto">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gold-800">Character Generation Cost</p>
+                        <p className="text-sm text-gold-600">
+                          {CHARACTER_GENERATION_COST} character credits
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gold-600">Your balance</p>
+                        <p className="font-bold text-gold-800">{credits.characterCredits} credits</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Generate Button */}
+                  <div className="flex flex-col gap-3 max-w-sm mx-auto">
+                    <Button
+                      variant="hero"
+                      size="lg"
+                      onClick={handleGenerateCharacter}
+                      disabled={!hasEnoughCredits("character", CHARACTER_GENERATION_COST) || isGenerating}
+                      className="w-full"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Generate Character ({CHARACTER_GENERATION_COST} credits)
+                        </>
+                      )}
+                    </Button>
+
+                    {!hasEnoughCredits("character", CHARACTER_GENERATION_COST) && (
+                      <p className="text-sm text-destructive text-center">
+                        Not enough credits.{" "}
+                        <Button
+                          variant="link"
+                          className="p-0 h-auto text-destructive underline"
+                          onClick={() => navigate("/app/billing")}
+                        >
+                          Get more credits
+                        </Button>
+                      </p>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveAsDraft}
+                      className="w-full"
+                    >
+                      Save as Draft (Skip Generation)
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Generate Pose Sheet */}
+        {currentStep === 4 && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Generate Pose Sheet</h2>
+                <p className="text-muted-foreground">Create 12 poses in one generation</p>
+              </div>
+            </div>
+
+            {/* Approved Character Preview */}
+            {createdCharacter?.imageUrl && (
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 border border-green-200">
+                <img
+                  src={createdCharacter.imageUrl}
+                  alt={createdCharacter.name}
+                  className="w-20 h-20 rounded-lg object-cover border border-green-300"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{createdCharacter.name}</h3>
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      <Check className="w-3 h-3 mr-1" />
+                      Approved
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{createdCharacter.role}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Style: {CHARACTER_STYLES.find((s) => s.id === createdCharacter.visualDNA.style)?.label}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Pose Preview Grid */}
             <div className="space-y-3">
-              <h3 className="font-medium">12 Poses to Generate</h3>
+              <h3 className="font-medium">12 Poses to Generate (Single API Call)</h3>
+              <p className="text-sm text-muted-foreground">
+                All 12 poses will be generated in a single image grid, ensuring perfect character consistency.
+              </p>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {DEFAULT_POSE_NAMES.map((pose, idx) => (
                   <div
@@ -611,7 +905,7 @@ export default function CharacterCreatePage() {
                 <div>
                   <p className="font-medium text-gold-800">Pose Sheet Cost</p>
                   <p className="text-sm text-gold-600">
-                    {POSE_SHEET_COST} character credits
+                    {POSE_SHEET_COST} character credits (12 poses)
                   </p>
                 </div>
                 <div className="text-right">
@@ -649,10 +943,10 @@ export default function CharacterCreatePage() {
 
               <Button
                 variant="outline"
-                onClick={handleSaveWithoutPoses}
+                onClick={handleSaveAsDraft}
                 className="w-full"
               >
-                Save as Draft (Generate Later)
+                Save Without Poses (Generate Later)
               </Button>
             </div>
           </div>
@@ -668,6 +962,7 @@ export default function CharacterCreatePage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Previous
           </Button>
+          {/* Only show Next for steps 1-2. Steps 3-4 have their own action buttons */}
           {currentStep < 3 && (
             <Button
               variant="hero"

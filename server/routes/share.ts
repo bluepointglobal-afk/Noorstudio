@@ -150,7 +150,7 @@ router.post("/upsert", async (req: Request, res: Response) => {
     }
 
     // Upsert the shared project with collision retry
-    let upsertError: any = null;
+    let upsertError: { code?: string; message?: string } | null = null;
     const MAX_RETRIES = 3;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -210,13 +210,14 @@ router.post("/upsert", async (req: Request, res: Response) => {
       shareToken,
       shareUrl,
     } as UpsertShareResponse);
-  } catch (error: any) {
-    console.error("Share upsert error:", error);
-    res.status(error.status || 500).json({
+  } catch (error: unknown) {
+    const err = error as Error & { status?: number; statusCode?: number; code?: string };
+    console.error("Share upsert error:", err);
+    res.status(err.status || err.statusCode || 500).json({
       error: {
-        code: error.code || "SHARE_UPSERT_FAILED",
-        message: error.message || "Failed to upsert share",
-        details: env.NODE_ENV === "development" ? error.stack : undefined,
+        code: err.code || "SHARE_UPSERT_FAILED",
+        message: err.message || "Failed to upsert share",
+        details: env.NODE_ENV === "development" ? err.stack : undefined,
       },
     });
   }
@@ -249,7 +250,7 @@ router.post("/rotate", async (req: Request, res: Response) => {
     // Generate new token
     let shareToken = generateShareToken();
     const MAX_RETRIES = 3;
-    let updateError: any = null;
+    let updateError: { code?: string; message?: string } | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const { error } = await supabaseAdmin!
@@ -282,13 +283,14 @@ router.post("/rotate", async (req: Request, res: Response) => {
       projectId,
       shareToken,
     });
-  } catch (error: any) {
-    console.error("Token rotation error:", error);
-    res.status(500).json({
+  } catch (error: unknown) {
+    const err = error as Error & { status?: number; statusCode?: number; code?: string };
+    console.error("Token rotation error:", err);
+    res.status(err.status || err.statusCode || 500).json({
       error: {
         code: "ROTATION_FAILED",
         message: "Failed to rotate share token",
-        details: env.NODE_ENV === "development" ? error : undefined,
+        details: env.NODE_ENV === "development" ? err.message : undefined,
       },
     });
   }
