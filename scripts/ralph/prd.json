@@ -95,7 +95,7 @@
         "Verify in browser: can trigger export, see progress, download PDF and EPUB files"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
