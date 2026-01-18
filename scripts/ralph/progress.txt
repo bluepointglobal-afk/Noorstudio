@@ -115,3 +115,16 @@
 [2026-01-18T09:46:29Z] [RALPH] Attempt 1/3: running verifiers...
 [2026-01-18T09:46:29Z] [RALPH] Verifier: npx tsc --noEmit
 [2026-01-18T09:46:29Z] [RALPH] ✅ Verifiers PASSED for US-005
+[2026-01-18T09:46:29Z] [RALPH] Committed: ralph: US-005
+[2026-01-18T09:46:29Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:29Z] [RALPH] Story: US-006
+[2026-01-18T09:46:29Z] [RALPH] Title: Export Caching and Stale Detection
+[2026-01-18T09:46:29Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:29Z] [RALPH] IMPLEMENTATION REQUIRED:
+[2026-01-18T09:46:29Z] [RALPH]   1. Open prd.json, find story: US-006
+[2026-01-18T09:46:29Z] [RALPH]   2. Implement in Claude Code
+[2026-01-18T09:46:29Z] [RALPH]   3. Re-run: make ralph
+[2026-01-18T09:46:29Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:29Z] [RALPH] Attempt 1/3: running verifiers...
+[2026-01-18T09:46:29Z] [RALPH] Verifier: npx tsc --noEmit
+[2026-01-18T09:46:29Z] [RALPH] ✅ Verifiers PASSED for US-006
