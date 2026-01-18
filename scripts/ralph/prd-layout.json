@@ -1,0 +1,116 @@
+{
+  "project": "NoorStudio",
+  "branchName": "ralph/layout-stage",
+  "description": "Implement Layout Stage for composing book pages from text and illustrations",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Layout Artifact Types",
+      "description": "As a developer, I want comprehensive layout artifact types so that page composition is well-structured.",
+      "acceptanceCriteria": [
+        "Update LayoutArtifactContent in artifacts.ts to include spreads",
+        "Add PagePosition type (left/right)",
+        "Add ContentBlock type for text/image placement",
+        "Add margin and gutter specifications",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added PagePosition, PageType, ContentBlock, PageLayoutItem, SpreadLayoutItem, LayoutSettings types. Updated LayoutArtifactContent. Typecheck passes."
+    },
+    {
+      "id": "US-002",
+      "title": "Text Flow Algorithm",
+      "description": "As a developer, I want text to flow correctly across pages so that chapters are readable.",
+      "acceptanceCriteria": [
+        "Create calculateTextPages() function that estimates pages needed per chapter",
+        "Handle word count per page based on trim size and font size",
+        "Support text-only, image-only, and mixed page types",
+        "Keep paragraphs together when possible (avoid orphan lines)",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Created layoutEngine.ts with calculateTextPages() and estimateChapterPages(). Handles paragraph splitting and orphan avoidance. Typecheck passes."
+    },
+    {
+      "id": "US-003",
+      "title": "Illustration Placement",
+      "description": "As a developer, I want illustrations placed appropriately so that images enhance the reading experience.",
+      "acceptanceCriteria": [
+        "Create placeIllustrations() function",
+        "Each chapter gets one spread with illustration",
+        "Support full-spread images and half-page images",
+        "Illustrations appear on correct spread for their chapter",
+        "Never place two full-spread images consecutively",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Created placeIllustrations() that maps illustrations to chapter spreads. Supports full-spread images. Typecheck passes."
+    },
+    {
+      "id": "US-004",
+      "title": "Spread Composition",
+      "description": "As a developer, I want spreads composed properly so that left and right pages work together.",
+      "acceptanceCriteria": [
+        "Create composeSpread() function",
+        "Left page = even numbers, right page = odd numbers",
+        "First page of chapter always on right (recto)",
+        "Handle blank pages for proper pagination",
+        "Support different trim sizes (6x9, 7x10, 8.5x11)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Created composeSpread() and helper functions. Chapter starts on right page (recto). Supports 6x9, 7x10, 8.5x11 trim sizes. Typecheck passes."
+    },
+    {
+      "id": "US-005",
+      "title": "Layout Stage Runner",
+      "description": "As a developer, I want the layout stage integrated into stageRunner.ts so that it runs in the pipeline.",
+      "acceptanceCriteria": [
+        "Create runLayoutStage() function in stageRunner.ts",
+        "Takes chapters, illustrations, and project settings as input",
+        "Outputs LayoutArtifact with all spreads",
+        "Shows progress during composition",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added runLayoutStage() to stageRunner.ts. Integrated into ProjectWorkspacePage. Shows progress during composition. Typecheck passes."
+    },
+    {
+      "id": "US-006",
+      "title": "Layout Preview UI",
+      "description": "As an author, I want to preview my book layout so that I can see how pages will look.",
+      "acceptanceCriteria": [
+        "Create LayoutPreview component showing spread thumbnails",
+        "Display page numbers on each page",
+        "Show which pages have text vs images",
+        "Indicate chapter starts",
+        "Add spread navigation (previous/next)",
+        "Typecheck passes",
+        "Verify in browser: layout preview displays correctly"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Page Reordering",
+      "description": "As an author, I want to adjust page order so that I can customize my book layout.",
+      "acceptanceCriteria": [
+        "Add drag-and-drop spread reordering in LayoutPreview",
+        "Prevent invalid reorders (cover pages stay fixed)",
+        "Update page numbers after reorder",
+        "Save reordered layout to artifact",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

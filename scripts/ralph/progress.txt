@@ -6,10 +6,22 @@
 - AI usage logging goes to `ai_usage` table via `logAIUsage()` helper in `server/routes/ai.ts`
 - Token budgets are defined in `src/lib/ai/tokenBudget.ts` and imported by server for enforcement
 - Run `npx tsc --noEmit` for typecheck (no npm script defined)
+- Layout types in `src/lib/types/artifacts.ts`: LayoutArtifactContent, SpreadLayoutItem, PageLayoutItem
+- Layout composition in `src/lib/ai/layoutEngine.ts`: composeBookLayout(), calculateTextPages()
+- Stage runner in `src/lib/ai/stageRunner.ts`: runOutlineStage, runChaptersStage, etc.
+- Export types already exist: ExportArtifactItem, ExportArtifactContent in artifacts.ts
+
+## Export-Specific Notes
+- Export UI exists in ProjectWorkspacePage around line 1650+ (TabsContent value="export")
+- Export artifact types: { format: string; fileUrl: string; fileSize: number }
+- canExport() entitlement check exists in ProjectWorkspacePage
+- Need to use browser-side generation (jsPDF) - no server roundtrip needed
+- Trim size dimensions: 6x9=432x648pt, 7x10=504x720pt, 8.5x11=612x792pt
+- Page layouts have: pageNumber, position (left/right), type, blocks, chapterNumber, chapterTitle
 
 ---
 
-## 2026-01-17 - US-001
+## 2026-01-17 - US-001 (Image Generation)
 - What was implemented: Server Proxy for NanoBanana API (was already implemented in working tree)
 - Files changed:
   - `server/routes/ai.ts` - Image generation endpoint with NanoBanana provider
@@ -21,4 +33,33 @@
   - Server validates JWT via `authMiddleware` before any /api/ai routes
   - Rate limit for images is 15 req/10min per IP (see `RATE_LIMITS["/api/ai/image"]`)
   - NanoBanana provider is already implemented in `nanobananaImageGeneration()` function
+
 ---
+
+## 2026-01-18 - Feature Audit
+- **Completed Features:** Image Generation (100%), Layout Stage (100%), Cover Stage (100%)
+- **Current Feature:** PDF/EPUB Export (0/7 stories)
+- **Key Files for Export:**
+  - `src/lib/export/` (to be created)
+  - `src/lib/types/artifacts.ts` - ExportArtifactContent
+  - `src/lib/ai/stageRunner.ts` - Add runExportStage()
+  - `src/pages/app/ProjectWorkspacePage.tsx` - Export tab UI
+---
+[2026-01-18T09:46:27Z] [RALPH] ════════════════════════════════════════
+[2026-01-18T09:46:27Z] [RALPH] Governed Execution Loop
+[2026-01-18T09:46:27Z] [RALPH] ════════════════════════════════════════
+[2026-01-18T09:46:27Z] [RALPH] Stories: 0/7 passed
+[2026-01-18T09:46:27Z] [RALPH] Max attempts per story: 3
+[2026-01-18T09:46:27Z] [RALPH] WARN: Working tree has uncommitted changes.
+[2026-01-18T09:46:27Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:27Z] [RALPH] Story: US-001
+[2026-01-18T09:46:27Z] [RALPH] Title: PDF Generation Service
+[2026-01-18T09:46:27Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:27Z] [RALPH] IMPLEMENTATION REQUIRED:
+[2026-01-18T09:46:27Z] [RALPH]   1. Open prd.json, find story: US-001
+[2026-01-18T09:46:27Z] [RALPH]   2. Implement in Claude Code
+[2026-01-18T09:46:27Z] [RALPH]   3. Re-run: make ralph
+[2026-01-18T09:46:27Z] [RALPH] ────────────────────────────────────────
+[2026-01-18T09:46:27Z] [RALPH] Attempt 1/3: running verifiers...
+[2026-01-18T09:46:27Z] [RALPH] Verifier: npx tsc --noEmit
+[2026-01-18T09:46:27Z] [RALPH] ✅ Verifiers PASSED for US-001

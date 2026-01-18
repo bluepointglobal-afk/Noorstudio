@@ -14,10 +14,10 @@ Features ordered by dependency chain. Complete top-to-bottom.
 
 | # | Feature | Status | Blocks | PRD | Ralph |
 |---|---------|--------|--------|-----|-------|
-| 1 | Image Generation (NanoBanana) | 🔄 50% | Illustrations, Cover, full pipeline | ✅ | 🔄 5/10 |
-| 2 | Layout Stage | 🟡 20% | Export (need page composition) | ⬜ | ⬜ |
-| 3 | Cover Stage | 🟡 20% | Export (need cover images) | ⬜ | ⬜ |
-| 4 | PDF/EPUB Export | 🟡 40% | Users downloading books | ⬜ | ⬜ |
+| 1 | Image Generation (NanoBanana) | ✅ 100% | Illustrations, Cover, full pipeline | ✅ | ✅ 10/10 |
+| 2 | Layout Stage | ✅ 100% | Export (need page composition) | ✅ | ✅ 7/7 |
+| 3 | Cover Stage | ✅ 100% | Export (need cover images) | ✅ | ✅ via F1 |
+| 4 | PDF/EPUB Export | 🔄 0% | Users downloading books | ✅ | 🔄 0/7 |
 | 5 | Stripe Payments | 🟡 10% | Production launch, monetization | ⬜ | ⬜ |
 | 6 | Data Persistence (Supabase) | ❌ Missing | Scale, multi-device access | ⬜ | ⬜ |
 | 7 | Compliance Guard | 🟡 50% | Automated quality assurance | ⬜ | ⬜ |

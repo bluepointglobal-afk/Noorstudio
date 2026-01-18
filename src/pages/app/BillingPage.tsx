@@ -21,6 +21,7 @@ import {
   CreditBalances,
   CreditLedgerEntry,
   LedgerFilters,
+  IMAGE_CREDITS,
 } from "@/lib/storage/creditsStore";
 import { PlanTier, CreditType } from "@/lib/models";
 import {
@@ -376,6 +377,45 @@ export default function BillingPage() {
                   +{stats.totalCharacterCreditsAdded + stats.totalBookCreditsAdded}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Image Credit Costs */}
+          <div className="card-glow p-6">
+            <h3 className="font-semibold mb-4">Image Generation Costs</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Character Sheet (12 poses)</span>
+                <Badge variant="outline" className="font-mono">
+                  {IMAGE_CREDITS.characterSheet} credits
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Illustration (3 variants)</span>
+                <Badge variant="outline" className="font-mono">
+                  {IMAGE_CREDITS.illustration} credits
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Cover (front or back)</span>
+                <Badge variant="outline" className="font-mono">
+                  {IMAGE_CREDITS.cover} credits
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Pose Alternative</span>
+                <Badge variant="outline" className="font-mono">
+                  {IMAGE_CREDITS.poseAlternative} credit
+                </Badge>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <p className="text-xs text-muted-foreground">
+                Character credits: poses & reference sheets
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Book credits: illustrations, covers & pipeline stages
+              </p>
             </div>
           </div>
 

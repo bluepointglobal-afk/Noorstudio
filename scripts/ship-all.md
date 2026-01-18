@@ -1,120 +1,135 @@
-# Ship All: Automated Pipeline
+# ship-all.md
 
-## Goal
+Universal product shipping pipeline. Works for SaaS, Mobile, Web, API, and Content.
 
-One command. Claude executes the entire workflow sequentially until all features are shipped.
+---
 
-## The Command
+## PHASE 0: DISCOVERY (Agent-Driven)
 
-```
-Use @scripts/ship-all.md
-Start from: @STATUS.md
-```
+Agent extracts from conversation:
+- [ ] Product Type (SaaS/Mobile/Web/API/Content)
+- [ ] Market (B2B/B2C/Internal/Hybrid)
+- [ ] Target Persona
+- [ ] Primary Outcome (1 sentence)
+- [ ] Core Deliverables
+- [ ] Success Criteria
+- [ ] Context & Constraints
 
-## Automated Pipeline
+Agent confirms understanding with user, then generates:
 
-Claude will execute these steps WITHOUT stopping for manual input:
-
-```
-PHASE 1: BACKLOG
-├── Read STATUS.md
-├── Ask priority questions (wait for answer once)
-├── Generate BACKLOG.md
-└── Continue automatically
-
-PHASE 2: FOR EACH FEATURE IN BACKLOG
-├── Generate PRD (use defaults, minimal questions)
-├── Generate Tasks (auto-approve parent tasks)
-├── Convert to prd.json
-├── Execute Ralph inline (not shell script)
-│   ├── Pick story where passes: false
-│   ├── Implement
-│   ├── Run checks
-│   ├── Commit
-│   ├── Mark passes: true
-│   └── Loop until all stories pass
-├── Mark feature complete in BACKLOG.md
-└── Move to next feature
-
-PHASE 3: DONE
-└── Report: all features shipped
+```bash
+bash scripts/util/generate_scope.sh --json '{
+  "product_type": "...",
+  "market": "...",
+  "persona": "...",
+  "outcome": "...",
+  "deliverables": [...],
+  "success_criteria": [...],
+  "context": "...",
+  "constraints": [...]
+}'
 ```
 
-## Execution Rules
+**Checkpoint:** SCOPE.md generated and confirmed.
 
-### Minimize Human Interaction
-- Ask priority questions ONCE at the start
-- Use sensible defaults for PRD questions
-- Auto-approve task generation (no "Go" wait)
-- Only stop if blocked or error
+---
 
-### PRD Defaults (skip questionnaire)
-When generating PRDs automatically, use:
-- Scope: Minimal viable version
-- Target: All users
-- Timeline: Standard
+## PHASE 1: SCOPE LOCK
 
-If critical ambiguity, ask ONE question max, then proceed.
+- [ ] Review generated SCOPE.md
+- [ ] User confirms or requests adjustments
+- [ ] If adjustments: regenerate SCOPE.md
+- [ ] Lock scope (no changes after this)
 
-### Task Defaults
-- Auto-approve parent tasks
-- Generate sub-tasks immediately
-- No "Go" confirmation needed
+**Checkpoint:** SCOPE.md is locked. Drives all downstream decisions.
 
-### Ralph Inline Execution
-Instead of calling ralph.sh, execute the Ralph loop directly:
-1. Read prd.json
-2. Find first story where `passes: false`
-3. Implement it
-4. Run: `npm run typecheck` (or project equivalent)
-5. If pass: commit, mark `passes: true`
-6. If fail: fix and retry (max 3 attempts)
-7. Loop until all stories pass
-8. Move to next feature
+---
 
-### Error Handling
-- If stuck on a story for 3 attempts: skip, log to BACKLOG.md, continue
-- If critical error: stop and report
+## PHASE 2: ARCHITECTURE
 
-## Progress Tracking
+- [ ] Define technical approach
+- [ ] Identify key components
+- [ ] Document decisions in decisions.log
+- [ ] Create PRD or tasks/*.md
 
-Update BACKLOG.md after each feature:
+**Checkpoint:** Architecture documented, PRD ready.
 
-```markdown
-| # | Feature | PRD | Tasks | Ralph | Status |
-|---|---------|-----|-------|-------|--------|
-| 1 | Image Generation | ✅ | ✅ | ✅ | SHIPPED |
-| 2 | PDF Export | ✅ | ✅ | 🔄 | IN PROGRESS |
-| 3 | Payments | ⬜ | ⬜ | ⬜ | PENDING |
-```
+---
 
-## Output
+## PHASE 3: IMPLEMENTATION
 
-At the end, Claude reports:
+- [ ] Convert PRD to Ralph stories (make prd-to-ralph)
+- [ ] Run Ralph loop (make ralph)
+- [ ] All stories pass verifiers
+- [ ] Code committed per story
+
+**Checkpoint:** All stories implemented and verified.
+
+---
+
+## PHASE 4: INTEGRATION
+
+- [ ] End-to-end flow works
+- [ ] External integrations tested
+- [ ] Data flows correctly
+- [ ] No blocking errors
+
+**Checkpoint:** System works as integrated whole.
+
+---
+
+## PHASE 5: VALIDATION (MANDATORY)
 
 ```
-## Ship All Complete
-
-Features Shipped: 4/5
-- ✅ Image Generation (12 commits)
-- ✅ PDF Export (8 commits)
-- ✅ Stripe Payments (6 commits)
-- ✅ Layout & Cover (4 commits)
-- ⚠️ Team Collaboration (skipped - blocked on auth refactor)
-
-Total commits: 30
-Branch: feature/mvp-completion
-Ready for: git push origin feature/mvp-completion
+├── Read Product Type from SCOPE.md
+├── Load validation adapter:
+│   - SaaS  → scripts/validation/saas.md
+│   - Mobile → scripts/validation/mobile.md
+│   - Web   → scripts/validation/web.md
+│   - API   → scripts/validation/api.md
+│   - Content → scripts/validation/content.md
+│
+├── Execute adapter scenarios
+├── Fill SCORE.json
+│
+├── If score ≥ threshold:
+│   └── Mark READY_TO_SHIP
+│
+└── If score < threshold:
+    ├── Generate GAP_REPORT.md
+    ├── Generate PRD_DELTA.md
+    └── Loop back to PHASE 2
 ```
 
-## Start
+**Checkpoint:** Validation complete, SCORE.json filled.
 
-To run the full automated pipeline:
+---
 
-```
-Use @scripts/ship-all.md
-Reference: @STATUS.md
-Goal: [demo/beta/production]
-```
+## SHIP GATE
 
-Claude takes over from there.
+Run: `make ship`
+
+- Score ≥ threshold → READY_TO_SHIP
+- Score < threshold → Review GAP_REPORT.md, iterate
+
+---
+
+## POST-SHIP
+
+- [ ] Tag release
+- [ ] Deploy to production
+- [ ] Update STATUS.md → SHIPPED
+- [ ] Record learnings (automatic via memory.sh)
+
+---
+
+## Quick Reference
+
+| Command | Purpose |
+|---------|---------|
+| `make ship` | Full pipeline |
+| `make ship-dry` | Preview without running |
+| `make ship-validate` | Run only validation |
+| `make ralph` | Run Ralph story loop |
+| `make ship-memory` | View learnings |
+| `make prd-to-ralph FEATURE=x NAME="Y"` | Convert PRD to stories |

@@ -37,6 +37,27 @@ export interface CreditLedgerEntry {
 const BALANCES_KEY = "noorstudio.credits.balances.v1";
 const LEDGER_KEY = "noorstudio.credits.ledger.v1";
 
+// ============================================
+// Image Generation Credit Costs
+// ============================================
+
+export const IMAGE_CREDITS = {
+  characterSheet: 8,    // Full 12-pose reference sheet (36 images)
+  illustration: 2,      // Single chapter illustration (3 variants)
+  cover: 2,             // Single cover (front or back)
+  poseAlternative: 1,   // Regenerate a single pose variant
+} as const;
+
+// Calculate total illustration credits for a book
+export function calculateIllustrationCredits(chapterCount: number): number {
+  return chapterCount * IMAGE_CREDITS.illustration;
+}
+
+// Calculate total cover credits (front + back)
+export function calculateCoverCredits(): number {
+  return IMAGE_CREDITS.cover * 2; // Front + Back
+}
+
 const DEFAULT_BALANCES: CreditBalances = {
   characterCredits: 30,
   bookCredits: 50,

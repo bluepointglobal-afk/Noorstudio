@@ -123,6 +123,10 @@ export interface StoredProject {
   trimSize: TrimSize;
   exportTargets: ExportTarget[];
 
+  // Image Generation Settings
+  illustrationDimensions?: { width: number; height: number };
+  coverDimensions?: { width: number; height: number };
+
   // Pipeline state
   pipeline: PipelineStageState[];
   currentStage: ProjectStage;
@@ -143,13 +147,15 @@ export interface StoredProject {
 const STORAGE_KEY = "noorstudio.projects.v1";
 
 // Credit costs for each stage
+// Note: illustrations and cover costs are base values - actual cost may vary by chapter count
+// Use IMAGE_CREDITS from creditsStore for more precise calculations
 export const STAGE_CREDIT_COSTS: Record<ProjectStage, number> = {
   outline: 1,
   chapters: 3,
-  illustrations: 8,
+  illustrations: 8,  // Base cost - will be calculated per chapter using IMAGE_CREDITS
   humanize: 2,
   layout: 2,
-  cover: 5,
+  cover: 4,          // 2 credits each for front + back
   export: 2,
   completed: 0,
 };

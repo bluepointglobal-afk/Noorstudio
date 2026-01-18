@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
+import { LayoutPreview } from "@/components/shared/LayoutPreview";
 import { useToast } from "@/hooks/use-toast";
 import { mockJobRunner, JobProgressEvent } from "@/lib/jobs/mockJobRunner";
 import {
@@ -68,6 +69,9 @@ import {
   runOutlineStage,
   runChaptersStage,
   runHumanizeStage,
+  runIllustrationsStage,
+  runCoverStage,
+  runLayoutStage,
   getProjectAIUsage,
   AIUsageStats,
   StageRunnerProgress,
@@ -75,6 +79,7 @@ import {
   OutlineOutput,
   ChapterOutput,
 } from "@/lib/ai";
+import { IllustrationArtifactItem, IllustrationVariant, ChapterArtifactItem } from "@/lib/types/artifacts";
 import { ProjectStage, PIPELINE_STAGES } from "@/lib/models";
 import {
   updateProject,
@@ -289,6 +294,7 @@ export default function ProjectWorkspacePage() {
   const [aiUsage, setAiUsage] = useState<AIUsageStats | null>(null);
   const [stageSubProgress, setStageSubProgress] = useState<StageRunnerProgress["subProgress"] | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [selectedIllustration, setSelectedIllustration] = useState<IllustrationArtifactItem | null>(null);
   const artifactsRef = useRef<HTMLDivElement>(null);
 
   // Load project and characters
@@ -519,6 +525,56 @@ export default function ProjectWorkspacePage() {
                 }
               }
             }
+          } else if (stageId === "illustrations") {
+            // Get chapters from previous stage
+            const chaptersContent = getArtifactContent<Array<{ _structured?: ChapterOutput }>>(project, "chapters");
+            const chapters = chaptersContent?.map(ch => ch._structured).filter((ch): ch is ChapterOutput => !!ch);
+
+            if (!chapters || chapters.length === 0) {
+              errorMessage = "Chapters must be generated first";
+            } else {
+              const result = await runIllustrationsStage(project, chapters, characters, kbRules, onAIProgress, token);
+              if (result.success && result.data) {
+                success = true;
+                artifactData = result.data.illustrations;
+              } else {
+                errorMessage = result.error;
+              }
+            }
+          } else if (stageId === "cover") {
+            // Cover generation uses the real image provider
+            const result = await runCoverStage(project, characters, kbRules, onAIProgress, token);
+            if (result.success && result.data) {
+              success = true;
+              artifactData = {
+                frontCoverUrl: result.data.frontCoverUrl,
+                backCoverUrl: result.data.backCoverUrl,
+              };
+            } else {
+              errorMessage = result.error;
+            }
+          } else if (stageId === "layout") {
+            // Layout stage composes pages from chapters and illustrations
+            const chaptersArtifact = getArtifactContent<ChapterArtifactItem[]>(project, "chapters");
+            const illustrationsArtifact = getArtifactContent<IllustrationArtifactItem[]>(project, "illustrations");
+
+            if (!chaptersArtifact || chaptersArtifact.length === 0) {
+              errorMessage = "Chapters must be generated first";
+            } else {
+              const result = await runLayoutStage(
+                project,
+                chaptersArtifact,
+                illustrationsArtifact || [],
+                onAIProgress,
+                token
+              );
+              if (result.success && result.data) {
+                success = true;
+                artifactData = result.data.layout;
+              } else {
+                errorMessage = result.error;
+              }
+            }
           }
         } catch (error: unknown) {
           const err = error as { message?: string; cancelled?: boolean };
@@ -545,15 +601,6 @@ export default function ProjectWorkspacePage() {
         if (result.success) {
           success = true;
           switch (stageId) {
-            case "illustrations":
-              artifactData = generateDemoIllustrations(project);
-              break;
-            case "layout":
-              artifactData = generateDemoLayout(project);
-              break;
-            case "cover":
-              artifactData = generateDemoCover();
-              break;
             case "export": {
               const characterNames = characters.map((c) => c.name);
               const kbName = kbRules?.kbName || project.knowledgeBaseName || "Unknown KB";
@@ -790,6 +837,50 @@ export default function ProjectWorkspacePage() {
     });
   };
 
+  const handleSelectVariant = (illustrationId: string, variantId: string) => {
+    if (!project) return;
+
+    // Get current illustrations artifact
+    const illustrationsContent = getArtifactContent<IllustrationArtifactItem[]>(project, "illustrations");
+    if (!illustrationsContent) return;
+
+    // Update the illustrations with new selection
+    const updatedIllustrations = illustrationsContent.map((ill) => {
+      if (ill.id === illustrationId) {
+        // Update variants to mark the selected one
+        const updatedVariants = ill.variants?.map((v) => ({
+          ...v,
+          selected: v.id === variantId,
+        }));
+        // Find the selected variant's image URL
+        const selectedVariant = updatedVariants?.find((v) => v.id === variantId);
+        return {
+          ...ill,
+          variants: updatedVariants,
+          selectedVariantId: variantId,
+          imageUrl: selectedVariant?.imageUrl || ill.imageUrl,
+          status: "approved" as const,
+        };
+      }
+      return ill;
+    });
+
+    // Save the updated artifact
+    addArtifact(project.id, "illustrations", {
+      type: "illustrations" as const,
+      content: updatedIllustrations,
+      generatedAt: new Date().toISOString(),
+    });
+
+    refreshProject();
+    setSelectedIllustration(null);
+
+    toast({
+      title: "Variant selected",
+      description: "The illustration has been updated with your selection.",
+    });
+  };
+
   const getStageIcon = (stageId: string) => {
     switch (stageId) {
       case "outline":
@@ -906,7 +997,7 @@ export default function ProjectWorkspacePage() {
   const humanizeRaw = humanizeNeedsReview ? humanizeContent?._rawText : null;
 
   const layoutArtifact = hasLayout
-    ? getArtifactContent<{ pageCount: number }>(project, "layout")
+    ? getArtifactContent<LayoutArtifactContent>(project, "layout")
     : undefined;
   const coverArtifact = hasCover
     ? getArtifactContent<{ frontCoverUrl?: string; backCoverUrl?: string }>(project, "cover")
@@ -1406,39 +1497,69 @@ export default function ProjectWorkspacePage() {
 
               {/* Illustrations Tab */}
               <TabsContent value="illustrations" className="card-glow p-6 mt-4">
-                <h3 className="font-semibold mb-4">Illustration Scenes</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Illustration Scenes</h3>
+                  {illustrationsArtifact && (
+                    <Badge variant="secondary">
+                      {illustrationsArtifact.length} illustrations • 3 variants each
+                    </Badge>
+                  )}
+                </div>
                 {illustrationsArtifact && (
-                  <div className="grid sm:grid-cols-3 gap-4">
-                    {illustrationsArtifact.map((ill) => (
-                      <div key={ill.id} className="p-4 rounded-lg bg-muted/50 border border-border">
-                        <div className="aspect-video bg-gradient-subtle rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(illustrationsArtifact as IllustrationArtifactItem[]).map((ill) => (
+                      <div
+                        key={ill.id}
+                        className={cn(
+                          "p-4 rounded-lg border transition-all cursor-pointer hover:shadow-md",
+                          ill.status === "approved"
+                            ? "bg-primary/5 border-primary/30"
+                            : "bg-muted/50 border-border hover:border-primary/50"
+                        )}
+                        onClick={() => setSelectedIllustration(ill)}
+                      >
+                        <div className="aspect-video bg-gradient-subtle rounded-lg mb-3 flex items-center justify-center overflow-hidden relative group">
                           {ill.imageUrl ? (
-                            <img
-                              src={ill.imageUrl}
-                              alt={ill.scene}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = "none";
-                              }}
-                            />
+                            <>
+                              <img
+                                src={ill.imageUrl}
+                                alt={ill.scene}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = "none";
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="text-white text-sm font-medium">
+                                  View {ill.variants?.length || 0} variants
+                                </span>
+                              </div>
+                            </>
                           ) : (
                             <ImageIcon className="w-8 h-8 text-muted-foreground" />
                           )}
                         </div>
-                        <p className="text-sm font-medium mb-1">{ill.scene}</p>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            Ch. {ill.chapterNumber}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs",
-                              ill.status === "approved" && "bg-primary/10 text-primary border-primary/30"
-                            )}
-                          >
-                            {ill.status}
-                          </Badge>
+                        <p className="text-sm font-medium mb-2 line-clamp-2">{ill.scene}</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              Ch. {ill.chapterNumber}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-xs",
+                                ill.status === "approved" && "bg-primary/10 text-primary border-primary/30"
+                              )}
+                            >
+                              {ill.status}
+                            </Badge>
+                          </div>
+                          {ill.variants && ill.variants.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {ill.variants.length} variants
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1462,8 +1583,9 @@ export default function ProjectWorkspacePage() {
 
               {/* Layout Tab */}
               <TabsContent value="layout" className="card-glow p-6 mt-4">
-                <h3 className="font-semibold mb-4">Book Layout</h3>
-                {layoutArtifact && (
+                {layoutArtifact && layoutArtifact.spreads ? (
+                  <LayoutPreview layout={layoutArtifact} />
+                ) : layoutArtifact ? (
                   <div className="text-center py-8">
                     <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/10 mb-4">
                       <Layout className="w-12 h-12 text-primary" />
@@ -1474,6 +1596,11 @@ export default function ProjectWorkspacePage() {
                     <p className="text-sm text-muted-foreground">
                       Layout generated and ready for review
                     </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Layout className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No layout generated yet</p>
                   </div>
                 )}
               </TabsContent>
@@ -1905,6 +2032,76 @@ follows Islamic guidelines for children's content.
               <span>Size: {previewFile?.sizeEstimate}</span>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Illustration Variant Selection Modal */}
+      <Dialog open={!!selectedIllustration} onOpenChange={(open) => !open && setSelectedIllustration(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5" />
+              Select Illustration Variant
+            </DialogTitle>
+          </DialogHeader>
+          {selectedIllustration && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-sm font-medium">Chapter {selectedIllustration.chapterNumber}</p>
+                <p className="text-sm text-muted-foreground">{selectedIllustration.scene}</p>
+              </div>
+
+              {selectedIllustration.variants && selectedIllustration.variants.length > 0 ? (
+                <div className="grid grid-cols-3 gap-4">
+                  {selectedIllustration.variants.map((variant, idx) => (
+                    <div
+                      key={variant.id}
+                      className={cn(
+                        "relative rounded-lg overflow-hidden border-2 cursor-pointer transition-all hover:shadow-lg",
+                        variant.selected || selectedIllustration.selectedVariantId === variant.id
+                          ? "border-primary ring-2 ring-primary/30"
+                          : "border-border hover:border-primary/50"
+                      )}
+                      onClick={() => handleSelectVariant(selectedIllustration.id, variant.id)}
+                    >
+                      <div className="aspect-video bg-gradient-subtle">
+                        <img
+                          src={variant.imageUrl}
+                          alt={`Variant ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://placehold.co/600x400/f1f5f9/64748b?text=Variant+" + (idx + 1);
+                          }}
+                        />
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white text-sm font-medium">Variant {idx + 1}</span>
+                          {(variant.selected || selectedIllustration.selectedVariantId === variant.id) && (
+                            <Badge className="bg-primary text-white border-none">
+                              <Check className="w-3 h-3 mr-1" />
+                              Selected
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No variants available for this illustration.</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setSelectedIllustration(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </AppLayout >
