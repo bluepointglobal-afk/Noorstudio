@@ -17,6 +17,8 @@ import KnowledgeBasePage from "./pages/app/KnowledgeBasePage";
 import BookBuilderPage from "./pages/app/BookBuilderPage";
 import ProjectWorkspacePage from "./pages/app/ProjectWorkspacePage";
 import BillingPage from "./pages/app/BillingPage";
+import BillingSuccessPage from "./pages/app/BillingSuccessPage";
+import BillingCancelPage from "./pages/app/BillingCancelPage";
 import DemoViewerPage from "./pages/DemoViewerPage";
 import AuthPage from "./pages/AuthPage";
 import { AuthGuard } from "./components/auth/AuthGuard";
@@ -60,6 +62,8 @@ const App = () => (
                   <Route path="projects" element={<DashboardPage />} />
                   <Route path="projects/:id" element={<ProjectWorkspacePage />} />
                   <Route path="billing" element={<BillingPage />} />
+                  <Route path="billing/success" element={<BillingSuccessPage />} />
+                  <Route path="billing/cancel" element={<BillingCancelPage />} />
                   <Route path="settings" element={<DashboardPage />} />
                   <Route path="help" element={<DashboardPage />} />
                 </Routes>

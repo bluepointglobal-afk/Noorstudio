@@ -7,6 +7,8 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
+import { checkoutRoutes } from "./routes/checkout";
+import { webhookRoutes } from "./routes/webhooks";
 import { AppError, RateLimitError, AuthError } from "./errors";
 import { createClient } from "@supabase/supabase-js";
 import helmet from "helmet"; // Added import for helmet
@@ -333,6 +335,10 @@ app.use(cors({
   origin: env.CLIENT_ORIGIN,
   credentials: true,
 }));
+
+// Stripe webhook route (must be before express.json() for raw body access)
+app.use("/api/webhooks", express.raw({ type: "application/json" }), webhookRoutes);
+
 app.use(express.json({ limit: "1mb" }));
 
 // Apply rate limiting to specific routes
@@ -353,6 +359,9 @@ app.use("/api/ai", authMiddleware, creditMiddleware, aiRoutes);
 
 // Share routes (project sharing to Supabase) - Protected
 app.use("/api/share", authMiddleware, shareRoutes);
+
+// Checkout routes (Stripe payments) - Protected
+app.use("/api/checkout", authMiddleware, checkoutRoutes);
 
 // ============================================
 // Error Handler

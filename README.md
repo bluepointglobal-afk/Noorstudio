@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# GHOSTY MASTER
 
-## Project info
+> Universal gated workflow for shipping products.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## Quick Start
 
-There are several ways of editing your application.
+```bash
+# Install in any project
+unzip ghosty-master.zip
+cp -r ghosty-master/* /path/to/your/project/
+chmod +x scripts/**/*.sh
 
-**Use Lovable**
+# Open Claude Code
+claude --dangerously-skip-permissions
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Start workflow
+Follow @workflow/WORKFLOW.md
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Structure
 
-**Use GitHub Codespaces**
+```
+/workflow/           ← Start here. Controls everything.
+/execution-engine/   ← Ralph, task decomposition. Gate 4+.
+/architecture/       ← Templates. Gate 3.
+/project-context/    ← Auto-generated context.
+/scripts/            ← Automation scripts.
+/docs/               ← Reference material.
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+## Commands
 
-This project is built with:
+| Command | What it does |
+|---------|--------------|
+| `make ship` | Execute (requires Gate 4) |
+| `make status` | Show current gate |
+| `make validate` | Run validation only |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+---
 
-## How can I deploy this project?
+## Gates
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+```
+Gate 0: IDEA         → Capture problem
+Gate 1: MARKET       → Validate market (skippable)
+Gate 2: SCOPE        → Lock scope (REQUIRED)
+Gate 3: ARCHITECTURE → Lock architecture (skippable)
+Gate 4: EXECUTION    → Build features
+Gate 5: VALIDATION   → Verify & ship
+```
 
-## Can I connect a custom domain to my Lovable project?
+---
 
-Yes, you can!
+## Prompts
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+**Standard:**
+```
+Follow @workflow/WORKFLOW.md
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+**With idea:**
+```
+Follow @workflow/WORKFLOW.md
+
+IDEA: [your idea]
+```
+
+**Check status:**
+```
+Follow @workflow/WORKFLOW.md
+
+STATUS
+```
+
+---
+
+## Rules
+
+1. SCOPE.md is mandatory
+2. One question at a time
+3. "AI" delegates to agent
+4. CONFIRM locks gates
+5. `make ship` does everything

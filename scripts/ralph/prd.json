@@ -1,25 +1,21 @@
 {
   "project": "NoorStudio",
-  "branchName": "ralph/pdf-epub-export",
-  "description": "Implement PDF and EPUB export so users can download their finished books",
+  "branchName": "ralph/consistent-character-generation",
+  "description": "Fix image generation pipeline: prompt→image mapping, 12-pose sheets, character consistency, covers with text, AI-suggested scenes",
   "verifiers": [
     "npx tsc --noEmit"
   ],
   "stories": [
     {
       "id": "US-001",
-      "title": "PDF Generation Service",
-      "description": "As a developer, I want a PDF generation service so that books can be exported as PDF files.",
+      "title": "Fix Prompt → Image Mapping",
+      "description": "As a user, I want my character's visual DNA (colors, clothing, features) to actually appear in generated images.",
       "acceptanceCriteria": [
-        "Create src/lib/export/pdfGenerator.ts",
-        "Install and use jspdf library for browser-side PDF generation",
-        "Accept LayoutArtifactContent and CoverArtifactContent as input",
-        "Generate PDF with correct page dimensions based on trim size (6x9=432x648pt, 7x10=504x720pt, 8.5x11=612x792pt)",
-        "Include front cover as first page",
-        "Render text pages with proper fonts and margins",
-        "Embed images (illustrations) at correct positions",
-        "Include back cover as last page",
-        "Return PDF as Blob",
+        "Audit buildCharacterPrompt() in src/lib/ai/imagePrompts.ts",
+        "Document all visual DNA fields and which are missing from prompts",
+        "Restructure prompt to include: age, gender, skin tone, hair (color/style/length), eyes, clothing with modesty rules, accessories",
+        "Add negative prompt for inappropriate content and style inconsistencies",
+        "Generate same character 3x and verify visual DNA is reflected",
         "Typecheck passes"
       ],
       "priority": 1,
@@ -28,106 +24,171 @@
     },
     {
       "id": "US-002",
-      "title": "EPUB Generation Service",
-      "description": "As a developer, I want an EPUB generation service so that books can be exported as EPUB files.",
+      "title": "Sequential 12-Pose Generation",
+      "description": "As a user, I want to generate a 12-pose reference sheet for my character that works reliably.",
       "acceptanceCriteria": [
-        "Create src/lib/export/epubGenerator.ts",
-        "Generate EPUB 3.0 compatible files using JSZip",
-        "Create proper EPUB structure (META-INF/container.xml, OEBPS/, mimetype)",
-        "Generate content.opf manifest with all resources",
-        "Generate toc.ncx for navigation",
-        "Convert chapters to XHTML format",
-        "Embed images as base64 in XHTML or as separate files",
-        "Include cover image in metadata",
-        "Return EPUB as Blob",
+        "Identify why single API call for 12 poses fails",
+        "Implement sequential pose generation (one at a time)",
+        "Use consistent seed across all 12 poses",
+        "Create pose-specific prompts for: front_neutral, front_smiling, side_left, side_right, three_quarter, walking, sitting, reading, praying, pointing, thinking, surprised",
+        "Update charactersStore.ts pose data structure with url, seed, prompt, generatedAt",
+        "Add progress callback for UI updates (0/12 → 12/12)",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Export Stage Runner",
-      "description": "As a developer, I want the export stage integrated into stageRunner.ts so that it runs in the pipeline.",
+      "title": "Pose Sheet UI",
+      "description": "As a user, I want to see and manage my character's 12-pose reference sheet in the UI.",
       "acceptanceCriteria": [
-        "Create runExportStage() function in stageRunner.ts",
-        "Add 'export' to AIStageType union and isAIStage check",
-        "Takes project with layout, cover, chapters, and illustrations artifacts",
-        "Generates PDF and EPUB concurrently using Promise.all",
-        "Shows progress during generation (0%, 50% PDF done, 100% EPUB done)",
-        "Returns ExportArtifactContent with file metadata (format, fileSize, pageCount)",
+        "Update CharacterDetailPage.tsx with pose grid (4x3 layout)",
+        "Show generation progress indicator",
+        "Allow individual pose regeneration",
+        "Add 'Regenerate All Poses' button with same seed option",
+        "Verify all poses display correctly after generation",
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Blob Download Utility",
-      "description": "As a developer, I want a download utility so that users can download generated files.",
+      "title": "Character Consistency Strategy",
+      "description": "As a developer, I want a strategy for maintaining character consistency across illustrations.",
       "acceptanceCriteria": [
-        "Create src/lib/export/downloadUtils.ts",
-        "Implement downloadBlob(blob: Blob, filename: string) function",
-        "Generate sanitized filenames from project title (remove special chars, replace spaces with hyphens)",
-        "Support PDF (application/pdf) and EPUB (application/epub+zip) MIME types",
-        "Trigger browser download dialog using URL.createObjectURL and anchor click",
-        "Clean up object URL after download",
+        "Research and document consistency options: reference image, detailed text, seed consistency",
+        "Choose and document approach in progress.txt",
+        "Create buildScenePrompt() function accepting: sceneDescription, characters (max 2-3), setting, mood, style",
+        "Include full visual DNA for each character in scene prompts",
+        "Add character positioning hints (left/center/right, relative sizes)",
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-005",
-      "title": "Export UI Integration",
-      "description": "As an author, I want to export my book from the workspace so that I can download it.",
+      "title": "Multi-Character Illustration Generation",
+      "description": "As a user, I want illustrations with 2-3 characters that all look consistent with their reference sheets.",
       "acceptanceCriteria": [
-        "Update Export tab in ProjectWorkspacePage to show format selection (PDF, EPUB, Both)",
-        "Show export button that triggers runExportStage()",
-        "Show progress bar during generation with percentage",
-        "Display download buttons when generation complete",
-        "Show file sizes in human-readable format (KB, MB)",
-        "Handle errors gracefully with toast messages",
-        "Typecheck passes",
-        "Verify in browser: can trigger export, see progress, download PDF and EPUB files"
+        "Extract character IDs from scene data",
+        "Load character visual DNA for each character in scene",
+        "Build composite prompt with all characters",
+        "Pass character seeds if API supports",
+        "Generate scene with 2 characters and verify both match references",
+        "Generate 3 different scenes and verify consistency across all",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-006",
-      "title": "Export Caching and Stale Detection",
-      "description": "As an author, I want export results cached and stale detection so that re-exports are fast.",
+      "title": "Front Cover Generation",
+      "description": "As a user, I want a professional front cover with title and author name.",
       "acceptanceCriteria": [
-        "Cache generated Blobs in memory using Map keyed by project ID + format",
-        "Store generation timestamp with each cached export",
-        "Compare export timestamp with layout/cover/chapters artifact timestamps",
-        "Show 'Regenerate' badge when source artifacts are newer than export",
-        "Clear cache on project save or artifact regeneration",
-        "Show 'Cached' indicator when serving from cache",
+        "Research children's book cover best practices (title placement, composition)",
+        "Create buildFrontCoverPrompt() with: main character, scene hint, space for title/author, Islamic aesthetic elements",
+        "Generate base cover image with proper composition",
+        "Implement text overlay for title (large, readable font)",
+        "Implement text overlay for author name (smaller, elegant font)",
+        "Store final composite in cover artifact",
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-007",
-      "title": "Export Index and Types",
-      "description": "As a developer, I want proper exports and types so that the export module is well-organized.",
+      "title": "Back Cover Generation",
+      "description": "As a user, I want a professional back cover with synopsis and barcode area.",
       "acceptanceCriteria": [
-        "Create src/lib/export/index.ts with all exports",
-        "Create src/lib/export/types.ts with ExportOptions, ExportResult interfaces",
-        "Add export functions to src/lib/ai/index.ts",
-        "Update ExportArtifactContent in artifacts.ts if needed",
+        "Create buildBackCoverPrompt() with: simpler design, space for synopsis, barcode area",
+        "Generate base back cover image",
+        "Implement text overlay for synopsis (body text, max width)",
+        "Reserve barcode area (bottom right)",
+        "Optional: author photo area placeholder",
+        "Store final composite in cover artifact",
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": true,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Cover UI and Customization",
+      "description": "As a user, I want to preview and customize my book covers.",
+      "acceptanceCriteria": [
+        "Update workspace UI to show front/back cover previews with text",
+        "Create CoverTextStyle type with font, size, color, shadow, position options",
+        "Allow text style customization (font selection, colors)",
+        "Allow text content editing (title, author, synopsis)",
+        "Allow individual cover regeneration",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "AI Illustration Scene Analysis",
+      "description": "As a user, I want AI to suggest 2-3 illustration moments from my chapter content.",
+      "acceptanceCriteria": [
+        "Define IllustrationSuggestion type with: sceneDescription, charactersInScene, emotionalTone, suggestedComposition, pagePosition, confidence",
+        "Create analyzeChapterForIllustrations() function",
+        "Implement Claude-based scene analysis with structured output",
+        "Create prompt template requesting 2-3 illustration moments per chapter",
+        "Parse and return structured suggestions",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Illustration Suggestions UI",
+      "description": "As a user, I want to see, accept, and modify AI-suggested illustration scenes.",
+      "acceptanceCriteria": [
+        "Auto-trigger suggestions after chapter generation",
+        "Display suggestions as cards in workspace UI",
+        "Add 'Accept' button to queue scene for generation",
+        "Add 'Edit' button to modify scene description",
+        "Add 'Add Custom' button for manual scenes",
+        "Generate illustrations from accepted suggestions",
+        "Verify illustrations match suggestion descriptions",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "End-to-End Integration Test",
+      "description": "As a developer, I want to verify the complete flow works end-to-end.",
+      "acceptanceCriteria": [
+        "Create new character with full visual DNA",
+        "Generate 12-pose reference sheet successfully",
+        "Create book project with character",
+        "Generate chapter content",
+        "Review AI illustration suggestions",
+        "Generate illustrations and verify character consistency",
+        "Generate front and back covers with text",
+        "Verify typecheck, tests, and lint all pass",
+        "Update STATUS.md and BACKLOG.md to reflect completion"
+      ],
+      "priority": 11,
+      "passes": false,
       "notes": ""
     }
   ]

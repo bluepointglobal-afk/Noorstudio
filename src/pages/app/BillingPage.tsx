@@ -4,11 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Users, BookOpen, TrendingUp, Zap, Calendar, Filter, RefreshCw } from "lucide-react";
+import { CreditCard, Users, BookOpen, TrendingUp, Zap, Calendar, Filter, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useCheckout, useCustomerPortal } from "@/lib/stripe/useCheckout";
+import { isStripeConfigured } from "@/lib/stripe/client";
+import { supabase } from "@/lib/supabase/client";
 import {
   getBalances,
   getLedger,
@@ -46,6 +49,11 @@ export default function BillingPage() {
   const [ledger, setLedger] = useState<CreditLedgerEntry[]>([]);
   const [filters, setFilters] = useState<LedgerFilters>({});
   const [stats, setStats] = useState(getCreditStats());
+  const { checkout, isLoading: isCheckoutLoading } = useCheckout();
+  const { openPortal, isLoading: isPortalLoading } = useCustomerPortal();
+  const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const stripeEnabled = isStripeConfigured();
 
   const refreshData = useCallback(() => {
     setCredits(getBalances());
@@ -56,6 +64,28 @@ export default function BillingPage() {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  // Fetch Stripe customer ID from profile
+  useEffect(() => {
+    async function fetchStripeCustomerId() {
+      if (!supabase) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("stripe_customer_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.stripe_customer_id) {
+        setStripeCustomerId(profile.stripe_customer_id);
+      }
+    }
+
+    fetchStripeCustomerId();
+  }, []);
 
   const plan = planDetails[credits.plan];
   const limits = getPlanLimits(credits.plan);
@@ -89,6 +119,54 @@ export default function BillingPage() {
       title: "Plan changed",
       description: `You are now on the ${planDetails[newPlan].name} plan.`,
     });
+  };
+
+  const handleUpgrade = async (tier: PlanTier) => {
+    // For creator (free) tier, just use demo mode
+    if (tier === "creator") {
+      handleChangePlan(tier);
+      return;
+    }
+
+    // If Stripe is not configured, use demo mode
+    if (!stripeEnabled) {
+      handleChangePlan(tier);
+      toast({
+        title: "Demo Mode",
+        description: "Stripe is not configured. Plan changed in demo mode.",
+      });
+      return;
+    }
+
+    // Use real Stripe checkout for paid plans
+    try {
+      setCheckoutTier(tier);
+      await checkout(tier);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start checkout";
+      toast({
+        title: "Checkout Error",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setCheckoutTier(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!stripeCustomerId) return;
+
+    try {
+      await openPortal(stripeCustomerId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to open subscription portal";
+      toast({
+        title: "Portal Error",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleResetCredits = () => {
@@ -158,6 +236,25 @@ export default function BillingPage() {
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Reset All (Demo)
               </Button>
+              {stripeCustomerId && credits.plan !== "creator" && (
+                <Button
+                  variant="outline"
+                  onClick={handleManageSubscription}
+                  disabled={isPortalLoading}
+                >
+                  {isPortalLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Manage Subscription
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -489,9 +586,19 @@ export default function BillingPage() {
                         variant="outline"
                         size="sm"
                         className="w-full mt-3"
-                        onClick={() => handleChangePlan(planInfo.id as PlanTier)}
+                        onClick={() => handleUpgrade(planInfo.id as PlanTier)}
+                        disabled={isCheckoutLoading && checkoutTier === planInfo.id}
                       >
-                        {planInfo.price === "Free" ? "Downgrade" : "Upgrade"} to {planInfo.name}
+                        {isCheckoutLoading && checkoutTier === planInfo.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            {planInfo.price === "Free" ? "Downgrade" : "Upgrade"} to {planInfo.name}
+                          </>
+                        )}
                       </Button>
                     )}
                     {isCurrentPlan && (

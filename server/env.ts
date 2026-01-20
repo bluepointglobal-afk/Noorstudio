@@ -21,6 +21,9 @@ const envSchema = z.object({
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     SUPABASE_ANON_KEY: z.string().optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    // Stripe
+    STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
 }).refine((data) => {
     if (data.AI_TEXT_PROVIDER === "claude" && !data.CLAUDE_API_KEY) {
         return false;

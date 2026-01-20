@@ -1,197 +1,162 @@
 # Feature Backlog
 
-Generated from STATUS.md on 2026-01-17
+> Generated: 2026-01-20
+> Gate: 4 - EXECUTION
+> Aligned with: SCOPE.md (Gate 2)
 
-**Goal:** Production with payments (full monetization)
-**Timeline:** No fixed deadline (quality over speed)
-**Skipping:** i18n, team collaboration (placeholders for future)
-
----
-
-## Priority Order
-
-Features ordered by dependency chain. Complete top-to-bottom.
-
-| # | Feature | Status | Blocks | PRD | Ralph |
-|---|---------|--------|--------|-----|-------|
-| 1 | Image Generation (NanoBanana) | ✅ 100% | Illustrations, Cover, full pipeline | ✅ | ✅ 10/10 |
-| 2 | Layout Stage | ✅ 100% | Export (need page composition) | ✅ | ✅ 7/7 |
-| 3 | Cover Stage | ✅ 100% | Export (need cover images) | ✅ | ✅ via F1 |
-| 4 | PDF/EPUB Export | 🔄 0% | Users downloading books | ✅ | 🔄 0/7 |
-| 5 | Stripe Payments | 🟡 10% | Production launch, monetization | ⬜ | ⬜ |
-| 6 | Data Persistence (Supabase) | ❌ Missing | Scale, multi-device access | ⬜ | ⬜ |
-| 7 | Compliance Guard | 🟡 50% | Automated quality assurance | ⬜ | ⬜ |
-| 8 | Analytics Dashboard | ❌ Missing | Business insights | ⬜ | ⬜ |
-| 9 | Content Library | ❌ Missing | Faster book creation | ⬜ | ⬜ |
-| 10 | Batch Operations | ❌ Missing | Power user workflows | ⬜ | ⬜ |
+**Goal:** Child can create and publish their own illustrated book in under an hour
+**Ship Order:** Image Gen → Export → Persistence → Payments
 
 ---
 
-## Feature Details
+## Priority Order (from SCOPE.md)
 
-### 1. Image Generation (NanoBanana API)
-**Current state:** Mock provider works, prompt builder exists, NanoBanana stub at `src/lib/ai/providers/imageProvider.ts:45+`
-**What's needed:**
-- Connect to NanoBanana API (pixar-3d-v1 model)
-- Character reference sheet generation (12 poses)
-- Illustration generation with character consistency
-- Server proxy route for API key security
-**Dependencies:** None (first in chain)
-**Unblocks:** Illustrations stage, Cover stage, full book creation pipeline
+| # | Feature | Status | Actual Gap | Blocks |
+|---|---------|--------|------------|--------|
+| 1 | **Image Generation + Consistent Character** | 🔴 40% | Prompt mismatch, 12-pose broken, consistency | Illustrations, Covers |
+| 2 | PDF/EPUB Export | 🟡 70% | File generation works, needs polish | Users downloading |
+| 3 | Data Persistence | ❌ 0% | localStorage only | Multi-device, scale |
+| 4 | Stripe Payments | 🟡 10% | Webhook skeleton only | Revenue |
 
 ---
 
-### 2. Layout Stage
-**Current state:** Type definitions exist in `src/lib/types/artifacts.ts`, no execution logic
-**What's needed:**
-- Layout generation prompts (text + image placement)
-- SpreadLayout composition algorithm
-- Page type handling (text-only, image-only, mixed)
-- Integration with stageRunner.ts
-**Dependencies:** Image Generation (needs illustrations to place)
-**Unblocks:** Export (need composed pages)
+## Feature 1: Image Generation + Consistent Character (CURRENT)
+
+**Status:** 🔴 40% - Critical gaps remain
+
+### What's Working
+- NanoBanana API connected
+- Basic image generation endpoint exists
+- Image prompt builder exists
+- Character visual DNA structure defined
+
+### Actual Gaps
+
+#### Gap 1.1: Prompt → Image Mismatch
+- Visual DNA inputs (colors, clothing, features) don't influence output
+- Character descriptions ignored by image generation
+- Need to restructure prompts for NanoBanana's model
+
+#### Gap 1.2: 12-Pose Reference Sheet Broken
+- Single API call for 12 poses not working
+- Need sequential generation with consistent seed
+- Pose-specific prompt templates incomplete
+
+#### Gap 1.3: Character Consistency Across Illustrations
+- No mechanism to reference character sheet in scene generation
+- Characters look different in each illustration
+- Solution: Pass 12-pose reference as context for consistency
+- Constraint: Max 2-3 characters per scene
+
+#### Gap 1.4: Book Covers Incomplete
+- Front cover: Missing title text, author name, proper composition
+- Back cover: Missing synopsis area, barcode space, author photo
+- Text rendering on images not implemented
+- Need best practices for children's book covers
+
+#### Gap 1.5: Chapter-Based Illustration Generation
+- No AI analysis of chapter content for scene suggestions
+- No automatic illustration opportunity detection
+- Scene composition not derived from narrative
+- Need: AI suggests 2-3 illustration moments per chapter
+
+### Success Criteria
+- [ ] Character visual DNA actually influences generated images
+- [ ] 12-pose reference sheet generates correctly
+- [ ] Same character looks consistent across all illustrations
+- [ ] Front/back covers render with text and proper layout
+- [ ] AI suggests illustration scenes from chapter content
 
 ---
 
-### 3. Cover Stage
-**Current state:** Type definitions only, no prompt logic
-**What's needed:**
-- Cover prompt generation (front cover with title, author, illustration)
-- Back cover composition (synopsis, barcode area)
-- Spine text formatting for print
-- Integration with image generation
-**Dependencies:** Image Generation
-**Unblocks:** Export (need cover files)
+## Feature 2: PDF/EPUB Export
+
+**Status:** 🟡 70% - Core works, needs polish
+
+### What's Working
+- jsPDF integration exists
+- EPUB structure defined
+- Layout artifact provides page composition
+- Download mechanism works
+
+### Remaining Gaps
+- Print-ready PDF (bleed, crop marks)
+- EPUB metadata completeness
+- Cover integration with export
+- File size optimization
 
 ---
 
-### 4. PDF/EPUB Export
-**Current state:** UI exists, metadata structure defined, stale detection works, no file generation
-**What's needed:**
-- PDF generation (pdfkit or similar)
-- EPUB assembly (epub-gen or similar)
-- File bundling/compression
-- Supabase Storage upload
-- Download URL generation
-- Print-ready PDF variant (bleed, crop marks)
-**Dependencies:** Layout Stage, Cover Stage
-**Unblocks:** Users can actually download finished books
+## Feature 3: Data Persistence
+
+**Status:** ❌ 0% - localStorage only
+
+### Current State
+- All data in localStorage
+- No cloud sync
+- Single device only
+- Data lost on browser clear
+
+### What's Needed
+- Migrate to Supabase tables
+- Sync layer for offline capability
+- RLS policies for user isolation
+- Migration tool for existing localStorage data
 
 ---
 
-### 5. Stripe Payments
-**Current state:** Billing UI skeleton at `src/pages/app/BillingPage.tsx`, no backend
-**What's needed:**
-- Stripe webhook endpoint (`/api/stripe/webhook`)
+## Feature 4: Stripe Payments
+
+**Status:** 🟡 10% - Foundation only
+
+### Current State
+- Billing UI skeleton exists
+- Webhook endpoint stub
+- No actual Stripe integration
+
+### What's Needed
 - Checkout session creation
-- Subscription management (create, update, cancel)
-- Credit purchase flow (one-time)
-- Invoice history
 - Webhook signature verification
-- Plan upgrade/downgrade handling
-**Dependencies:** None (can parallelize with 1-4)
-**Unblocks:** Production launch, revenue
-
----
-
-### 6. Data Persistence (localStorage → Supabase)
-**Current state:** All data in localStorage, won't scale
-**What's needed:**
-- Migrate projectsStore to Supabase tables
-- Migrate charactersStore to Supabase
-- Migrate knowledgeBaseStore to Supabase
-- Sync layer for offline capability (optional)
-- Row-level security policies
-**Dependencies:** None (can parallelize)
-**Unblocks:** Multi-device access, data durability, scale
-
----
-
-### 7. Compliance Guard (Auto-checking)
-**Current state:** Modesty rules engine exists at `src/lib/ai/complianceGuard.ts`, no post-generation checking
-**What's needed:**
-- Post-generation image analysis
-- Automated flagging for non-compliant images
-- Compliance report per illustration
-- Manual review queue UI
-- Re-generation trigger for failed checks
-**Dependencies:** Image Generation (need images to check)
-**Unblocks:** Quality assurance at scale
-
----
-
-### 8. Analytics Dashboard
-**Current state:** `ai_usage` telemetry table exists, no UI
-**What's needed:**
-- Usage metrics visualization
-- Credit consumption trends
-- Popular templates/features
-- User activity dashboard
-- Export reports
-**Dependencies:** Data Persistence (better with real data)
-**Unblocks:** Business insights, optimization decisions
-
----
-
-### 9. Content Library
-**Current state:** 4 hardcoded book templates only
-**What's needed:**
-- Reusable story templates
-- Character template library
-- Setting/world templates
-- Community sharing (future)
-- Template categorization and search
-**Dependencies:** None
-**Unblocks:** Faster book creation, better onboarding
-
----
-
-### 10. Batch Operations
-**Current state:** None
-**What's needed:**
-- Bulk character generation
-- Bulk export (multiple books)
-- Batch illustration regeneration
-- Queue management UI
-**Dependencies:** Image Generation, Export
-**Unblocks:** Power user efficiency
+- Credit provisioning on purchase
+- Subscription management
 
 ---
 
 ## Execution Plan
 
-### Phase 1: Complete the Pipeline (Features 1-4)
-Get a book from idea to downloadable PDF.
+### Phase 1: Image Generation + Consistency (Feature 1)
+**Branch:** `ralph/consistent-character-generation`
 
 ```
-Image Gen → Layout → Cover → Export
+Fix Prompts → 12-Pose Sheet → Consistency → Covers → Chapter Scenes
 ```
 
-### Phase 2: Monetization (Feature 5)
-Enable payments before public launch.
+### Phase 2: Export Polish (Feature 2)
+Finalize PDF/EPUB with covers integrated.
 
-### Phase 3: Scale & Polish (Features 6-7)
-Data persistence and quality assurance.
+### Phase 3: Persistence (Feature 3)
+Move to Supabase, enable multi-device.
 
-### Phase 4: Growth (Features 8-10)
-Analytics, templates, power features.
+### Phase 4: Payments (Feature 4)
+Enable revenue before public launch.
 
 ---
 
-## Skipped (Future Placeholders)
+## Skipped (Post-MVP)
 
-| Feature | Reason | Future Notes |
-|---------|--------|--------------|
-| i18n/Multi-language | English-only MVP | Use react-i18next, extract all strings |
-| Team Collaboration | Single-user sufficient | Add workspace/team tables, invite flow |
+| Feature | Reason |
+|---------|--------|
+| i18n | English-only MVP |
+| Team Collaboration | Single-user sufficient |
+| Batch Operations | Power user feature |
+| Analytics Dashboard | Nice-to-have |
+| Content Library | Post-launch expansion |
 
 ---
 
 ## Next Action
 
-Start with Feature #1:
-```
-Use @scripts/01-create-prd.md
-Feature: NanoBanana image generation integration
-Reference: @STATUS.md @BACKLOG.md
+Execute Feature #1 with Ralph:
+```bash
+./scripts/ralph/ralph.sh 10
 ```
