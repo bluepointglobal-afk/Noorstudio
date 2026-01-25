@@ -254,38 +254,31 @@ export function buildIllustrationPrompt(input: IllustrationPromptInput): ImagePr
   // Build multi-character guide if needed
   const multiCharGuide = buildMultiCharacterGuide(characters);
 
-  // Build the main prompt with compliance enhancement
-  const basePrompt = `${stylePrompt}
-Target audience: Ages ${project.ageRange}
+  // Build concise character summaries for prompt start (AI models prioritize early text)
+  const characterSummaries = characters.map((char) => {
+    const traits = [
+      char.visualDNA?.skinTone,
+      char.visualDNA?.hairOrHijab,
+      char.modestyRules?.hijabAlways ? "wearing hijab" : null,
+      char.name,
+    ].filter(Boolean).join(", ");
+    return traits;
+  }).join(" and ");
 
-## SCENE DESCRIPTION
-Chapter ${chapterNumber}: "${sceneDescription}"
+  // Build the main prompt with summary-first approach
+  const basePrompt = `${stylePrompt} children's book illustration showing ${characterSummaries}
 
-## CHARACTERS IN THIS SCENE
+SCENE: ${sceneDescription}
+CHAPTER: ${chapterNumber}, for ages ${project.ageRange}
+
+CHARACTERS (EXACT APPEARANCE - must match reference images):
 ${characterDescriptions}
 ${multiCharGuide}
 
-## ART STYLE TECHNICAL REQUIREMENTS
-Style: ${primaryStyleId}
-${styleTechnical}
-
-## SCENE COMPOSITION
-- Warm, inviting lighting with soft ambient fill
-- Soft shadows that don't obscure faces
-- Vibrant but harmonious colors
-- Child-friendly, approachable expressions
-- Clear focal point with all characters visible
-- Appropriate setting that matches the story
-
-## CULTURAL & MODESTY REQUIREMENTS
+STYLE: ${styleTechnical}
+COMPOSITION: Warm lighting, soft shadows, vibrant colors, child-friendly expressions, all characters clearly visible
 ${buildModestyConstraints(characters, kbSummary)}
-
-## TECHNICAL REQUIREMENTS
-- High detail on character faces (eyes, expressions)
-- Consistent character design matching reference images
-- NO text, words, or letters anywhere in image
-- Professional children's book quality
-- 4:3 landscape orientation for spread layout`;
+TECHNICAL: High detail faces, NO text or words, professional children's book quality, 4:3 landscape`;
 
   // Apply compliance enforcement
   const complianceResult = enforceComplianceIllustrationPrompt(
@@ -606,42 +599,27 @@ export function buildCharacterPosePrompt(input: CharacterPosePromptInput): Chara
     ? `COLOR PALETTE: ${character.colorPalette.join(", ")}`
     : "";
 
-  const prompt = `CHARACTER REFERENCE SHEET POSE: ${poseInfo.name}
-${stylePrompt}
+  // Build concise visual summary for prompt start (AI models prioritize early text)
+  const visualSummary = [
+    character.visualDNA?.skinTone,
+    character.visualDNA?.hairOrHijab,
+    character.modestyRules?.hijabAlways ? "wearing hijab" : null,
+    character.ageRange ? `${character.ageRange} years old` : "child",
+    character.name,
+  ].filter(Boolean).join(", ");
 
-## CHARACTER IDENTITY
-Name: ${character.name}
-Role: ${character.role}
-Age Appearance: ${character.ageRange || "child"} years old
+  const prompt = `${stylePrompt} of ${visualSummary}, ${poseInfo.bodyPosition.toLowerCase()}
 
-## VISUAL DNA (MUST MATCH EXACTLY)
-${visualDNABlock.join("\n")}
-${colorBlock}
+CHARACTER: ${character.name}, ${character.role}, ${character.ageRange || "child"} years old
+EXACT APPEARANCE: ${visualDNABlock.join(". ")}
+${colorBlock ? `COLORS: ${character.colorPalette?.join(", ")}` : ""}
+POSE: ${poseInfo.name} - ${poseInfo.bodyPosition}
+${character.modestyRules?.hijabAlways ? "HIJAB: Must cover ALL hair completely, no hair visible" : ""}
+${character.modestyRules?.longSleeves ? "SLEEVES: Long sleeves covering to wrists" : ""}
+${character.modestyRules?.looseClothing ? "CLOTHING: Loose-fitting, modest garments" : ""}
 
-## POSE REQUIREMENTS
-Pose: ${poseInfo.name}
-Description: ${poseInfo.description}
-Body Position: ${poseInfo.bodyPosition}
-
-## ${modestyBlock.join("\n")}
-
-## ART STYLE (CONSISTENT WITH CHARACTER)
-Style: ${styleId}
-${styleTechnical}
-
-## TECHNICAL REQUIREMENTS
-- Single character only, isolated on clean background
-- Full body visible (head to feet)
-- Clean, simple background (solid color or subtle gradient)
-- High detail on face and clothing
-- Consistent proportions for reference sheet use
-- NO text, watermarks, or labels
-- Professional character design quality
-- Portrait orientation preferred (for reference sheet grid)
-
-## CRITICAL CONSISTENCY RULES
-- This pose must match the character's established visual identity
-- Skin tone, hair/hijab style, and outfit must be EXACTLY as described
+STYLE: ${styleTechnical}
+TECHNICAL: Single character, full body, clean background, high detail, portrait orientation, NO text or watermarks
 - This image will be used as reference for all future illustrations
 - Maintain the exact same character design across all poses`;
 

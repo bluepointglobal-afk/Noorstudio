@@ -11,6 +11,7 @@ import {
   PoseType,
   ALL_POSE_TYPES,
 } from "@/lib/ai/imagePrompts";
+import { createLabeledPoseSheetGrid } from "@/lib/utils/imageGrid";
 
 // ============================================
 // Types (Extended for full Character Studio)
@@ -597,23 +598,49 @@ export async function generateCharacterReferenceSheet(
     });
   }
 
-  onProgress?.(totalGenerations, totalGenerations, "Complete");
+  onProgress?.(totalGenerations, totalGenerations, "Creating pose sheet grid...");
 
-  // Use first pose's first alternative as the reference sheet thumbnail
+  // Collect selected pose images for grid stitching
+  const selectedPoseUrls = updatedPoses
+    .map(pose => pose.imageUrl)
+    .filter((url): url is string => !!url);
+
+  const poseNames = updatedPoses.map(pose => pose.name);
+
+  // Create composite 4x3 grid from individual poses
+  let poseSheetGridUrl: string | undefined;
+  try {
+    if (selectedPoseUrls.length >= 6) { // Need at least half the poses for a useful grid
+      const gridResult = await createLabeledPoseSheetGrid(selectedPoseUrls, poseNames);
+      poseSheetGridUrl = gridResult.dataUrl;
+      if (import.meta.env.DEV) {
+        console.log(`Created pose sheet grid: ${gridResult.width}x${gridResult.height}`);
+      }
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("Failed to create pose sheet grid, using thumbnail fallback:", error);
+    }
+  }
+
+  // Use grid if available, otherwise fall back to first pose thumbnail
   const poseSheetThumbnail = updatedPoses[0]?.alternatives[0]?.imageUrl;
+  const finalPoseSheetUrl = poseSheetGridUrl || poseSheetThumbnail;
+
+  onProgress?.(totalGenerations, totalGenerations, "Complete");
 
   // Create version entry
   const newVersion: CharacterVersion = {
     version: character.version + 1,
     createdAt: now,
     note: "Generated 12-pose reference sheet with 3 alternatives each",
-    snapshotPoseSheetImageUrl: poseSheetThumbnail,
+    snapshotPoseSheetImageUrl: finalPoseSheetUrl,
   };
 
   return updateCharacter(characterId, {
     poses: updatedPoses,
     poseSheetGenerated: true,
-    poseSheetUrl: poseSheetThumbnail,
+    poseSheetUrl: finalPoseSheetUrl,
     version: character.version + 1,
     versions: [...character.versions, newVersion],
     status: "draft", // Reset to draft for review

@@ -530,10 +530,14 @@ export default function ProjectWorkspacePage() {
             const chaptersContent = getArtifactContent<Array<{ _structured?: ChapterOutput }>>(project, "chapters");
             const chapters = chaptersContent?.map(ch => ch._structured).filter((ch): ch is ChapterOutput => !!ch);
 
+            // Get outline for key_scene data (AI-suggested illustration moments)
+            const outlineContent = getArtifactContent<{ _structured?: OutlineOutput }>(project, "outline");
+            const outline = outlineContent?._structured;
+
             if (!chapters || chapters.length === 0) {
               errorMessage = "Chapters must be generated first";
             } else {
-              const result = await runIllustrationsStage(project, chapters, characters, kbRules, onAIProgress, token);
+              const result = await runIllustrationsStage(project, chapters, characters, kbRules, onAIProgress, token, outline);
               if (result.success && result.data) {
                 success = true;
                 artifactData = result.data.illustrations;

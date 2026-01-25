@@ -47,6 +47,12 @@ import {
 import { composeBookLayout, LayoutComposerInput } from "./layoutEngine";
 import { generatePDF, generateEPUB } from "@/lib/export";
 import type { ExportArtifactContent, ExportArtifactItem } from "@/lib/export/types";
+import {
+  createFrontCoverWithText,
+  createBackCoverWithText,
+  CoverTextConfig,
+  BackCoverTextConfig,
+} from "@/lib/utils/coverTextOverlay";
 
 function generateAttemptId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
@@ -527,7 +533,8 @@ export async function runIllustrationsStage(
   characters: StoredCharacter[],
   kbSummary: KBRulesSummary | null,
   onProgress: ProgressCallback,
-  cancelToken?: CancelToken
+  cancelToken?: CancelToken,
+  outline?: OutlineOutput
 ): Promise<StageRunnerResult<IllustrationsStageResult>> {
   const totalChapters = chapters.length;
   const totalGenerations = totalChapters * VARIANTS_PER_ILLUSTRATION;
@@ -551,11 +558,12 @@ export async function runIllustrationsStage(
       const chapterNum = chapter.chapter_number;
 
       // Generate scene description from chapter
+      // Use key_scene from outline if available (AI-generated scene suggestion)
+      const outlineKeyScene = outline?.chapters?.[i]?.key_scene;
       const sceneDescription = generateSceneDescriptionFromChapter(
         chapter.text,
         chapter.chapter_title,
-        // Use key_scene if available from outline
-        undefined
+        outlineKeyScene
       );
 
       // Build prompt using imagePrompts
@@ -802,6 +810,57 @@ export async function runCoverStage(
 
     const backResponse = await generateImage(backRequest);
 
+    // Apply text overlay to covers
+    onProgress({
+      stage: "cover",
+      status: "running",
+      progress: 80,
+      message: "Adding text to covers...",
+    });
+
+    let finalFrontCoverUrl = frontResponse.imageUrl;
+    let finalBackCoverUrl = backResponse.imageUrl;
+
+    // Apply text overlay to front cover
+    try {
+      const frontTextConfig: CoverTextConfig = {
+        title: project.title,
+        authorName: project.authorName,
+        ageRange: project.ageRange,
+        titlePosition: "top",
+        shadowEnabled: true,
+      };
+      const frontWithText = await createFrontCoverWithText(
+        frontResponse.imageUrl,
+        frontTextConfig
+      );
+      finalFrontCoverUrl = frontWithText.dataUrl;
+    } catch (textError) {
+      console.warn("Failed to apply text to front cover, using original:", textError);
+      // Fall back to original image
+    }
+
+    // Apply text overlay to back cover (with synopsis if available)
+    try {
+      // Get synopsis from outline if available
+      const outlineContent = getArtifactContent<{ _structured?: OutlineOutput }>(project, "outline");
+      const synopsis = outlineContent?._structured?.moral_lesson || project.learningObjective || "";
+
+      const backTextConfig: BackCoverTextConfig = {
+        synopsis: synopsis ? `"${synopsis}"` : undefined,
+        authorBio: project.authorName ? `Written by ${project.authorName}` : undefined,
+        credits: "Created with NoorStudio",
+      };
+      const backWithText = await createBackCoverWithText(
+        backResponse.imageUrl,
+        backTextConfig
+      );
+      finalBackCoverUrl = backWithText.dataUrl;
+    } catch (textError) {
+      console.warn("Failed to apply text to back cover, using original:", textError);
+      // Fall back to original image
+    }
+
     onProgress({
       stage: "cover",
       status: "completed",
@@ -821,8 +880,8 @@ export async function runCoverStage(
     return {
       success: true,
       data: {
-        frontCoverUrl: frontResponse.imageUrl,
-        backCoverUrl: backResponse.imageUrl,
+        frontCoverUrl: finalFrontCoverUrl,
+        backCoverUrl: finalBackCoverUrl,
       },
     };
   } catch (error: unknown) {
