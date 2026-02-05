@@ -17,6 +17,18 @@ export interface ImageGenerationRequest {
   stage: "illustrations" | "cover";
   attemptId?: string;
   count?: number;
+
+  /**
+   * Optional deterministic seed for consistency across generations.
+   * When paired with reference images, helps lock identity.
+   */
+  seed?: number;
+
+  /**
+   * Optional reference/image consistency strength (provider-specific).
+   * Higher values = stronger adherence to reference images.
+   */
+  referenceStrength?: number;
 }
 
 export interface ImageGenerationResponse {
@@ -69,6 +81,16 @@ const DEMO_POSE_SHEETS = [
 // Mock Provider
 // ============================================
 
+function hashToSeed(input: string): number {
+  // Deterministic non-cryptographic hash → 32-bit unsigned int
+  // (Good enough for stable mock seeds in tests/dev.)
+  let hash = 5381;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i); // hash * 33 ^ c
+  }
+  return hash >>> 0;
+}
+
 async function mockImageGeneration(
   request: ImageGenerationRequest
 ): Promise<ImageGenerationResponse> {
@@ -100,16 +122,37 @@ async function mockImageGeneration(
     pool = DEMO_ILLUSTRATIONS;
   }
 
-  const randomIndex = Math.floor(Math.random() * pool.length);
+  // Deterministic seed behavior:
+  // - If caller provided a seed, honor it.
+  // - Otherwise derive a stable seed from the request payload.
+  const derivedSeed = hashToSeed(
+    JSON.stringify({
+      prompt: request.prompt,
+      references: request.references || [],
+      style: request.style || "default",
+      width: request.width,
+      height: request.height,
+      stage: request.stage,
+    })
+  );
+  const effectiveSeed = typeof request.seed === "number" ? request.seed : derivedSeed;
+
+  // Pick a deterministic image from the pool based on the effective seed.
+  const index = pool.length ? effectiveSeed % pool.length : 0;
 
   return {
-    imageUrl: pool[randomIndex],
+    imageUrl: pool[index],
     providerMeta: {
       mock: true,
+      seed: effectiveSeed,
       prompt: request.prompt.substring(0, 100),
       style: request.style || "default",
       processingTime: Math.floor(800 + Math.random() * 700),
-      imageType: isCharacterGeneration ? "character" : isPoseSheetGeneration ? "pose_sheet" : "illustration",
+      imageType: isCharacterGeneration
+        ? "character"
+        : isPoseSheetGeneration
+          ? "pose_sheet"
+          : "illustration",
     },
     provider: "mock",
   };
@@ -168,6 +211,8 @@ async function nanobananaImageGeneration(
         task: request.stage === "cover" ? "cover" : "illustration",
         attemptId: request.attemptId,
         count: request.count,
+        seed: request.seed,
+        referenceStrength: request.referenceStrength,
       }),
       signal: _imageAbortController.signal,
     });
