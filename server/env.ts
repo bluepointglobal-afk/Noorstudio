@@ -14,7 +14,7 @@ const envSchema = z.object({
     PORT: z.string().transform((v) => parseInt(v, 10)).default("3001"),
     CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
     AI_TEXT_PROVIDER: z.enum(["mock", "claude"]).default("mock"),
-    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google"]).default("mock"),
+    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google", "claude-local"]).default("mock"),
     CLAUDE_API_KEY: z.string().optional(),
     NANOBANANA_API_KEY: z.string().optional(),
     GOOGLE_API_KEY: z.string().optional(),

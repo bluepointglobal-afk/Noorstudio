@@ -3,6 +3,7 @@
 
 import { Router, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { env } from "../env";
 import { deductCredits, supabase } from "../index";
 import { AI_TOKEN_BUDGETS, IMAGE_LIMITS, estimateTokens, AIStage } from "../../src/lib/ai/tokenBudget";
@@ -16,6 +17,7 @@ const router = Router();
 const TEXT_PROVIDER = env.AI_TEXT_PROVIDER;
 const IMAGE_PROVIDER = env.AI_IMAGE_PROVIDER;
 const CLAUDE_API_KEY = env.CLAUDE_API_KEY || "";
+const OPENAI_API_KEY = env.OPENAI_API_KEY || "";
 const NANOBANANA_API_KEY = env.NANOBANANA_API_KEY || "";
 const GOOGLE_API_KEY = env.GOOGLE_API_KEY || "";
 const MAX_RETRIES = parseInt(process.env.AI_MAX_RETRIES || "2", 10);
@@ -24,6 +26,12 @@ const MAX_RETRIES = parseInt(process.env.AI_MAX_RETRIES || "2", 10);
 let claudeClient: Anthropic | null = null;
 if (CLAUDE_API_KEY && TEXT_PROVIDER === "claude") {
   claudeClient = new Anthropic({ apiKey: CLAUDE_API_KEY });
+}
+
+// Initialize OpenAI client if key is available
+let openaiClient: OpenAI | null = null;
+if (OPENAI_API_KEY) {
+  openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
 }
 
 // ============================================
@@ -74,6 +82,25 @@ interface ImageResponse {
 // NanoBanana API configuration
 const NANOBANANA_API_URL = process.env.NANOBANANA_API_URL || "https://api.nanobanana.com/v1";
 const NANOBANANA_MODEL = process.env.NANOBANANA_MODEL || "pixar-3d-v1";
+
+// API timeout configuration (in milliseconds)
+const API_TIMEOUT_MS = parseInt(process.env.API_TIMEOUT_MS || "30000", 10);
+
+// Helper: Create fetch with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = API_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // ============================================
 // Telemetry Helper
@@ -334,7 +361,7 @@ async function nanobananaImageGeneration(
       });
     }
 
-    const response = await fetch(`${NANOBANANA_API_URL}/generate`, {
+    const response = await fetchWithTimeout(`${NANOBANANA_API_URL}/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -353,7 +380,7 @@ async function nanobananaImageGeneration(
         seed: req.seed,
         reference_strength: req.referenceStrength,
       }),
-    });
+    }, 60000); // 60 second timeout for image generation
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -537,7 +564,7 @@ async function googleImageGeneration(
 
     // Use Google's Generative AI REST API for image generation
     // Note: This uses the text-to-image capability via prompt
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
+    const response = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -555,7 +582,7 @@ async function googleImageGeneration(
           topP: 0.95,
         },
       }),
-    });
+    }, 45000); // 45 second timeout
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -600,6 +627,231 @@ async function googleImageGeneration(
   }
 }
 
+// ============================================
+// Claude-Local Provider (Claude descriptions + Local SVG generation)
+// ============================================
+
+// Character definitions for consistency
+const CHARACTER_SPECS: Record<string, {
+  name: string;
+  age: number;
+  skinTone: string;
+  hairColor: string;
+  hijabColor: string;
+  clothingColor: string;
+  distinctiveFeatures: string;
+}> = {
+  amira: {
+    name: "Amira",
+    age: 9,
+    skinTone: "#E8C69F",
+    hairColor: "#3D2817",
+    hijabColor: "#D4A5A5",
+    clothingColor: "#F4A9B8",
+    distinctiveFeatures: "warm smile, thoughtful eyes, round face",
+  },
+  layla: {
+    name: "Layla",
+    age: 9,
+    skinTone: "#D4A574",
+    hairColor: "#2C2C2C",
+    hijabColor: "#4A7BA7",
+    clothingColor: "#6B9FD4",
+    distinctiveFeatures: "bright smile, kind eyes, oval face",
+  },
+  ahmed: {
+    name: "Ahmed",
+    age: 10,
+    skinTone: "#D4A574",
+    hairColor: "#2C2C2C",
+    hijabColor: "none",
+    clothingColor: "#4A7B4A",
+    distinctiveFeatures: "curious expression, short dark hair, friendly face",
+  },
+};
+
+async function claudeLocalImageGeneration(
+  req: ImageRequest,
+  retryCount = 0
+): Promise<ImageResponse> {
+  // Use Claude to analyze the prompt and enhance it with character consistency
+  let enhancedDescription = req.prompt;
+  
+  if (claudeClient) {
+    try {
+      const charPrompt = Object.entries(CHARACTER_SPECS)
+        .map(([key, char]) => `${char.name}: ${char.distinctiveFeatures}, skin ${char.skinTone}, clothing ${char.clothingColor}, hijab ${char.hijabColor}`)
+        .join('\n');
+      
+      const response = await claudeClient.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        system: `You are an illustration description specialist. Given a scene description, output a detailed visual description for a children's book illustration. Maintain these character appearances for consistency:\n${charPrompt}\n\nKeep descriptions warm, child-friendly, and culturally appropriate (Islamic aesthetic). Output ONLY the description, no commentary.`,
+        messages: [{ role: "user", content: `Describe this scene for illustration: ${req.prompt}` }],
+      });
+      
+      const textContent = response.content.find((c) => c.type === "text");
+      if (textContent && textContent.type === "text") {
+        enhancedDescription = textContent.text;
+      }
+    } catch (err) {
+      console.warn("Claude description enhancement failed, using original prompt:", err);
+    }
+  }
+  
+  // Generate local SVG-based illustration
+  const size = req.size || { width: 800, height: 600 };
+  const svgImage = generateLocalIllustration(enhancedDescription, req.task || "illustration", size);
+  
+  // Convert SVG to data URL
+  const base64Svg = Buffer.from(svgImage).toString("base64");
+  const dataUrl = `data:image/svg+xml;base64,${base64Svg}`;
+  
+  return {
+    imageUrl: dataUrl,
+    providerMeta: {
+      provider: "claude-local",
+      enhancedDescription: enhancedDescription.substring(0, 200),
+      task: req.task,
+      size,
+    },
+    provider: "claude-local",
+  };
+}
+
+function generateLocalIllustration(description: string, task: string, size: { width: number; height: number }): string {
+  const { width, height } = size;
+  
+  // Color palettes based on scene type
+  const palettes: Record<string, { bg: string[]; accent: string; text: string }> = {
+    cover: { bg: ["#1e5282", "#2e82c2", "#4ea2e2"], accent: "#FFD700", text: "#FFFFFF" },
+    chapter1: { bg: ["#FFF8DC", "#FFE4B5", "#FFDAB9"], accent: "#8B4513", text: "#2F4F4F" },
+    chapter2: { bg: ["#E0F7FA", "#B2EBF2", "#80DEEA"], accent: "#00796B", text: "#004D40" },
+    chapter3: { bg: ["#FCE4EC", "#F8BBD9", "#F48FB1"], accent: "#C2185B", text: "#880E4F" },
+    illustration: { bg: ["#FFF3E0", "#FFE0B2", "#FFCC80"], accent: "#E65100", text: "#BF360C" },
+  };
+  
+  const palette = palettes[task] || palettes.illustration;
+  
+  // Detect characters in description for consistent rendering
+  const hasAmira = description.toLowerCase().includes("amira");
+  const hasLayla = description.toLowerCase().includes("layla");
+  const hasAhmed = description.toLowerCase().includes("ahmed");
+  
+  // Build character SVG elements
+  let characterElements = "";
+  let charX = width * 0.3;
+  
+  if (hasAmira) {
+    characterElements += generateCharacterSVG(CHARACTER_SPECS.amira, charX, height * 0.55, height * 0.35);
+    charX += width * 0.25;
+  }
+  if (hasLayla) {
+    characterElements += generateCharacterSVG(CHARACTER_SPECS.layla, charX, height * 0.55, height * 0.35);
+    charX += width * 0.25;
+  }
+  if (hasAhmed) {
+    characterElements += generateCharacterSVG(CHARACTER_SPECS.ahmed, charX, height * 0.55, height * 0.35);
+  }
+  
+  // Create SVG with gradient background, decorative elements, and characters
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:${palette.bg[0]};stop-opacity:1" />
+      <stop offset="50%" style="stop-color:${palette.bg[1]};stop-opacity:1" />
+      <stop offset="100%" style="stop-color:${palette.bg[2]};stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="url(#bgGradient)"/>
+  
+  <!-- Decorative Islamic geometric border -->
+  <rect x="15" y="15" width="${width - 30}" height="${height - 30}" 
+        fill="none" stroke="${palette.accent}" stroke-width="3" rx="10"/>
+  <rect x="25" y="25" width="${width - 50}" height="${height - 50}" 
+        fill="none" stroke="${palette.accent}" stroke-width="1.5" rx="8" stroke-dasharray="10,5"/>
+  
+  <!-- Corner ornaments -->
+  ${generateCornerOrnaments(width, height, palette.accent)}
+  
+  <!-- Characters -->
+  ${characterElements}
+  
+  <!-- Scene description text area -->
+  <rect x="40" y="${height - 100}" width="${width - 80}" height="70" fill="white" fill-opacity="0.85" rx="8" filter="url(#shadow)"/>
+  <text x="${width / 2}" y="${height - 60}" font-family="Georgia, serif" font-size="14" fill="${palette.text}" text-anchor="middle">
+    ${truncateText(description, 60)}
+  </text>
+  <text x="${width / 2}" y="${height - 40}" font-family="Georgia, serif" font-size="12" fill="${palette.text}" text-anchor="middle" opacity="0.7">
+    NoorStudio Illustration
+  </text>
+</svg>`;
+  
+  return svg;
+}
+
+function generateCharacterSVG(char: typeof CHARACTER_SPECS.amira, x: number, y: number, scale: number): string {
+  const headSize = scale * 0.3;
+  const bodyHeight = scale * 0.5;
+  
+  return `
+  <!-- Character: ${char.name} -->
+  <g transform="translate(${x}, ${y})">
+    <!-- Body/Dress -->
+    <ellipse cx="0" cy="${bodyHeight * 0.4}" rx="${headSize * 0.8}" ry="${bodyHeight * 0.5}" fill="${char.clothingColor}"/>
+    
+    <!-- Head -->
+    <circle cx="0" cy="-${headSize * 0.5}" r="${headSize}" fill="${char.skinTone}"/>
+    
+    <!-- Hijab (if applicable) -->
+    ${char.hijabColor !== "none" ? `
+    <ellipse cx="0" cy="-${headSize * 0.7}" rx="${headSize * 1.1}" ry="${headSize * 0.9}" fill="${char.hijabColor}"/>
+    <ellipse cx="0" cy="-${headSize * 0.3}" rx="${headSize * 0.95}" ry="${headSize * 0.7}" fill="${char.skinTone}"/>
+    ` : `
+    <!-- Hair for male character -->
+    <ellipse cx="0" cy="-${headSize * 0.8}" rx="${headSize * 0.9}" ry="${headSize * 0.5}" fill="${char.hairColor}"/>
+    `}
+    
+    <!-- Face features -->
+    <circle cx="-${headSize * 0.25}" cy="-${headSize * 0.5}" r="${headSize * 0.08}" fill="#3D2817"/>
+    <circle cx="${headSize * 0.25}" cy="-${headSize * 0.5}" r="${headSize * 0.08}" fill="#3D2817"/>
+    <path d="M-${headSize * 0.15},-${headSize * 0.25} Q0,-${headSize * 0.15} ${headSize * 0.15},-${headSize * 0.25}" 
+          stroke="#3D2817" stroke-width="2" fill="none"/>
+    
+    <!-- Name label -->
+    <text x="0" y="${bodyHeight * 0.7}" font-family="Arial" font-size="12" fill="#333" text-anchor="middle" font-weight="bold">${char.name}</text>
+  </g>`;
+}
+
+function generateCornerOrnaments(width: number, height: number, color: string): string {
+  const size = 25;
+  const positions = [
+    { x: 30, y: 30 },
+    { x: width - 30, y: 30 },
+    { x: 30, y: height - 30 },
+    { x: width - 30, y: height - 30 },
+  ];
+  
+  return positions.map(pos => `
+    <g transform="translate(${pos.x}, ${pos.y})">
+      <circle cx="0" cy="0" r="${size}" fill="none" stroke="${color}" stroke-width="2"/>
+      <circle cx="0" cy="0" r="${size * 0.6}" fill="none" stroke="${color}" stroke-width="1.5"/>
+      <circle cx="0" cy="0" r="${size * 0.3}" fill="${color}" opacity="0.3"/>
+    </g>
+  `).join('');
+}
+
+function truncateText(text: string, maxLen: number): string {
+  const cleaned = text.replace(/\n/g, ' ').trim();
+  return cleaned.length > maxLen ? cleaned.substring(0, maxLen) + "..." : cleaned;
+}
+
 // Image generation endpoint
 router.post("/image", async (req: Request, res: Response) => {
   try {
@@ -633,6 +885,8 @@ router.post("/image", async (req: Request, res: Response) => {
       response = await nanobananaImageGeneration(body);
     } else if (IMAGE_PROVIDER === "google") {
       response = await googleImageGeneration(body);
+    } else if (IMAGE_PROVIDER === "claude-local") {
+      response = await claudeLocalImageGeneration(body);
     } else {
       response = await mockImageGeneration(body);
     }
@@ -701,6 +955,8 @@ router.get("/status", (_req: Request, res: Response) => {
     claudeConfigured: !!CLAUDE_API_KEY,
     nanobananaConfigured: !!NANOBANANA_API_KEY,
     googleConfigured: !!GOOGLE_API_KEY,
+    claudeLocalConfigured: IMAGE_PROVIDER === "claude-local" && !!CLAUDE_API_KEY,
+    apiTimeoutMs: API_TIMEOUT_MS,
   });
 });
 
