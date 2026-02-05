@@ -541,6 +541,10 @@ export async function runIllustrationsStage(
   const generatedIllustrations: IllustrationArtifactItem[] = [];
   let completedGenerations = 0;
 
+  // Consistency seed: we capture the first successful provider seed and reuse it
+  // across subsequent img2img generations to reduce character drift.
+  let globalConsistencySeed: number | undefined;
+
   onProgress({
     stage: "illustrations",
     status: "running",
@@ -613,15 +617,27 @@ export async function runIllustrationsStage(
             stage: "illustrations",
             attemptId,
             count: 1,
+
+            // Enforce cross-chapter identity consistency
+            seed: globalConsistencySeed,
+            referenceStrength: 0.9,
           };
 
           const response = await generateImage(request);
+
+          // Capture the first successful provider seed and reuse it for subsequent generations.
+          const providerSeed = response.providerMeta?.seed;
+          if (globalConsistencySeed === undefined && typeof providerSeed === "number") {
+            globalConsistencySeed = providerSeed;
+          }
 
           variants.push({
             id: `${illustrationId}-v${v + 1}`,
             imageUrl: response.imageUrl,
             selected: v === 0, // First variant is selected by default
             generatedAt: new Date().toISOString(),
+            seed: typeof providerSeed === "number" ? providerSeed : undefined,
+            prompt: promptResult.prompt,
           });
         } catch (error) {
           // Log error but continue with other variants
@@ -630,6 +646,8 @@ export async function runIllustrationsStage(
       }
 
       // Create illustration item with variants
+      const nowIso = new Date().toISOString();
+
       const illustration: IllustrationArtifactItem = {
         id: illustrationId,
         chapterNumber: chapterNum,
@@ -640,8 +658,19 @@ export async function runIllustrationsStage(
         selectedVariantId: variants[0]?.id,
         characterIds: characters.map((c) => c.id),
         prompt: promptResult.prompt,
+        references: promptResult.references,
         style: promptResult.style,
-        generatedAt: new Date().toISOString(),
+        regenerationCount: 0,
+        history: variants.length
+          ? variants.map((v) => ({
+              at: v.generatedAt,
+              action: "generated" as const,
+              variantId: v.id,
+              seed: v.seed,
+              prompt: v.prompt,
+            }))
+          : [],
+        generatedAt: nowIso,
       };
 
       generatedIllustrations.push(illustration);

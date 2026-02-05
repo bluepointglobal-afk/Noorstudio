@@ -278,7 +278,7 @@ ${multiCharGuide}
 STYLE: ${styleTechnical}
 COMPOSITION: Warm lighting, soft shadows, vibrant colors, child-friendly expressions, all characters clearly visible
 ${buildModestyConstraints(characters, kbSummary)}
-TECHNICAL: High detail faces, NO text or words, professional children's book quality, 4:3 landscape`;
+TECHNICAL: High detail faces, NO text, NO letters, NO words, professional children's book quality, 4:3 landscape`;
 
   // Apply compliance enforcement
   const complianceResult = enforceComplianceIllustrationPrompt(

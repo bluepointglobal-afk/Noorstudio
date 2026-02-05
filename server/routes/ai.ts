@@ -17,6 +17,7 @@ const TEXT_PROVIDER = env.AI_TEXT_PROVIDER;
 const IMAGE_PROVIDER = env.AI_IMAGE_PROVIDER;
 const CLAUDE_API_KEY = env.CLAUDE_API_KEY || "";
 const NANOBANANA_API_KEY = env.NANOBANANA_API_KEY || "";
+const GOOGLE_API_KEY = env.GOOGLE_API_KEY || "";
 const MAX_RETRIES = parseInt(process.env.AI_MAX_RETRIES || "2", 10);
 
 // Initialize Claude client if key is available
@@ -56,6 +57,12 @@ interface ImageRequest {
   count?: number;
   attemptId?: string;
   projectId?: string;
+
+  /** Optional deterministic seed for identity consistency. */
+  seed?: number;
+
+  /** Optional reference/identity strength (provider-specific). */
+  referenceStrength?: number;
 }
 
 interface ImageResponse {
@@ -343,6 +350,8 @@ async function nanobananaImageGeneration(
         style: req.style || "pixar-3d",
         guidance_scale: guidanceScale,
         num_inference_steps: req.task === "cover" ? 35 : 30, // More steps for cover quality
+        seed: req.seed,
+        reference_strength: req.referenceStrength,
       }),
     });
 
@@ -505,6 +514,92 @@ router.post("/text", async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// Google Generative AI Provider
+// ============================================
+
+async function googleImageGeneration(
+  req: ImageRequest,
+  retryCount = 0
+): Promise<ImageResponse> {
+  if (!GOOGLE_API_KEY) {
+    throw new Error("Google API key not configured");
+  }
+
+  try {
+    if (env.NODE_ENV === "development") {
+      console.log("Google Image Generation call:", {
+        task: req.task,
+        promptLength: req.prompt.length,
+        seed: req.seed,
+      });
+    }
+
+    // Use Google's Generative AI REST API for image generation
+    // Note: This uses the text-to-image capability via prompt
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GOOGLE_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: req.prompt,
+          }],
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Google API error:", errorData);
+      
+      if (retryCount < MAX_RETRIES) {
+        console.log(`Retrying Google image generation (attempt ${retryCount + 2})`);
+        return googleImageGeneration(req, retryCount + 1);
+      }
+
+      throw new Error(
+        `Google image generation failed: ${response.status} ${JSON.stringify(errorData)}`
+      );
+    }
+
+    const data = await response.json();
+
+    // Extract image URL from response
+    const imageUrl = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    
+    if (!imageUrl) {
+      throw new Error("No image URL returned from Google API");
+    }
+
+    return {
+      imageUrl,
+      provider: "google",
+      providerMeta: {
+        seed: req.seed,
+      },
+    };
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error("Google API error:", err.message);
+
+    if (retryCount < MAX_RETRIES) {
+      console.log(`Retrying Google image generation (attempt ${retryCount + 2}/${MAX_RETRIES + 1})`);
+      return googleImageGeneration(req, retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
 // Image generation endpoint
 router.post("/image", async (req: Request, res: Response) => {
   try {
@@ -536,6 +631,8 @@ router.post("/image", async (req: Request, res: Response) => {
 
     if (IMAGE_PROVIDER === "nanobanana") {
       response = await nanobananaImageGeneration(body);
+    } else if (IMAGE_PROVIDER === "google") {
+      response = await googleImageGeneration(body);
     } else {
       response = await mockImageGeneration(body);
     }
@@ -603,6 +700,7 @@ router.get("/status", (_req: Request, res: Response) => {
     imageProvider: IMAGE_PROVIDER,
     claudeConfigured: !!CLAUDE_API_KEY,
     nanobananaConfigured: !!NANOBANANA_API_KEY,
+    googleConfigured: !!GOOGLE_API_KEY,
   });
 });
 

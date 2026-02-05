@@ -14,9 +14,10 @@ const envSchema = z.object({
     PORT: z.string().transform((v) => parseInt(v, 10)).default("3001"),
     CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
     AI_TEXT_PROVIDER: z.enum(["mock", "claude"]).default("mock"),
-    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana"]).default("mock"),
+    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google"]).default("mock"),
     CLAUDE_API_KEY: z.string().optional(),
     NANOBANANA_API_KEY: z.string().optional(),
+    GOOGLE_API_KEY: z.string().optional(),
     SUPABASE_URL: z.string().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     SUPABASE_ANON_KEY: z.string().optional(),
@@ -40,6 +41,14 @@ const envSchema = z.object({
 }, {
     message: "NANOBANANA_API_KEY is required when AI_IMAGE_PROVIDER is 'nanobanana'",
     path: ["NANOBANANA_API_KEY"],
+}).refine((data) => {
+    if (data.AI_IMAGE_PROVIDER === "google" && !data.GOOGLE_API_KEY) {
+        return false;
+    }
+    return true;
+}, {
+    message: "GOOGLE_API_KEY is required when AI_IMAGE_PROVIDER is 'google'",
+    path: ["GOOGLE_API_KEY"],
 }).refine((data) => {
     // If either Supabase var is present, both must be present
     const hasUrl = !!data.SUPABASE_URL;

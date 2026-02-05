@@ -35,18 +35,53 @@ export interface IllustrationVariant {
     imageUrl: string;
     selected: boolean;
     generatedAt: string;
+    seed?: number;
+    prompt?: string;
 }
 
 export interface IllustrationArtifactItem {
     id: string;
     chapterNumber: number;
     scene: string;
+
+    /** Selected image URL for the current (draft) selection. */
     imageUrl?: string;
+
+    /** Workflow status. */
     status: "pending" | "generating" | "draft" | "approved";
+
+    /** All generated variants (including regenerated attempts). */
     variants?: IllustrationVariant[];
+
+    /** Currently selected draft variant. */
     selectedVariantId?: string;
-    characterIds?: string[];
+
+    /** Approved (locked) variant stored separately from drafts/rejected. */
+    approvedVariantId?: string;
+    approvedImageUrl?: string;
+
+    /** Core prompt used to generate the illustration (immutable baseline). */
     prompt?: string;
+
+    /** Optional user-edited prompt used for regenerations. */
+    promptOverride?: string;
+
+    /** Regeneration counter for this illustration. */
+    regenerationCount?: number;
+
+    /** Reference images used for consistency (pose sheets / character refs). */
+    references?: string[];
+
+    /** Revision/audit trail so parents can go back. */
+    history?: Array<{
+        at: string;
+        action: "generated" | "regenerated" | "prompt_edited" | "approved";
+        variantId?: string;
+        seed?: number;
+        prompt?: string;
+    }>;
+
+    characterIds?: string[];
     style?: string;
     generatedAt?: string;
 }

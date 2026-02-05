@@ -171,6 +171,13 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
+  // If supabase not configured in dev mode, bypass auth
+  if (!supabase && env.NODE_ENV === "development") {
+    console.warn("[AUTH] Supabase not configured, bypassing auth in DEV");
+    next();
+    return;
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
@@ -180,12 +187,6 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
   const token = authHeader.split(" ")[1];
 
   if (!supabase) {
-    // If supabase not configured, allow in development but log warning
-    if (env.NODE_ENV === "development") {
-      console.warn("[AUTH] Supabase not configured, bypassing auth in DEV");
-      next();
-      return;
-    }
     res.status(503).json({ error: { code: "SERVICE_UNAVAILABLE", message: "Auth service not configured" } });
     return;
   }
@@ -207,7 +208,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
  * This is the core "Foundation Hardening" for credit enforcement
  */
 const creditMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-  if (process.env.NODE_ENV === "development" && (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY)) {
+  if (env.NODE_ENV === "development" && (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY)) {
     return next();
   }
 

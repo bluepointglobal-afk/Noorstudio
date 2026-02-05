@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,7 @@ import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
 import { LayoutPreview } from "@/components/shared/LayoutPreview";
 import { useToast } from "@/hooks/use-toast";
+import { generateImage, ImageGenerationRequest } from "@/lib/ai/providers/imageProvider";
 import { mockJobRunner, JobProgressEvent } from "@/lib/jobs/mockJobRunner";
 import {
   isAIStage,
@@ -295,6 +297,12 @@ export default function ProjectWorkspacePage() {
   const [stageSubProgress, setStageSubProgress] = useState<StageRunnerProgress["subProgress"] | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [selectedIllustration, setSelectedIllustration] = useState<IllustrationArtifactItem | null>(null);
+
+  // Illustration approval workflow
+  const [isIllustrationUpdating, setIsIllustrationUpdating] = useState(false);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState<string>("");
+
   const artifactsRef = useRef<HTMLDivElement>(null);
 
   // Load project and characters
@@ -863,7 +871,10 @@ export default function ProjectWorkspacePage() {
           variants: updatedVariants,
           selectedVariantId: variantId,
           imageUrl: selectedVariant?.imageUrl || ill.imageUrl,
-          status: "approved" as const,
+          // Selecting a variant is NOT approval. Keep as draft until explicitly approved.
+          status: "draft" as const,
+          approvedVariantId: undefined,
+          approvedImageUrl: undefined,
         };
       }
       return ill;
@@ -881,8 +892,200 @@ export default function ProjectWorkspacePage() {
 
     toast({
       title: "Variant selected",
-      description: "The illustration has been updated with your selection.",
+      description: "Variant selected (not yet approved).",
     });
+  };
+
+  const handleApproveIllustration = (illustrationId: string) => {
+    if (!project) return;
+
+    const illustrationsContent = getArtifactContent<IllustrationArtifactItem[]>(project, "illustrations");
+    if (!illustrationsContent) return;
+
+    const now = new Date().toISOString();
+
+    const updatedIllustrations = illustrationsContent.map((ill) => {
+      if (ill.id !== illustrationId) return ill;
+
+      const selectedVariantId = ill.selectedVariantId || ill.variants?.find((v) => v.selected)?.id;
+      const selectedVariant = ill.variants?.find((v) => v.id === selectedVariantId);
+
+      return {
+        ...ill,
+        status: "approved" as const,
+        approvedVariantId: selectedVariantId,
+        approvedImageUrl: selectedVariant?.imageUrl || ill.imageUrl,
+        history: [
+          ...(ill.history || []),
+          {
+            at: now,
+            action: "approved" as const,
+            variantId: selectedVariantId,
+            seed: selectedVariant?.seed,
+            prompt: ill.promptOverride || ill.prompt,
+          },
+        ],
+      };
+    });
+
+    addArtifact(project.id, "illustrations", {
+      type: "illustrations" as const,
+      content: updatedIllustrations,
+      generatedAt: now,
+    });
+
+    refreshProject();
+
+    toast({
+      title: "Illustration approved",
+      description: "This illustration is now locked as approved.",
+    });
+  };
+
+  const handleOpenEditPrompt = (ill: IllustrationArtifactItem) => {
+    setPromptDraft(ill.promptOverride || ill.prompt || "");
+    setPromptEditorOpen(true);
+  };
+
+  const handleSavePromptOverride = (illustrationId: string) => {
+    if (!project) return;
+
+    const illustrationsContent = getArtifactContent<IllustrationArtifactItem[]>(project, "illustrations");
+    if (!illustrationsContent) return;
+
+    const now = new Date().toISOString();
+
+    const updatedIllustrations = illustrationsContent.map((ill) => {
+      if (ill.id !== illustrationId) return ill;
+      return {
+        ...ill,
+        promptOverride: promptDraft,
+        history: [
+          ...(ill.history || []),
+          { at: now, action: "prompt_edited" as const, prompt: promptDraft },
+        ],
+      };
+    });
+
+    addArtifact(project.id, "illustrations", {
+      type: "illustrations" as const,
+      content: updatedIllustrations,
+      generatedAt: now,
+    });
+
+    refreshProject();
+    setPromptEditorOpen(false);
+
+    toast({
+      title: "Prompt updated",
+      description: "Your prompt edits will be used for regenerations.",
+    });
+  };
+
+  const handleRegenerateIllustration = async (illustrationId: string) => {
+    if (!project) return;
+
+    const illustrationsContent = getArtifactContent<IllustrationArtifactItem[]>(project, "illustrations");
+    if (!illustrationsContent) return;
+
+    const target = illustrationsContent.find((i) => i.id === illustrationId);
+    if (!target) return;
+
+    const promptToUse = target.promptOverride || target.prompt;
+    if (!promptToUse) {
+      toast({
+        title: "Missing prompt",
+        description: "No prompt found to regenerate this illustration.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsIllustrationUpdating(true);
+
+    try {
+      const attemptId = `regen-${Date.now()}`;
+      const illustrationWidth = project.illustrationDimensions?.width || 1536;
+      const illustrationHeight = project.illustrationDimensions?.height || 1024;
+
+      const request: ImageGenerationRequest = {
+        prompt: promptToUse,
+        references: target.references,
+        style: target.style,
+        width: illustrationWidth,
+        height: illustrationHeight,
+        stage: "illustrations",
+        attemptId,
+        count: 1,
+        referenceStrength: 0.9,
+      };
+
+      const response = await generateImage(request);
+      const now = new Date().toISOString();
+      const newVariantId = `${illustrationId}-regen-${(target.regenerationCount || 0) + 1}`;
+
+      const updatedIllustrations = illustrationsContent.map((ill) => {
+        if (ill.id !== illustrationId) return ill;
+
+        const newVariant = {
+          id: newVariantId,
+          imageUrl: response.imageUrl,
+          selected: true,
+          generatedAt: now,
+          seed: typeof response.providerMeta?.seed === "number" ? response.providerMeta.seed : undefined,
+          prompt: promptToUse,
+        };
+
+        const updatedVariants = [
+          ...(ill.variants || []).map((v) => ({ ...v, selected: false })),
+          newVariant,
+        ];
+
+        return {
+          ...ill,
+          status: "draft" as const,
+          variants: updatedVariants,
+          selectedVariantId: newVariantId,
+          imageUrl: response.imageUrl,
+          regenerationCount: (ill.regenerationCount || 0) + 1,
+          // Regenerating invalidates previous approval until re-approved.
+          approvedVariantId: undefined,
+          approvedImageUrl: undefined,
+          history: [
+            ...(ill.history || []),
+            {
+              at: now,
+              action: "regenerated" as const,
+              variantId: newVariantId,
+              seed: newVariant.seed,
+              prompt: promptToUse,
+            },
+          ],
+        };
+      });
+
+      addArtifact(project.id, "illustrations", {
+        type: "illustrations" as const,
+        content: updatedIllustrations,
+        generatedAt: now,
+      });
+
+      refreshProject();
+
+      toast({
+        title: "Regenerated",
+        description: "A new variant was generated. Review and approve when ready.",
+      });
+    } catch (err) {
+      console.error("Failed to regenerate illustration:", err);
+      toast({
+        title: "Regeneration failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsIllustrationUpdating(false);
+    }
   };
 
   const getStageIcon = (stageId: string) => {
@@ -2099,13 +2302,72 @@ follows Islamic guidelines for children's content.
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={() => setSelectedIllustration(null)}>
-                  Close
-                </Button>
+              <div className="flex items-center justify-between gap-2 pt-4 border-t">
+                <div className="text-xs text-muted-foreground">
+                  {selectedIllustration.status === "approved" ? (
+                    <span>Approved variant locked.</span>
+                  ) : (
+                    <span>Select a variant, then approve.</span>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => selectedIllustration && handleOpenEditPrompt(selectedIllustration)}
+                    disabled={isIllustrationUpdating}
+                  >
+                    ✏️ Edit Prompt
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => selectedIllustration && handleRegenerateIllustration(selectedIllustration.id)}
+                    disabled={isIllustrationUpdating}
+                  >
+                    ↻ Regenerate
+                  </Button>
+                  <Button
+                    onClick={() => selectedIllustration && handleApproveIllustration(selectedIllustration.id)}
+                    disabled={isIllustrationUpdating}
+                  >
+                    ✓ Approve
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedIllustration(null)}>
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Prompt Modal */}
+      <Dialog open={promptEditorOpen} onOpenChange={(open) => !open && setPromptEditorOpen(false)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit illustration prompt</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Edit the prompt for this illustration. Your changes will be used for regenerations.
+            </p>
+            <Textarea
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              className="min-h-[220px]"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setPromptEditorOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => selectedIllustration && handleSavePromptOverride(selectedIllustration.id)}
+                disabled={!selectedIllustration}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </AppLayout >

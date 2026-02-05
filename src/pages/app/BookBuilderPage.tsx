@@ -14,6 +14,8 @@ import { ArrowLeft, ArrowRight, Globe, BookOpen, Type, Users, Layout, Check, Loc
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getNamespacedKey } from "@/lib/storage/keys";
+import { importStoryToChapters } from "@/lib/storyImport";
+import { addArtifact, updatePipelineStage, updateProject } from "@/lib/storage/projectsStore";
 import {
   getCharacters,
   StoredCharacter,
@@ -35,6 +37,7 @@ import {
 import { listProjects } from "@/lib/storage/projectsStore";
 import { canCreateProject } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
+import { ChapterArtifactItem, OutlineArtifactContent } from "@/lib/types/artifacts";
 
 const steps = [
   { id: 1, title: "Universe", icon: Globe, description: "Universe & KB" },
@@ -150,6 +153,11 @@ export default function BookBuilderPage() {
     exportTargets: ["pdf"] as ExportTarget[],
   });
 
+  // Story import (quick win): allow pasting an existing story (e.g., Google Docs)
+  const [importedStoryText, setImportedStoryText] = useState<string>("");
+  const [importedChaptersPreview, setImportedChaptersPreview] = useState<ReturnType<typeof importStoryToChapters>>([]);
+  const [useImportedStory, setUseImportedStory] = useState<boolean>(false);
+
   // Load characters, knowledge bases, and project count on mount
   useEffect(() => {
     seedDemoCharactersIfEmpty();
@@ -191,6 +199,17 @@ export default function BookBuilderPage() {
     saveAutosave(autosaveData);
     setLastSaved(autosaveData.savedAt);
   }, [formData, currentStep]);
+
+  // Build chapter preview from pasted story
+  useEffect(() => {
+    const chapters = importStoryToChapters(importedStoryText);
+    setImportedChaptersPreview(chapters);
+
+    // Auto-enable when content is present
+    if (importedStoryText.trim().length > 0) {
+      setUseImportedStory(true);
+    }
+  }, [importedStoryText]);
 
   const updateForm = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -281,6 +300,62 @@ export default function BookBuilderPage() {
         trimSize: formData.trimSize as TrimSize,
         exportTargets: formData.exportTargets,
       });
+
+      // If a story was imported, pre-seed outline/chapters artifacts and mark stages completed.
+      if (useImportedStory && importedChaptersPreview.length > 0) {
+        const now = new Date().toISOString();
+
+        const chaptersArtifact: ChapterArtifactItem[] = importedChaptersPreview.map((ch) => ({
+          chapterNumber: ch.chapterNumber,
+          title: ch.title,
+          content: ch.content,
+          wordCount: ch.wordCount,
+        }));
+
+        const outlineArtifact: OutlineArtifactContent = {
+          chapters: chaptersArtifact.map((c) => c.title),
+          synopsis: formData.synopsis,
+          kbApplied: formData.knowledgeBaseName || null,
+        };
+
+        addArtifact(project.id, "storyImport", {
+          type: "meta" as const,
+          content: {
+            source: "paste",
+            rawText: importedStoryText,
+            detectedChapters: importedChaptersPreview.length,
+          },
+          generatedAt: now,
+        });
+
+        addArtifact(project.id, "outline", {
+          type: "outline" as const,
+          content: outlineArtifact,
+          generatedAt: now,
+        });
+
+        addArtifact(project.id, "chapters", {
+          type: "chapters" as const,
+          content: chaptersArtifact,
+          generatedAt: now,
+        });
+
+        updatePipelineStage(project.id, "outline", {
+          status: "completed",
+          progress: 100,
+          completedAt: now,
+        });
+
+        updatePipelineStage(project.id, "chapters", {
+          status: "completed",
+          progress: 100,
+          completedAt: now,
+        });
+
+        updateProject(project.id, {
+          currentStage: "illustrations",
+        });
+      }
 
       // Clear autosave on successful creation
       clearAutosave();
@@ -564,6 +639,43 @@ export default function BookBuilderPage() {
                 placeholder="Brief description of the story (2-3 sentences)..."
                 rows={3}
               />
+            </div>
+
+            {/* Story Import (Paste your story) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Paste your story (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="useImportedStory"
+                    checked={useImportedStory}
+                    onCheckedChange={(v) => setUseImportedStory(Boolean(v))}
+                    disabled={importedStoryText.trim().length === 0}
+                  />
+                  <Label htmlFor="useImportedStory" className="text-sm text-muted-foreground">
+                    Use imported story (skip AI chapter writing)
+                  </Label>
+                </div>
+              </div>
+              <Textarea
+                value={importedStoryText}
+                onChange={(e) => setImportedStoryText(e.target.value)}
+                placeholder="Paste from Google Docs or plain text. We'll auto-detect chapters (e.g., 'Chapter 1')."
+                rows={8}
+              />
+              {importedChaptersPreview.length > 0 && (
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-sm font-medium mb-2">Detected chapters</p>
+                  <div className="space-y-2 max-h-[180px] overflow-auto">
+                    {importedChaptersPreview.map((ch) => (
+                      <div key={ch.chapterNumber} className="text-sm">
+                        <span className="font-medium">{ch.title}</span>
+                        <span className="text-muted-foreground"> • {ch.wordCount} words</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Learning Objective */}
