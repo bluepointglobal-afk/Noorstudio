@@ -20,6 +20,7 @@ const CLAUDE_API_KEY = env.CLAUDE_API_KEY || "";
 const OPENAI_API_KEY = env.OPENAI_API_KEY || "";
 const NANOBANANA_API_KEY = env.NANOBANANA_API_KEY || "";
 const GOOGLE_API_KEY = env.GOOGLE_API_KEY || "";
+const REPLICATE_API_TOKEN = env.REPLICATE_API_TOKEN || "";
 const MAX_RETRIES = parseInt(process.env.AI_MAX_RETRIES || "2", 10);
 
 // Initialize Claude client if key is available
@@ -32,6 +33,13 @@ if (CLAUDE_API_KEY && TEXT_PROVIDER === "claude") {
 let openaiClient: OpenAI | null = null;
 if (OPENAI_API_KEY) {
   openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
+}
+
+// Initialize Replicate provider if token is available
+import { ReplicateProvider } from "../lib/replicateProvider";
+let replicateProvider: ReplicateProvider | null = null;
+if (REPLICATE_API_TOKEN && IMAGE_PROVIDER === "replicate") {
+  replicateProvider = new ReplicateProvider(REPLICATE_API_TOKEN);
 }
 
 // ============================================
@@ -542,6 +550,79 @@ router.post("/text", async (req: Request, res: Response) => {
 });
 
 // ============================================
+// OpenAI DALL-E 3 Provider
+// ============================================
+
+async function openaiImageGeneration(
+  req: ImageRequest,
+  retryCount = 0
+): Promise<ImageResponse> {
+  if (!openaiClient) {
+    throw new Error("OpenAI client not initialized. Check OPENAI_API_KEY.");
+  }
+
+  try {
+    if (env.NODE_ENV === "development") {
+      console.log("OpenAI DALL-E 3 image generation:", {
+        task: req.task,
+        promptLength: req.prompt.length,
+        style: req.style,
+      });
+    }
+
+    // Enhance prompt for Islamic children's book style
+    const enhancedPrompt = `${req.prompt}
+
+Style: Warm, inviting children's book illustration with Islamic aesthetic. 
+Characters wear modest clothing (long sleeves, loose clothing, hijabs for girls/women). 
+Diverse Muslim characters with Middle Eastern, South Asian, or African features. 
+Family-friendly, wholesome scenes. Soft, gentle colors. 2D illustrated style like high-quality picture books.
+
+Important: No text, no words, no letters, no numbers, no signatures, no watermarks.`;
+
+    const response = await openaiClient.images.generate({
+      model: "dall-e-3",
+      prompt: enhancedPrompt,
+      size: req.task === "cover" ? "1024x1792" : "1792x1024", // Portrait for cover, landscape for illustrations
+      quality: "standard",
+      n: 1,
+      response_format: "url",
+      style: "vivid",
+    });
+
+    const imageUrl = response.data[0]?.url;
+    
+    if (!imageUrl) {
+      throw new Error("No image URL returned from OpenAI API");
+    }
+
+    return {
+      imageUrl,
+      provider: "openai",
+      providerMeta: {
+        model: "dall-e-3",
+        task: req.task,
+        size: req.task === "cover" ? "1024x1792" : "1792x1024",
+        style: req.style || "vivid",
+        revisedPrompt: response.data[0]?.revised_prompt,
+      },
+    };
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(`OpenAI API error (attempt ${retryCount + 1}):`, err.message);
+
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`Retrying OpenAI image generation in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return openaiImageGeneration(req, retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
+// ============================================
 // Google Generative AI Provider
 // ============================================
 
@@ -852,6 +933,102 @@ function truncateText(text: string, maxLen: number): string {
   return cleaned.length > maxLen ? cleaned.substring(0, maxLen) + "..." : cleaned;
 }
 
+// ============================================
+// Replicate Provider (Character Consistency)
+// ============================================
+
+async function replicateImageGeneration(
+  req: ImageRequest,
+  retryCount = 0
+): Promise<ImageResponse> {
+  if (!replicateProvider) {
+    throw new Error("Replicate provider not initialized. Check REPLICATE_API_TOKEN.");
+  }
+
+  try {
+    if (env.NODE_ENV === "development") {
+      console.log("Replicate character-consistent generation:", {
+        task: req.task,
+        promptLength: req.prompt.length,
+        hasReferences: (req.references?.length || 0) > 0,
+        seed: req.seed,
+      });
+    }
+
+    // Default sizes based on task type
+    const defaultSize = req.task === "cover"
+      ? { width: 1024, height: 1536 } // 2:3 ratio for book covers
+      : { width: 1024, height: 768 };  // 4:3 ratio for illustrations
+
+    const width = req.size?.width || defaultSize.width;
+    const height = req.size?.height || defaultSize.height;
+
+    // Build comprehensive negative prompt
+    const negativePrompt = req.task === "cover"
+      ? [
+          // Text prevention (CRITICAL for covers)
+          "text", "words", "letters", "numbers", "title", "author", "signature",
+          "watermark", "logo", "barcode", "typography", "font", "writing",
+          // Quality issues
+          "blurry", "distorted", "low quality", "pixelated", "artifacts",
+          "bad anatomy", "deformed", "ugly", "mutated",
+          // Content issues
+          "scary", "violent", "inappropriate", "revealing clothing",
+        ].join(", ")
+      : [
+          // Character consistency (CRITICAL for illustrations)
+          "different face", "changed appearance", "wrong skin tone", "inconsistent character",
+          "missing hijab", "different hair color", "wrong clothing", "character variation",
+          "text", "words", "letters", "numbers", "watermark",
+          // Quality issues
+          "blurry", "distorted", "low quality", "artifacts", "bad anatomy", "deformed",
+          // Content issues
+          "scary", "violent", "inappropriate", "revealing clothing",
+        ].join(", ");
+
+    // Extract character reference from references array (first one is character ref)
+    const characterRefUrl = req.references && req.references.length > 0
+      ? req.references[0]
+      : undefined;
+
+    const result = await replicateProvider.generateImage({
+      prompt: req.prompt,
+      subjectImageUrl: characterRefUrl,
+      negativePrompt,
+      width,
+      height,
+      seed: req.seed,
+      numOutputs: req.count || 1,
+      guidanceScale: req.task === "cover" ? 8.5 : 7.5,
+      numInferenceSteps: req.task === "cover" ? 35 : 30,
+      referenceStrength: req.referenceStrength || 0.8,
+    });
+
+    return {
+      imageUrl: result.imageUrl,
+      providerMeta: {
+        model: result.model,
+        seed: result.seed,
+        processingTime: result.processingTimeMs,
+        characterReference: characterRefUrl ? "used" : "none",
+      },
+      provider: "replicate",
+    };
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(`Replicate API error (attempt ${retryCount + 1}):`, err.message);
+
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`Retrying Replicate image generation in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return replicateImageGeneration(req, retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
 // Image generation endpoint
 router.post("/image", async (req: Request, res: Response) => {
   try {
@@ -881,12 +1058,14 @@ router.post("/image", async (req: Request, res: Response) => {
 
     let response: ImageResponse;
 
-    if (IMAGE_PROVIDER === "nanobanana") {
+    if (IMAGE_PROVIDER === "replicate" && replicateProvider) {
+      response = await replicateImageGeneration(body);
+    } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
+      response = await openaiImageGeneration(body);
+    } else if (IMAGE_PROVIDER === "nanobanana") {
       response = await nanobananaImageGeneration(body);
     } else if (IMAGE_PROVIDER === "google") {
       response = await googleImageGeneration(body);
-    } else if (IMAGE_PROVIDER === "claude-local") {
-      response = await claudeLocalImageGeneration(body);
     } else {
       response = await mockImageGeneration(body);
     }
@@ -953,9 +1132,11 @@ router.get("/status", (_req: Request, res: Response) => {
     textProvider: TEXT_PROVIDER,
     imageProvider: IMAGE_PROVIDER,
     claudeConfigured: !!CLAUDE_API_KEY,
+    openaiConfigured: !!OPENAI_API_KEY,
     nanobananaConfigured: !!NANOBANANA_API_KEY,
     googleConfigured: !!GOOGLE_API_KEY,
-    claudeLocalConfigured: IMAGE_PROVIDER === "claude-local" && !!CLAUDE_API_KEY,
+    replicateConfigured: !!REPLICATE_API_TOKEN,
+    replicateModel: replicateProvider?.getModelInfo()?.model,
     apiTimeoutMs: API_TIMEOUT_MS,
   });
 });

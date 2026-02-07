@@ -10,7 +10,7 @@ import { authenticatedFetch } from "@/lib/utils/api";
 
 export interface ImageGenerationRequest {
   prompt: string;
-  references?: string[]; // URLs to reference images (e.g., pose sheets)
+  references?: string[]; // URLs to reference images (e.g., pose sheets, character refs)
   style?: string;
   width?: number;
   height?: number;
@@ -27,8 +27,15 @@ export interface ImageGenerationRequest {
   /**
    * Optional reference/image consistency strength (provider-specific).
    * Higher values = stronger adherence to reference images.
+   * Range: 0.0 - 1.0 (0.8-0.9 recommended for character consistency)
    */
   referenceStrength?: number;
+
+  /**
+   * Character reference URL for IP-Adapter based consistency.
+   * This is the primary reference image that defines the character's appearance.
+   */
+  characterReference?: string;
 }
 
 export interface ImageGenerationResponse {
@@ -195,6 +202,15 @@ async function nanobananaImageGeneration(
   // Create new abort controller for this request
   _imageAbortController = new AbortController();
 
+  // Build references array with character reference first (if provided)
+  const references: string[] = [];
+  if (request.characterReference) {
+    references.push(request.characterReference);
+  }
+  if (request.references) {
+    references.push(...request.references);
+  }
+
   try {
     // Make API call to server proxy
     const response = await authenticatedFetch(config.imageProxyUrl, {
@@ -204,7 +220,7 @@ async function nanobananaImageGeneration(
       },
       body: JSON.stringify({
         prompt: request.prompt,
-        references: request.references,
+        references: references.length > 0 ? references : undefined,
         style: request.style,
         width: request.width,
         height: request.height,
