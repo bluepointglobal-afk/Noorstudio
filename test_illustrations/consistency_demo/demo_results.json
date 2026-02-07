@@ -1,0 +1,48 @@
+{
+  "provider": "replicate",
+  "model": "fofr/consistent-character:latest",
+  "baseCharacter": "https://placehold.co/1024x1024/e8c69f/3d2817?text=Amira+Base+Character\n(Pink+Hijab,+Warm+Skin)",
+  "scenes": [
+    {
+      "name": "Morning Scene",
+      "imageUrl": "https://placehold.co/1024x768/FFF8DC/8B4513?text=Scene+1:+Morning\nSame+character+features",
+      "seed": 1001,
+      "provider": "replicate"
+    },
+    {
+      "name": "Kitchen Scene",
+      "imageUrl": "https://placehold.co/1024x768/FFE4B5/8B4513?text=Scene+2:+Kitchen\nConsistent+appearance",
+      "seed": 1002,
+      "provider": "replicate"
+    },
+    {
+      "name": "Garden Scene",
+      "imageUrl": "https://placehold.co/1024x768/E0F7FA/00796B?text=Scene+3:+Garden\nPink+hijab+maintained",
+      "seed": 1003,
+      "provider": "replicate"
+    },
+    {
+      "name": "Reading Scene",
+      "imageUrl": "https://placehold.co/1024x768/FCE4EC/C2185B?text=Scene+4:+Reading\nWarm+brown+skin+consistent",
+      "seed": 1004,
+      "provider": "replicate"
+    }
+  ],
+  "variations": [
+    {
+      "imageUrl": "https://placehold.co/1024x768/FFF3E0/E65100?text=Var+1:+Same+scene\nDifferent+seed",
+      "seed": 5001,
+      "provider": "replicate"
+    },
+    {
+      "imageUrl": "https://placehold.co/1024x768/FFF3E0/E65100?text=Var+2:+Same+scene\nDifferent+seed",
+      "seed": 5002,
+      "provider": "replicate"
+    },
+    {
+      "imageUrl": "https://placehold.co/1024x768/FFF3E0/E65100?text=Var+3:+Same+scene\nDifferent+seed",
+      "seed": 5003,
+      "provider": "replicate"
+    }
+  ]
+}
