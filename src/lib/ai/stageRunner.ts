@@ -541,6 +541,10 @@ export async function runIllustrationsStage(
   const generatedIllustrations: IllustrationArtifactItem[] = [];
   let completedGenerations = 0;
 
+  // IMG2IMG Architecture: Store first chapter's illustration as character reference
+  // This provides true image-to-image consistency instead of just seed reuse
+  let characterConsistencyReference: string | undefined;
+  
   // Consistency seed: we capture the first successful provider seed and reuse it
   // across subsequent img2img generations to reduce character drift.
   let globalConsistencySeed: number | undefined;
@@ -549,7 +553,7 @@ export async function runIllustrationsStage(
     stage: "illustrations",
     status: "running",
     progress: 5,
-    message: `Generating ${totalChapters} illustrations (${VARIANTS_PER_ILLUSTRATION} variants each)...`,
+    message: `Generating ${totalChapters} illustrations (${VARIANTS_PER_ILLUSTRATION} variants each) with img2img consistency...`,
   });
 
   try {
@@ -579,6 +583,14 @@ export async function runIllustrationsStage(
         kbSummary,
       });
 
+      // IMG2IMG Enhancement: Add first chapter's illustration as reference for consistency
+      const enhancedReferences = [...promptResult.references];
+      if (characterConsistencyReference && i > 0) {
+        // Prepend the character reference so it has priority
+        enhancedReferences.unshift(characterConsistencyReference);
+        console.log(`[IMG2IMG] Chapter ${chapterNum}: Using first chapter illustration as character reference`);
+      }
+
       const illustrationId = `ill-ch${chapterNum}-${generateAttemptId().substring(0, 8)}`;
       const variants: IllustrationVariant[] = [];
 
@@ -591,11 +603,15 @@ export async function runIllustrationsStage(
         completedGenerations++;
         const overallProgress = Math.round((completedGenerations / totalGenerations) * 90) + 5;
 
+        const progressMessage = i === 0 
+          ? `Chapter ${chapterNum}: Generating base character reference (variant ${v + 1}/${VARIANTS_PER_ILLUSTRATION})...`
+          : `Chapter ${chapterNum}: Generating with img2img reference (variant ${v + 1}/${VARIANTS_PER_ILLUSTRATION})...`;
+
         onProgress({
           stage: "illustrations",
           status: "running",
           progress: overallProgress,
-          message: `Chapter ${chapterNum}: Generating variant ${v + 1}/${VARIANTS_PER_ILLUSTRATION}...`,
+          message: progressMessage,
           subProgress: {
             current: completedGenerations,
             total: totalGenerations,
@@ -608,9 +624,14 @@ export async function runIllustrationsStage(
           // Use project dimensions or defaults (landscape for spreads)
           const illustrationWidth = project.illustrationDimensions?.width || 1536;
           const illustrationHeight = project.illustrationDimensions?.height || 1024;
+          
+          // Adjust reference strength based on whether we're using img2img
+          // Higher strength for img2img to enforce character consistency
+          const referenceStrength = characterConsistencyReference && i > 0 ? 0.95 : 0.85;
+          
           const request: ImageGenerationRequest = {
             prompt: promptResult.prompt,
-            references: promptResult.references,
+            references: enhancedReferences,
             style: promptResult.style,
             width: illustrationWidth,
             height: illustrationHeight,
@@ -618,9 +639,9 @@ export async function runIllustrationsStage(
             attemptId,
             count: 1,
 
-            // Enforce cross-chapter identity consistency
+            // Enforce cross-chapter identity consistency with seed + img2img
             seed: globalConsistencySeed,
-            referenceStrength: 0.9,
+            referenceStrength,
           };
 
           const response = await generateImage(request);
@@ -629,6 +650,12 @@ export async function runIllustrationsStage(
           const providerSeed = response.providerMeta?.seed;
           if (globalConsistencySeed === undefined && typeof providerSeed === "number") {
             globalConsistencySeed = providerSeed;
+          }
+
+          // Store first illustration as character reference for subsequent chapters
+          if (i === 0 && v === 0 && !characterConsistencyReference) {
+            characterConsistencyReference = response.imageUrl;
+            console.log(`[IMG2IMG] Captured first chapter illustration as character reference: ${characterConsistencyReference.substring(0, 50)}...`);
           }
 
           variants.push({
@@ -658,7 +685,7 @@ export async function runIllustrationsStage(
         selectedVariantId: variants[0]?.id,
         characterIds: characters.map((c) => c.id),
         prompt: promptResult.prompt,
-        references: promptResult.references,
+        references: enhancedReferences, // Store the enhanced references including img2img ref
         style: promptResult.style,
         regenerationCount: 0,
         history: variants.length
@@ -676,11 +703,15 @@ export async function runIllustrationsStage(
       generatedIllustrations.push(illustration);
     }
 
+    const consistencyMethod = characterConsistencyReference 
+      ? "img2img + seed" 
+      : "seed-only (no multi-chapter)";
+    
     onProgress({
       stage: "illustrations",
       status: "completed",
       progress: 100,
-      message: `Generated ${generatedIllustrations.length} illustrations with ${VARIANTS_PER_ILLUSTRATION} variants each`,
+      message: `Generated ${generatedIllustrations.length} illustrations with ${VARIANTS_PER_ILLUSTRATION} variants each (${consistencyMethod})`,
     });
 
     // Track usage

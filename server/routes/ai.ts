@@ -934,6 +934,39 @@ function truncateText(text: string, maxLen: number): string {
 }
 
 // ============================================
+// Style Enhancement Helper
+// ============================================
+
+/**
+ * Build a style-enhanced prompt by prepending style-specific directives.
+ * This ensures the chosen art style is respected even when using generic models.
+ */
+function buildStyleEnhancedPrompt(basePrompt: string, style: string): string {
+  const STYLE_PREFIXES: Record<string, string> = {
+    "pixar-3d": "Pixar-style 3D CGI children's book illustration with soft lighting, subsurface scattering on skin, rounded features, expressive eyes, high-quality render like Disney/Pixar animated films",
+    "watercolor": "Soft traditional watercolor children's book illustration with gentle color bleeding, organic textures, delicate brushstrokes, dreamy quality like classic children's book art",
+    "anime": "Vibrant Japanese anime/manga style children's book illustration with expressive large eyes, dynamic poses, clean linework, cel-shaded coloring, inspired by Studio Ghibli",
+    "manga": "Japanese manga style children's book illustration with expressive large eyes, dynamic poses, clean black linework, screentone shading, manga panel aesthetic",
+    "2d-vector": "Clean modern 2D vector children's book illustration with flat colors, bold outlines, geometric simplification, contemporary aesthetic",
+    "paper-cutout": "Textured paper collage style children's book illustration with visible paper grain, layered cut-paper shapes, handcrafted feel, Eric Carle inspired",
+  };
+
+  const stylePrefix = STYLE_PREFIXES[style] || STYLE_PREFIXES["pixar-3d"];
+  
+  // If prompt already explicitly includes the style keywords, don't duplicate
+  const styleLower = style.toLowerCase();
+  const promptLower = basePrompt.toLowerCase();
+  if (promptLower.includes(styleLower) || 
+      (styleLower === "anime" && promptLower.includes("manga")) ||
+      (styleLower === "manga" && promptLower.includes("anime"))) {
+    return basePrompt;
+  }
+  
+  // Prepend style directive to ensure it's prioritized by the model
+  return `${stylePrefix}.\n\n${basePrompt}`;
+}
+
+// ============================================
 // Replicate Provider (Character Consistency)
 // ============================================
 
@@ -951,6 +984,7 @@ async function replicateImageGeneration(
         task: req.task,
         promptLength: req.prompt.length,
         hasReferences: (req.references?.length || 0) > 0,
+        style: req.style || "pixar-3d",
         seed: req.seed,
       });
     }
@@ -991,8 +1025,19 @@ async function replicateImageGeneration(
       ? req.references[0]
       : undefined;
 
+    // 🔧 FIX: Enhance prompt with style information
+    const styleEnhancedPrompt = buildStyleEnhancedPrompt(
+      req.prompt,
+      req.style || "pixar-3d"
+    );
+
+    if (env.NODE_ENV === "development") {
+      console.log("[Replicate] Using style:", req.style || "pixar-3d");
+      console.log("[Replicate] Prompt enhanced:", styleEnhancedPrompt.substring(0, 150) + "...");
+    }
+
     const result = await replicateProvider.generateImage({
-      prompt: req.prompt,
+      prompt: styleEnhancedPrompt,  // ← Use style-enhanced prompt instead of raw prompt
       subjectImageUrl: characterRefUrl,
       negativePrompt,
       width,

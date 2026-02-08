@@ -1,365 +1,240 @@
 #!/usr/bin/env node
+
 /**
- * NoorStudio Image Generation Test Script
- * Tests the fixed image generation with Claude-local provider
- * Generates test illustrations for book characters
+ * Test Image Generation for NoorStudio
+ * Generates test illustrations for book chapters using Replicate Flux model
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import Anthropic from "@anthropic-ai/sdk";
+import Replicate from "replicate";
+import fs from "fs";
+import https from "https";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Test configuration
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3002';
-const OUTPUT_DIR = path.join(__dirname, 'test_illustrations');
+// Initialize clients
+const claudeClient = new Anthropic({
+  apiKey: process.env.CLAUDE_API_KEY,
+});
 
-// Ensure output directory exists
-if (!fs.existsSync(OUTPUT_DIR)) {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-}
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
-// Test scenes for character consistency verification
-const TEST_SCENES = [
+// Book chapter data
+const chapters = [
   {
-    name: 'amira_intro',
-    description: 'Amira standing in her cozy bedroom, morning light streaming through the window, wearing her pink dress and mauve hijab, with a warm smile on her round face',
-    task: 'illustration',
-    expectedCharacters: ['Amira'],
+    title: "Amira Finds a Toy",
+    character: "Amira",
+    description:
+      "A young Muslim girl finds a lost toy and must decide whether to keep it or return it",
+    key_scene:
+      "Amira holding a beautiful toy, looking uncertain but noble, in her home with Islamic decoration",
   },
   {
-    name: 'layla_intro',
-    description: 'Layla in the schoolyard, wearing her blue dress and blue hijab, her oval face showing a bright smile, kind eyes looking at a book she is holding',
-    task: 'illustration',
-    expectedCharacters: ['Layla'],
+    title: "The Broken Window",
+    character: "Ahmed",
+    description:
+      "A boy accidentally breaks a neighbor's window and must find the courage to admit it",
+    key_scene:
+      "Ahmed standing nervously at a neighbor's door, looking worried but determined to be honest",
   },
   {
-    name: 'ahmed_intro',
-    description: 'Ahmed at the mosque entrance, wearing his green thobe, short dark hair, curious expression on his friendly face, ready for Jummah prayer',
-    task: 'illustration',
-    expectedCharacters: ['Ahmed'],
-  },
-  {
-    name: 'amira_layla_together',
-    description: 'Amira and Layla walking together in the garden, Amira in her pink dress with mauve hijab and Layla in her blue dress with blue hijab, both smiling as they share a moment of friendship',
-    task: 'illustration',
-    expectedCharacters: ['Amira', 'Layla'],
-  },
-  {
-    name: 'all_characters',
-    description: 'Amira, Layla, and Ahmed standing together at the community center, each in their distinctive clothing - Amira in pink, Layla in blue, Ahmed in green - representing the spirit of Muslim community',
-    task: 'illustration',
-    expectedCharacters: ['Amira', 'Layla', 'Ahmed'],
-  },
-  {
-    name: 'front_cover',
-    description: 'Book cover: "The Honest Little Muslim" featuring Amira prominently in her pink dress and mauve hijab, warm Islamic geometric patterns in the background, gold accents, professional children\'s book style',
-    task: 'cover',
-    expectedCharacters: ['Amira'],
+    title: "The Test at School",
+    character: "Amira",
+    description: "Amira faces a difficult test and must resist the temptation to cheat",
+    key_scene:
+      "Amira at her school desk, focused and thoughtful, with classmates studying around her",
   },
 ];
 
-async function testDirectImageGeneration(scene) {
-  console.log(`\n📸 Testing: ${scene.name}`);
-  console.log(`   Description: ${scene.description.substring(0, 60)}...`);
-  console.log(`   Expected characters: ${scene.expectedCharacters.join(', ')}`);
-  
-  const startTime = Date.now();
-  
-  try {
-    const response = await fetch(`${SERVER_URL}/api/ai/image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+/**
+ * Use Claude to generate detailed illustration prompts
+ */
+async function generateImagePrompt(chapterData) {
+  console.log(`\n📝 Generating prompt for: ${chapterData.title}`);
+
+  const response = await claudeClient.messages.create({
+    model: "claude-opus-4-1-20250805",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `You are a children's book illustrator specializing in Islamic-themed stories. Generate a detailed, vivid image prompt for the following chapter:
+
+Title: ${chapterData.title}
+Character: ${chapterData.character}
+Description: ${chapterData.description}
+Key Scene: ${chapterData.key_scene}
+
+Generate a prompt that:
+1. Is suitable for a children's book illustration
+2. Features Islamic aesthetic (modest clothing, hijabs where appropriate, diverse Middle Eastern/South Asian/African features)
+3. Is warm, inviting, and family-friendly
+4. Specifically includes the character ${chapterData.character} with visually distinctive features for consistency
+5. Includes the key scene details
+6. Explicitly says "NO TEXT, NO WORDS, NO WATERMARKS"
+7. Specifies 2D illustrated children's book style
+
+Format: Just the detailed prompt, nothing else.`,
       },
-      body: JSON.stringify({
-        task: scene.task,
-        prompt: scene.description,
-        size: scene.task === 'cover' ? { width: 800, height: 1200 } : { width: 800, height: 600 },
-      }),
+    ],
+  });
+
+  const prompt = response.content[0].type === "text" ? response.content[0].text : "";
+  return prompt;
+}
+
+/**
+ * Generate image using Replicate's Flux model
+ */
+async function generateImage(prompt, chapter_num) {
+  console.log(`🎨 Generating image for prompt (Chapter ${chapter_num})...`);
+  console.log(`📋 Prompt: ${prompt.substring(0, 100)}...`);
+
+  try {
+    const output = await replicate.run("black-forest-labs/flux-1.1-pro-ultra", {
+      prompt: prompt,
+      aspect_ratio: "4:3",
+      num_outputs: 1,
+      output_format: "jpg",
+      quality: 90,
     });
-    
-    const elapsed = Date.now() - startTime;
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      console.log(`   ❌ FAILED (${elapsed}ms): ${JSON.stringify(error)}`);
-      return { success: false, scene: scene.name, error, elapsed };
-    }
-    
-    const data = await response.json();
-    console.log(`   ✅ SUCCESS (${elapsed}ms)`);
-    console.log(`   Provider: ${data.provider}`);
-    
-    // Save the image
-    if (data.imageUrl) {
-      let imageData;
-      let extension;
-      
-      if (data.imageUrl.startsWith('data:image/svg')) {
-        // SVG data URL
-        const base64Data = data.imageUrl.split(',')[1];
-        imageData = Buffer.from(base64Data, 'base64');
-        extension = 'svg';
-      } else if (data.imageUrl.startsWith('data:image/')) {
-        // Other image data URL
-        const matches = data.imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
-        if (matches) {
-          extension = matches[1];
-          imageData = Buffer.from(matches[2], 'base64');
-        }
-      } else {
-        // URL - would need to fetch
-        console.log(`   Image URL: ${data.imageUrl}`);
-      }
-      
-      if (imageData) {
-        const outputPath = path.join(OUTPUT_DIR, `${scene.name}.${extension}`);
-        fs.writeFileSync(outputPath, imageData);
-        console.log(`   📁 Saved: ${outputPath}`);
-      }
-    }
-    
-    return {
-      success: true,
-      scene: scene.name,
-      provider: data.provider,
-      elapsed,
-      meta: data.providerMeta,
-    };
-    
-  } catch (error) {
-    const elapsed = Date.now() - startTime;
-    console.log(`   ❌ ERROR (${elapsed}ms): ${error.message}`);
-    return { success: false, scene: scene.name, error: error.message, elapsed };
-  }
-}
 
-async function checkServerHealth() {
-  console.log('🔍 Checking server health...');
-  try {
-    const response = await fetch(`${SERVER_URL}/api/health`, { timeout: 5000 });
-    const data = await response.json();
-    console.log(`   ✅ Server healthy: ${JSON.stringify(data)}`);
-    return true;
+    if (Array.isArray(output) && output.length > 0) {
+      return output[0]; // URL to the generated image
+    }
+    throw new Error("No output from Replicate");
   } catch (error) {
-    console.log(`   ❌ Server not responding: ${error.message}`);
-    return false;
-  }
-}
-
-async function checkProviderStatus() {
-  console.log('\n🔧 Checking provider status...');
-  try {
-    const response = await fetch(`${SERVER_URL}/api/ai/status`);
-    const data = await response.json();
-    console.log(`   Text Provider: ${data.textProvider}`);
-    console.log(`   Image Provider: ${data.imageProvider}`);
-    console.log(`   Claude Configured: ${data.claudeConfigured}`);
-    console.log(`   Claude-Local Configured: ${data.claudeLocalConfigured}`);
-    console.log(`   API Timeout: ${data.apiTimeoutMs}ms`);
-    return data;
-  } catch (error) {
-    console.log(`   ⚠️ Could not fetch status: ${error.message}`);
+    console.error(`❌ Replicate error:`, error.message);
+    // Fallback: return a placeholder message
     return null;
   }
 }
 
-async function runConsistencyAnalysis(results) {
-  console.log('\n' + '='.repeat(60));
-  console.log('CHARACTER CONSISTENCY ANALYSIS');
-  console.log('='.repeat(60));
-  
-  const successfulResults = results.filter(r => r.success);
-  const failedResults = results.filter(r => !r.success);
-  
-  console.log(`\n✅ Successful generations: ${successfulResults.length}/${results.length}`);
-  console.log(`❌ Failed generations: ${failedResults.length}/${results.length}`);
-  
-  if (successfulResults.length > 0) {
-    console.log('\n📊 Consistency Metrics:');
-    console.log('   Since all illustrations use the same character definitions:');
-    console.log('   - Amira: Pink dress (#F4A9B8), Mauve hijab (#D4A5A5), Round face');
-    console.log('   - Layla: Blue dress (#6B9FD4), Blue hijab (#4A7BA7), Oval face');
-    console.log('   - Ahmed: Green clothing (#4A7B4A), No hijab, Short dark hair');
-    console.log('\n   Character Recognition Score: 100% (programmatic consistency)');
-    console.log('   Color Palette Consistency: 100% (defined in CHARACTER_SPECS)');
-    console.log('   Proportions Consistency: 100% (same generation logic)');
-    console.log('   Style Consistency: 100% (unified SVG template)');
-    console.log('\n   OVERALL CONSISTENCY SCORE: 100%');
-    console.log('   ✅ EXCEEDS TARGET (85%)');
-  }
-  
-  if (failedResults.length > 0) {
-    console.log('\n⚠️ Failed scenes:');
-    failedResults.forEach(r => {
-      console.log(`   - ${r.scene}: ${r.error}`);
-    });
-  }
-  
-  // Calculate average generation time
-  const avgTime = results.reduce((sum, r) => sum + (r.elapsed || 0), 0) / results.length;
-  console.log(`\n⏱️ Average generation time: ${avgTime.toFixed(0)}ms`);
-  
-  return {
-    total: results.length,
-    successful: successfulResults.length,
-    failed: failedResults.length,
-    consistencyScore: successfulResults.length > 0 ? 100 : 0,
-    avgGenerationTime: avgTime,
-  };
+/**
+ * Download image from URL
+ */
+async function downloadImage(imageUrl, filename) {
+  return new Promise((resolve, reject) => {
+    const filepath = path.join(__dirname, "test-images", filename);
+
+    // Create directory if it doesn't exist
+    const dir = path.dirname(filepath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const file = fs.createWriteStream(filepath);
+    https
+      .get(imageUrl, (response) => {
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close();
+          console.log(`✅ Downloaded: ${filename}`);
+          resolve(filepath);
+        });
+      })
+      .on("error", (err) => {
+        fs.unlink(filepath, () => {}); // Delete file on error
+        reject(err);
+      });
+  });
 }
 
-async function main() {
-  console.log('='.repeat(60));
-  console.log('NOORSTUDIO IMAGE GENERATION TEST');
-  console.log('Testing Claude-Local Provider Fix');
-  console.log('='.repeat(60));
-  
-  // Check server health
-  const serverHealthy = await checkServerHealth();
-  if (!serverHealthy) {
-    console.log('\n⚠️ Server not running. Starting server...');
-    console.log('   Run: cd server && npm run dev');
-    console.log('   Then re-run this test.');
-    
-    // Generate illustrations directly without server (fallback)
-    console.log('\n🔄 Generating illustrations using direct SVG generation...');
-    await generateDirectSVGIllustrations();
-    return;
+/**
+ * Main test function
+ */
+async function runImageGenerationTests() {
+  console.log("🚀 NoorStudio Image Generation Test");
+  console.log("=====================================\n");
+
+  if (!process.env.CLAUDE_API_KEY) {
+    console.error("❌ CLAUDE_API_KEY not set");
+    process.exit(1);
   }
-  
-  // Check provider status
-  await checkProviderStatus();
-  
-  // Run tests for each scene
-  console.log('\n' + '='.repeat(60));
-  console.log('GENERATING TEST ILLUSTRATIONS');
-  console.log('='.repeat(60));
-  
+
+  if (!process.env.REPLICATE_API_TOKEN) {
+    console.error("❌ REPLICATE_API_TOKEN not set");
+    console.log("ℹ️  Get one at: https://replicate.com/account/api-tokens");
+    process.exit(1);
+  }
+
   const results = [];
-  for (const scene of TEST_SCENES) {
-    const result = await testDirectImageGeneration(scene);
-    results.push(result);
+
+  for (let i = 0; i < chapters.length; i++) {
+    const chapter = chapters[i];
+    console.log(`\n📖 Chapter ${i + 1}: ${chapter.title}`);
+    console.log("─".repeat(50));
+
+    try {
+      // Step 1: Generate prompt using Claude
+      const prompt = await generateImagePrompt(chapter);
+      console.log(`✅ Prompt generated (${prompt.length} chars)`);
+
+      // Step 2: Generate image using Replicate
+      const imageUrl = await generateImage(prompt, i + 1);
+
+      if (!imageUrl) {
+        console.log("⚠️  Skipped (no valid output)");
+        results.push({
+          chapter: chapter.title,
+          status: "failed",
+          error: "No valid image URL",
+        });
+        continue;
+      }
+
+      // Step 3: Download and save image
+      const filename = `chapter-${i + 1}-${chapter.character.toLowerCase()}.jpg`;
+      const filepath = await downloadImage(imageUrl, filename);
+
+      results.push({
+        chapter: chapter.title,
+        character: chapter.character,
+        status: "success",
+        image_url: imageUrl,
+        local_file: filepath,
+        prompt: prompt.substring(0, 200),
+      });
+
+      console.log(`🎉 Image generated successfully!`);
+    } catch (error) {
+      console.error(`❌ Error:`, error.message);
+      results.push({
+        chapter: chapter.title,
+        status: "error",
+        error: error.message,
+      });
+    }
+
+    // Rate limiting: wait between requests
+    if (i < chapters.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
   }
-  
-  // Run consistency analysis
-  const analysis = await runConsistencyAnalysis(results);
-  
+
   // Summary
-  console.log('\n' + '='.repeat(60));
-  console.log('TEST SUMMARY');
-  console.log('='.repeat(60));
-  console.log(`Total tests: ${analysis.total}`);
-  console.log(`Passed: ${analysis.successful}`);
-  console.log(`Failed: ${analysis.failed}`);
-  console.log(`Consistency Score: ${analysis.consistencyScore}%`);
-  console.log(`Output directory: ${OUTPUT_DIR}`);
-  console.log('='.repeat(60));
+  console.log("\n\n📊 Test Results Summary");
+  console.log("=====================================");
+  console.log(JSON.stringify(results, null, 2));
+
+  const successful = results.filter((r) => r.status === "success").length;
+  console.log(
+    `\n✅ Success: ${successful}/${chapters.length} images generated`
+  );
+
+  return successful > 0;
 }
 
-// Direct SVG generation fallback (when server is not running)
-async function generateDirectSVGIllustrations() {
-  const CHARACTER_SPECS = {
-    amira: {
-      name: "Amira",
-      skinTone: "#E8C69F",
-      hijabColor: "#D4A5A5",
-      clothingColor: "#F4A9B8",
-    },
-    layla: {
-      name: "Layla",
-      skinTone: "#D4A574",
-      hijabColor: "#4A7BA7",
-      clothingColor: "#6B9FD4",
-    },
-    ahmed: {
-      name: "Ahmed",
-      skinTone: "#D4A574",
-      hijabColor: "none",
-      clothingColor: "#4A7B4A",
-    },
-  };
-  
-  for (const scene of TEST_SCENES) {
-    console.log(`\n📸 Generating: ${scene.name}`);
-    
-    const width = scene.task === 'cover' ? 800 : 800;
-    const height = scene.task === 'cover' ? 1200 : 600;
-    
-    // Detect characters
-    const hasAmira = scene.description.toLowerCase().includes('amira');
-    const hasLayla = scene.description.toLowerCase().includes('layla');
-    const hasAhmed = scene.description.toLowerCase().includes('ahmed');
-    
-    let characterElements = '';
-    let charX = width * 0.3;
-    
-    const generateChar = (char, x, y, scale) => {
-      const headSize = scale * 0.3;
-      const bodyHeight = scale * 0.5;
-      const hasHijab = char.hijabColor !== 'none';
-      
-      return `
-        <g transform="translate(${x}, ${y})">
-          <ellipse cx="0" cy="${bodyHeight * 0.4}" rx="${headSize * 0.8}" ry="${bodyHeight * 0.5}" fill="${char.clothingColor}"/>
-          <circle cx="0" cy="-${headSize * 0.5}" r="${headSize}" fill="${char.skinTone}"/>
-          ${hasHijab ? `
-            <ellipse cx="0" cy="-${headSize * 0.7}" rx="${headSize * 1.1}" ry="${headSize * 0.9}" fill="${char.hijabColor}"/>
-            <ellipse cx="0" cy="-${headSize * 0.3}" rx="${headSize * 0.95}" ry="${headSize * 0.7}" fill="${char.skinTone}"/>
-          ` : `
-            <ellipse cx="0" cy="-${headSize * 0.8}" rx="${headSize * 0.9}" ry="${headSize * 0.5}" fill="#2C2C2C"/>
-          `}
-          <circle cx="-${headSize * 0.25}" cy="-${headSize * 0.5}" r="${headSize * 0.08}" fill="#3D2817"/>
-          <circle cx="${headSize * 0.25}" cy="-${headSize * 0.5}" r="${headSize * 0.08}" fill="#3D2817"/>
-          <path d="M-${headSize * 0.15},-${headSize * 0.25} Q0,-${headSize * 0.15} ${headSize * 0.15},-${headSize * 0.25}" stroke="#3D2817" stroke-width="2" fill="none"/>
-          <text x="0" y="${bodyHeight * 0.7}" font-family="Arial" font-size="12" fill="#333" text-anchor="middle" font-weight="bold">${char.name}</text>
-        </g>`;
-    };
-    
-    if (hasAmira) {
-      characterElements += generateChar(CHARACTER_SPECS.amira, charX, height * 0.55, height * 0.35);
-      charX += width * 0.25;
-    }
-    if (hasLayla) {
-      characterElements += generateChar(CHARACTER_SPECS.layla, charX, height * 0.55, height * 0.35);
-      charX += width * 0.25;
-    }
-    if (hasAhmed) {
-      characterElements += generateChar(CHARACTER_SPECS.ahmed, charX, height * 0.55, height * 0.35);
-    }
-    
-    const palette = scene.task === 'cover' 
-      ? { bg: ['#1e5282', '#2e82c2', '#4ea2e2'], accent: '#FFD700', text: '#FFFFFF' }
-      : { bg: ['#FFF3E0', '#FFE0B2', '#FFCC80'], accent: '#E65100', text: '#BF360C' };
-    
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:${palette.bg[0]};stop-opacity:1" />
-      <stop offset="50%" style="stop-color:${palette.bg[1]};stop-opacity:1" />
-      <stop offset="100%" style="stop-color:${palette.bg[2]};stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <rect width="${width}" height="${height}" fill="url(#bgGradient)"/>
-  <rect x="15" y="15" width="${width - 30}" height="${height - 30}" fill="none" stroke="${palette.accent}" stroke-width="3" rx="10"/>
-  <rect x="25" y="25" width="${width - 50}" height="${height - 50}" fill="none" stroke="${palette.accent}" stroke-width="1.5" rx="8" stroke-dasharray="10,5"/>
-  ${characterElements}
-  <rect x="40" y="${height - 100}" width="${width - 80}" height="70" fill="white" fill-opacity="0.85" rx="8"/>
-  <text x="${width / 2}" y="${height - 60}" font-family="Georgia, serif" font-size="14" fill="${palette.text}" text-anchor="middle">${scene.name.replace(/_/g, ' ').toUpperCase()}</text>
-  <text x="${width / 2}" y="${height - 40}" font-family="Georgia, serif" font-size="12" fill="${palette.text}" text-anchor="middle" opacity="0.7">NoorStudio - Character Consistency Test</text>
-</svg>`;
-    
-    const outputPath = path.join(OUTPUT_DIR, `${scene.name}.svg`);
-    fs.writeFileSync(outputPath, svg);
-    console.log(`   ✅ Generated: ${outputPath}`);
-  }
-  
-  console.log('\n📊 Direct generation complete!');
-  console.log(`   Output directory: ${OUTPUT_DIR}`);
-  console.log('   Character consistency: 100% (programmatic)');
-}
-
-main().catch(console.error);
+// Run the test
+runImageGenerationTests()
+  .then((success) => {
+    process.exit(success ? 0 : 1);
+  })
+  .catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
