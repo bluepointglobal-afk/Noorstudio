@@ -16,6 +16,11 @@ import {
   preflightCoverGeneration,
   validateSceneCharacters,
 } from "./complianceGuard";
+import {
+  buildImprovedCharacterPrompt,
+  buildAttributeNegativePrompts,
+  buildCriticalAttributesBlock,
+} from "./improvedPrompts";
 
 // ============================================
 // Types
@@ -29,7 +34,7 @@ export interface IllustrationPromptInput {
   kbSummary: KBRulesSummary | null;
 }
 
-const STYLE_PROMPTS: Record<string, string> = {
+export const STYLE_PROMPTS: Record<string, string> = {
   "pixar-3d": "Pixar-style 3D children's book illustration with soft lighting, rounded features, expressive eyes, like Disney/Pixar films",
   "watercolor": "Soft, varying watercolor style children's book illustration with gentle color bleeding, organic textures, classic children's book art",
   "anime": "Vibrant Anime/Manga style children's book illustration with expressive large eyes, clean linework, Studio Ghibli inspired",
@@ -38,7 +43,7 @@ const STYLE_PROMPTS: Record<string, string> = {
 };
 
 // Extended style descriptions for better consistency
-const STYLE_TECHNICAL_DETAILS: Record<string, string> = {
+export const STYLE_TECHNICAL_DETAILS: Record<string, string> = {
   "pixar-3d": `
 - 3D CGI rendering with subsurface scattering on skin
 - Soft global illumination with warm fill lights
@@ -554,6 +559,7 @@ export interface CharacterPosePromptResult {
 /**
  * Build a prompt for generating a specific character pose.
  * Used for creating the 12-pose reference sheet.
+ * UPDATED: Now uses improved prompts with better AI compliance from Phase 2.
  */
 export function buildCharacterPosePrompt(input: CharacterPosePromptInput): CharacterPosePromptResult {
   const { character, pose } = input;
@@ -564,83 +570,17 @@ export function buildCharacterPosePrompt(input: CharacterPosePromptInput): Chara
   const stylePrompt = STYLE_PROMPTS[styleId] || STYLE_PROMPTS["pixar-3d"];
   const styleTechnical = STYLE_TECHNICAL_DETAILS[styleId] || STYLE_TECHNICAL_DETAILS["pixar-3d"];
 
-  // Build character visual DNA block
-  const visualDNABlock: string[] = [];
-  if (character.visualDNA) {
-    if (character.visualDNA.skinTone) {
-      visualDNABlock.push(`SKIN TONE: ${character.visualDNA.skinTone} (EXACT - maintain consistency)`);
-    }
-    if (character.visualDNA.hairOrHijab) {
-      visualDNABlock.push(`HEAD/HAIR: ${character.visualDNA.hairOrHijab} (EXACT - maintain consistency)`);
-    }
-    if (character.visualDNA.outfitRules) {
-      visualDNABlock.push(`OUTFIT: ${character.visualDNA.outfitRules}`);
-    }
-    if (character.visualDNA.accessories) {
-      visualDNABlock.push(`ACCESSORIES: ${character.visualDNA.accessories}`);
-    }
-  }
-
-  // Build modesty rules block
-  const modestyBlock: string[] = ["MANDATORY MODESTY RULES:"];
-  if (character.modestyRules?.hijabAlways) {
-    modestyBlock.push("- HIJAB REQUIRED: Must cover ALL hair completely, no hair strands visible");
-  }
-  if (character.modestyRules?.longSleeves) {
-    modestyBlock.push("- LONG SLEEVES: Arms must be covered to wrists");
-  }
-  if (character.modestyRules?.looseClothing) {
-    modestyBlock.push("- LOOSE CLOTHING: All garments must be loose-fitting, not form-revealing");
-  }
-  modestyBlock.push("- No tight or revealing clothing under any circumstances");
-
-  // Build color palette block
-  const colorBlock = character.colorPalette && character.colorPalette.length > 0
-    ? `COLOR PALETTE: ${character.colorPalette.join(", ")}`
-    : "";
-
-  // Build concise visual summary for prompt start (AI models prioritize early text)
-  const visualSummary = [
-    character.visualDNA?.skinTone,
-    character.visualDNA?.hairOrHijab,
-    character.modestyRules?.hijabAlways ? "wearing hijab" : null,
-    character.ageRange ? `${character.ageRange} years old` : "child",
-    character.name,
-  ].filter(Boolean).join(", ");
-
-  const prompt = `${stylePrompt} of ${visualSummary}, ${poseInfo.bodyPosition.toLowerCase()}
-
-CHARACTER: ${character.name}, ${character.role}, ${character.ageRange || "child"} years old
-EXACT APPEARANCE: ${visualDNABlock.join(". ")}
-${colorBlock ? `COLORS: ${character.colorPalette?.join(", ")}` : ""}
-POSE: ${poseInfo.name} - ${poseInfo.bodyPosition}
-${character.modestyRules?.hijabAlways ? "HIJAB: Must cover ALL hair completely, no hair visible" : ""}
-${character.modestyRules?.longSleeves ? "SLEEVES: Long sleeves covering to wrists" : ""}
-${character.modestyRules?.looseClothing ? "CLOTHING: Loose-fitting, modest garments" : ""}
-
-STYLE: ${styleTechnical}
-TECHNICAL: Single character, full body, clean background, high detail, portrait orientation, NO text or watermarks
-- This image will be used as reference for all future illustrations
-- Maintain the exact same character design across all poses`;
-
-  // Build negative prompt
-  const negativePrompts = [
-    "text", "watermark", "signature", "label", "multiple characters",
-    "background elements", "props", "furniture", "scenery",
-    "inconsistent features", "changed skin tone", "different hair style",
-    "revealing clothing", "tight clothing", "short sleeves",
-    "missing hijab", "visible hair under hijab",
-    "poor anatomy", "distorted proportions", "extra limbs",
-    "low quality", "blurry", "pixelated",
-  ];
-
-  if (character.modestyRules?.hijabAlways) {
-    negativePrompts.push("exposed hair", "hair visible", "no hijab");
-  }
+  // Use improved prompt builder with structured sections and critical attributes
+  const fullStylePrompt = `${stylePrompt}\n\n${styleTechnical}\n\nPOSE: ${poseInfo.name} - ${poseInfo.bodyPosition}`;
+  const { prompt, negativePrompt } = buildImprovedCharacterPrompt(
+    character,
+    fullStylePrompt,
+    `${poseInfo.name}: ${poseInfo.bodyPosition}`
+  );
 
   return {
     prompt,
-    negativePrompt: negativePrompts.join(", "),
+    negativePrompt,
     style: styleId,
     poseType: pose,
     poseName: poseInfo.name,

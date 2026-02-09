@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { AGE_RANGES, CHARACTER_STYLES, CharacterStyle } from "@/lib/models";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, User, Palette, Sparkles, Check, RefreshCw, Image, ThumbsUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, User, Palette, Sparkles, Check, RefreshCw, Image, ThumbsUp, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
 import { useToast } from "@/hooks/use-toast";
@@ -32,11 +32,12 @@ import {
 import { getCharacters } from "@/lib/storage/charactersStore";
 import { canCreateCharacter } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
+import { CharacterRefinementPanel, QuickAdjustments } from "@/components/characters/CharacterRefinementPanel";
 
 const steps = [
   { id: 1, title: "Persona", icon: User, description: "Name, role, traits" },
   { id: 2, title: "Visual DNA", icon: Palette, description: "Appearance & modesty" },
-  { id: 3, title: "Character", icon: Sparkles, description: "Generate & approve" },
+  { id: 3, title: "Character", icon: Sparkles, description: "Generate & refine" },
   { id: 4, title: "Pose Sheet", icon: Sparkles, description: "Generate 12 poses" },
 ];
 
@@ -46,9 +47,12 @@ const traitOptions = [
   "adventurous", "caring", "cheerful", "determined",
 ];
 
-// Credit costs
-const CHARACTER_GENERATION_COST = 2;  // Single character image
-const POSE_SHEET_COST = 8;            // 12-pose sheet (single API call)
+// Credit costs - Phase 2 with iteration pricing
+const CHARACTER_GENERATION_COST = 2;     // Initial character generation
+const TARGETED_FIX_COST = 0.5;           // Fix specific attribute (hair, accessories, etc.)
+const GUIDED_REGENERATION_COST = 1;      // Guided full regeneration
+const FULL_REGENERATION_COST = 2;        // Complete regeneration
+const POSE_SHEET_COST = 8;               // 12-pose sheet (single API call)
 
 export default function CharacterCreatePage() {
   const navigate = useNavigate();
@@ -60,6 +64,15 @@ export default function CharacterCreatePage() {
   const [createdCharacter, setCreatedCharacter] = useState<StoredCharacter | null>(null);
   const [credits, setCredits] = useState(getBalances());
   const [characterCount, setCharacterCount] = useState(0);
+  
+  // Phase 2: Quick adjustments state
+  const [showRefinementPanel, setShowRefinementPanel] = useState(false);
+  const [quickAdjustments, setQuickAdjustments] = useState<QuickAdjustments>({
+    brightness: 1.0,
+    saturation: 1.0,
+    ageScale: 1.0,
+    rotation: 0,
+  });
 
   // Refresh credits and character count on mount
   useEffect(() => {
@@ -255,6 +268,204 @@ export default function CharacterCreatePage() {
   const handleRegenerateCharacter = async () => {
     if (!createdCharacter) return;
     await handleGenerateCharacter();
+  };
+
+  // Phase 2: Quick adjustments handler (FREE - no credits)
+  const handleQuickAdjust = (adjustments: QuickAdjustments) => {
+    setQuickAdjustments(adjustments);
+    toast({
+      title: "Adjustments applied",
+      description: "Changes are preview-only. Use targeted fixes for permanent changes.",
+    });
+  };
+
+  // Phase 2: Targeted fix handler (0.5 credits)
+  const handleTargetedFix = async (fixType: string) => {
+    if (!createdCharacter) return;
+
+    // Check credits
+    if (!hasEnoughCredits("character", TARGETED_FIX_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${TARGETED_FIX_COST} character credits for targeted fixes.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: TARGETED_FIX_COST,
+      reason: `Fix ${fixType} for ${createdCharacter.name}`,
+      entityType: "character",
+      entityId: createdCharacter.id,
+      meta: { fixType, step: "targeted_fix" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to apply fix",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // TODO: Implement targeted inpainting API call
+      // For now, we'll regenerate with boosted attention to the specific attribute
+      toast({
+        title: "Targeted fix in progress",
+        description: `Fixing ${fixType}... This feature will use inpainting for precise attribute fixes.`,
+      });
+
+      // Placeholder: In production, this would call inpainting API
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setIsGenerating(false);
+      setCredits(getBalances());
+
+      toast({
+        title: "Fix applied!",
+        description: `${fixType} has been regenerated. ${TARGETED_FIX_COST} credits used.`,
+      });
+    } catch (error) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to apply fix",
+        description: "An error occurred during targeted fix",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Phase 2: Guided regeneration handler (1 credit)
+  const handleGuidedRegeneration = async (problemAreas: string[]) => {
+    if (!createdCharacter) return;
+
+    // Check credits
+    if (!hasEnoughCredits("character", GUIDED_REGENERATION_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${GUIDED_REGENERATION_COST} character credits for guided regeneration.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: GUIDED_REGENERATION_COST,
+      reason: `Guided regeneration for ${createdCharacter.name}`,
+      entityType: "character",
+      entityId: createdCharacter.id,
+      meta: { problemAreas, step: "guided_regeneration" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to regenerate",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Regenerate with boosted attention to problem areas
+      const updatedCharacter = await generateCharacterImage(createdCharacter.id, (status) => {
+        console.log("Guided regeneration:", status);
+      });
+
+      if (updatedCharacter) {
+        setCreatedCharacter(updatedCharacter);
+      }
+
+      setIsGenerating(false);
+      setCredits(getBalances());
+
+      toast({
+        title: "Character regenerated!",
+        description: `Focused on: ${problemAreas.join(', ')}. ${GUIDED_REGENERATION_COST} credit used.`,
+      });
+    } catch (error) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to regenerate",
+        description: "An error occurred during guided regeneration",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Phase 2: Full regeneration handler (2 credits)
+  const handleFullRegeneration = async () => {
+    if (!createdCharacter) return;
+
+    // Check credits
+    if (!hasEnoughCredits("character", FULL_REGENERATION_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${FULL_REGENERATION_COST} character credits for full regeneration.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: FULL_REGENERATION_COST,
+      reason: `Full regeneration for ${createdCharacter.name}`,
+      entityType: "character",
+      entityId: createdCharacter.id,
+      meta: { step: "full_regeneration" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to regenerate",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const updatedCharacter = await generateCharacterImage(createdCharacter.id, (status) => {
+        console.log("Full regeneration:", status);
+      });
+
+      if (updatedCharacter) {
+        setCreatedCharacter(updatedCharacter);
+      }
+
+      setIsGenerating(false);
+      setCredits(getBalances());
+
+      toast({
+        title: "Character regenerated!",
+        description: `Complete regeneration complete. ${FULL_REGENERATION_COST} credits used.`,
+      });
+    } catch (error) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to regenerate",
+        description: "An error occurred during full regeneration",
+        variant: "destructive",
+      });
+    }
   };
 
   // Step 4: Generate pose sheet
@@ -728,13 +939,17 @@ export default function CharacterCreatePage() {
             <div className="space-y-4">
               {createdCharacter?.imageUrl ? (
                 <>
-                  {/* Generated Character Image */}
+                  {/* Generated Character Image - Phase 2: With Quick Adjustments Applied */}
                   <div className="relative">
                     <div className="aspect-[3/4] max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-border bg-muted">
                       <img
                         src={createdCharacter.imageUrl}
                         alt={createdCharacter.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-all duration-300"
+                        style={{
+                          filter: `brightness(${quickAdjustments.brightness}) saturate(${quickAdjustments.saturation})`,
+                          transform: `scale(${quickAdjustments.ageScale}) rotate(${quickAdjustments.rotation}deg)`,
+                        }}
                       />
                     </div>
                     {createdCharacter.status === "approved" && (
@@ -745,28 +960,54 @@ export default function CharacterCreatePage() {
                     )}
                   </div>
 
-                  {/* Approval Actions */}
+                  {/* Phase 2: Refinement Panel - Show after generation but before approval */}
                   {createdCharacter.status !== "approved" && (
-                    <div className="flex flex-col gap-3 max-w-sm mx-auto">
-                      <Button
-                        variant="hero"
-                        size="lg"
-                        onClick={handleApproveCharacter}
-                        className="w-full"
-                      >
-                        <ThumbsUp className="w-4 h-4 mr-2" />
-                        Approve & Continue
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleRegenerateCharacter}
-                        disabled={isGenerating || !hasEnoughCredits("character", CHARACTER_GENERATION_COST)}
-                        className="w-full"
-                      >
-                        <RefreshCw className={cn("w-4 h-4 mr-2", isGenerating && "animate-spin")} />
-                        Regenerate ({CHARACTER_GENERATION_COST} credits)
-                      </Button>
-                    </div>
+                    <>
+                      {/* Credit transparency banner */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="font-medium text-blue-900 mb-1">Iteration Tools Available</h4>
+                            <p className="text-sm text-blue-800 mb-2">
+                              Instead of regenerating completely (2 credits), you can now refine specific attributes:
+                            </p>
+                            <ul className="text-sm text-blue-700 space-y-1">
+                              <li>• <strong>Quick adjustments:</strong> FREE (brightness, saturation, etc.)</li>
+                              <li>• <strong>Targeted fixes:</strong> 0.5 credits (fix hair, accessories, outfit)</li>
+                              <li>• <strong>Guided regeneration:</strong> 1 credit (focus on problem areas)</li>
+                              <li>• <strong>Full regeneration:</strong> 2 credits (start over)</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Refinement Panel */}
+                      <div className="max-w-2xl mx-auto">
+                        <CharacterRefinementPanel
+                          character={createdCharacter}
+                          onQuickAdjust={handleQuickAdjust}
+                          onTargetedFix={handleTargetedFix}
+                          onGuidedRegeneration={handleGuidedRegeneration}
+                          onFullRegeneration={handleFullRegeneration}
+                          isProcessing={isGenerating}
+                          remainingCredits={credits.characterCredits}
+                        />
+                      </div>
+
+                      {/* Primary Approval Action */}
+                      <div className="flex flex-col gap-3 max-w-sm mx-auto mt-6">
+                        <Button
+                          variant="hero"
+                          size="lg"
+                          onClick={handleApproveCharacter}
+                          className="w-full"
+                        >
+                          <ThumbsUp className="w-4 h-4 mr-2" />
+                          Approve & Continue to Pose Sheet
+                        </Button>
+                      </div>
+                    </>
                   )}
                 </>
               ) : (

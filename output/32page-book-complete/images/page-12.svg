@@ -1,0 +1,14 @@
+
+    <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+      <rect width="800" height="600" fill="#f0f0f0"/>
+      <text x="400" y="280" font-family="Arial" font-size="24" fill="#666" text-anchor="middle">
+        Page 12 Illustration
+      </text>
+      <text x="400" y="320" font-family="Arial" font-size="16" fill="#999" text-anchor="middle">
+        The three walking toward tall sunflowers. Amira (s...
+      </text>
+      <circle cx="400" cy="200" r="80" fill="#e91e63" opacity="0.3"/>
+      <circle cx="350" cy="220" r="60" fill="#ff9800" opacity="0.3"/>
+      <circle cx="450" cy="220" r="60" fill="#2196f3" opacity="0.3"/>
+    </svg>
+  

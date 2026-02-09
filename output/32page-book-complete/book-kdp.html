@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amira's Amazing Adventure</title>
+  <style>
+    @page {
+      size: 8.5in 11in;
+      margin: 0.75in;
+    }
+    
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    body {
+      font-family: 'Georgia', 'Palatino', 'Times New Roman', serif;
+      margin: 0;
+      padding: 0;
+      background: white;
+      font-size: 14pt;
+      line-height: 1.6;
+    }
+    
+    .page {
+      page-break-after: always;
+      page-break-inside: avoid;
+      min-height: 8.5in;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 1in;
+      position: relative;
+    }
+    
+    .cover {
+      background: linear-gradient(135deg, #fecaca 0%, #fca5a5 50%, #f87171 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 80px 60px;
+    }
+    
+    .cover h1 {
+      font-size: 48px;
+      color: #7c2d12;
+      margin: 0 0 16px 0;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(255,255,255,0.5);
+    }
+    
+    .cover .subtitle {
+      font-size: 24px;
+      color: #991b1b;
+      margin: 0 0 40px 0;
+      font-style: italic;
+    }
+    
+    .cover .author {
+      font-size: 20px;
+      color: #7c2d12;
+      margin-top: 40px;
+    }
+    
+    .story-page {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 20px;
+    }
+    
+    .illustration {
+      width: 100%;
+      max-height: 6in;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .text {
+      font-size: 16pt;
+      line-height: 1.8;
+      color: #1f2937;
+      text-align: justify;
+      padding: 10px 0;
+    }
+    
+    .page-number {
+      position: absolute;
+      bottom: 0.5in;
+      right: 1in;
+      font-size: 12pt;
+      color: #666;
+    }
+    
+    .copyright {
+      text-align: center;
+      font-size: 10pt;
+      color: #666;
+      padding: 40px 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Cover Page -->
+  <div class="page cover">
+    <h1>Amira's Amazing Adventure</h1>
+    <div class="subtitle">A 32-Page Story of Discovery and Friendship</div>
+    <div class="author">By NoorStudio QA Team</div>
+    <div class="author" style="font-size: 16px; margin-top: 20px;">
+      Illustrations: AI-Generated (Consistent Character System)
+    </div>
+  </div>
+  
+  <!-- Copyright Page -->
+  <div class="page">
+    <div class="copyright">
+      <h2>Amira's Amazing Adventure</h2>
+      <p>A 32-Page Story of Discovery and Friendship</p>
+      <p>Copyright © 2026 NoorStudio QA Team</p>
+      <p>All rights reserved.</p>
+      <p>Generated with NoorStudio</p>
+      <p>Character consistency powered by AI</p>
+    </div>
+  </div>
+  
+  
+  <!-- Page 1 -->
+  <div class="page story-page">
+    <img src="images/page-01.svg" 
+         alt="Page 1 illustration" 
+         class="illustration" />
+    <div class="text">
+      Once upon a time in the beautiful city of Dubai, there lived a cheerful girl named Amira. She had bright, curious brown eyes and always wore her favorite pink hijab with little golden stars on it.
+    </div>
+    <div class="page-number">1</div>
+  </div>
+  
+
+  <!-- Page 2 -->
+  <div class="page story-page">
+    <img src="images/page-02.svg" 
+         alt="Page 2 illustration" 
+         class="illustration" />
+    <div class="text">
+      Amira lived with her loving parents and her little brother Zaid in a cozy apartment near the Burj Khalifa. Every morning, she would wake up excited for a new day of adventure.
+    </div>
+    <div class="page-number">2</div>
+  </div>
+  
+
+  <!-- Page 3 -->
+  <div class="page story-page">
+    <img src="images/page-03.svg" 
+         alt="Page 3 illustration" 
+         class="illustration" />
+    <div class="text">
+      Her best friend was Layla, who lived in the same building. Layla had long dark hair and wore a blue dress with flowers. Together, they were the best of friends.
+    </div>
+    <div class="page-number">3</div>
+  </div>
+  
+
+  <!-- Page 4 -->
+  <div class="page story-page">
+    <img src="images/page-04.svg" 
+         alt="Page 4 illustration" 
+         class="illustration" />
+    <div class="text">
+      One sunny morning, Amira and Layla decided to explore the park near their neighborhood. They had heard tales of a mysterious garden hidden behind the tall hedges.
+    </div>
+    <div class="page-number">4</div>
+  </div>
+  
+
+  <!-- Page 5 -->
+  <div class="page story-page">
+    <img src="images/page-05.svg" 
+         alt="Page 5 illustration" 
+         class="illustration" />
+    <div class="text">
+      'Do you think we'll find it?' Layla asked. Amira's eyes sparkled with determination. 'We won't know unless we try!' she replied with a big smile.
+    </div>
+    <div class="page-number">5</div>
+  </div>
+  
+
+  <!-- Page 6 -->
+  <div class="page story-page">
+    <img src="images/page-06.svg" 
+         alt="Page 6 illustration" 
+         class="illustration" />
+    <div class="text">
+      They walked through the park, past the playground where children laughed, past the fountain where birds splashed, until they found a hidden pathway covered in climbing jasmine flowers.
+    </div>
+    <div class="page-number">6</div>
+  </div>
+  
+
+  <!-- Page 7 -->
+  <div class="page story-page">
+    <img src="images/page-07.svg" 
+         alt="Page 7 illustration" 
+         class="illustration" />
+    <div class="text">
+      The pathway led to a beautiful garden gate covered in vines. 'This must be it!' Amira whispered. Her heart beat with excitement as she gently pushed the gate open.
+    </div>
+    <div class="page-number">7</div>
+  </div>
+  
+
+  <!-- Page 8 -->
+  <div class="page story-page">
+    <img src="images/page-08.svg" 
+         alt="Page 8 illustration" 
+         class="illustration" />
+    <div class="text">
+      Inside the garden was the most amazing sight they had ever seen! Colorful butterflies danced among roses, tulips, and orchids. A small fountain bubbled peacefully in the center.
+    </div>
+    <div class="page-number">8</div>
+  </div>
+  
+
+  <!-- Page 9 -->
+  <div class="page story-page">
+    <img src="images/page-09.svg" 
+         alt="Page 9 illustration" 
+         class="illustration" />
+    <div class="text">
+      Sitting on a bench near the fountain was an elderly woman with kind eyes and a warm smile. She wore a white hijab and waved them over. 'Welcome, young explorers!' she said.
+    </div>
+    <div class="page-number">9</div>
+  </div>
+  
+
+  <!-- Page 10 -->
+  <div class="page story-page">
+    <img src="images/page-10.svg" 
+         alt="Page 10 illustration" 
+         class="illustration" />
+    <div class="text">
+      The woman introduced herself as Grandmother Fatima, the keeper of the secret garden. 'I've been waiting for curious hearts like yours,' she said with a twinkle in her eye.
+    </div>
+    <div class="page-number">10</div>
+  </div>
+  
+
+  <!-- Page 11 -->
+  <div class="page story-page">
+    <img src="images/page-11.svg" 
+         alt="Page 11 illustration" 
+         class="illustration" />
+    <div class="text">
+      'This garden has special flowers,' Grandmother Fatima explained. 'Each one teaches a lesson about being a good person. Would you like to learn their secrets?'
+    </div>
+    <div class="page-number">11</div>
+  </div>
+  
+
+  <!-- Page 12 -->
+  <div class="page story-page">
+    <img src="images/page-12.svg" 
+         alt="Page 12 illustration" 
+         class="illustration" />
+    <div class="text">
+      Amira and Layla nodded eagerly. Grandmother Fatima stood and led them to a cluster of bright yellow sunflowers. 'These teach us about gratitude,' she said.
+    </div>
+    <div class="page-number">12</div>
+  </div>
+  
+
+  <!-- Page 13 -->
+  <div class="page story-page">
+    <img src="images/page-13.svg" 
+         alt="Page 13 illustration" 
+         class="illustration" />
+    <div class="text">
+      'Just like sunflowers turn toward the sun, we should always turn our hearts toward the blessings in our lives. What are you grateful for, Amira?'
+    </div>
+    <div class="page-number">13</div>
+  </div>
+  
+
+  <!-- Page 14 -->
+  <div class="page story-page">
+    <img src="images/page-14.svg" 
+         alt="Page 14 illustration" 
+         class="illustration" />
+    <div class="text">
+      Amira thought for a moment. 'I'm grateful for my family, my best friend Layla, and for beautiful days like this!' she said with a bright smile.
+    </div>
+    <div class="page-number">14</div>
+  </div>
+  
+
+  <!-- Page 15 -->
+  <div class="page story-page">
+    <img src="images/page-15.svg" 
+         alt="Page 15 illustration" 
+         class="illustration" />
+    <div class="text">
+      Next, they visited the rose garden. 'These roses teach us about kindness,' Grandmother Fatima explained. 'Even though they have thorns to protect themselves, they give us beautiful flowers and sweet fragrance.'
+    </div>
+    <div class="page-number">15</div>
+  </div>
+  
+
+  <!-- Page 16 -->
+  <div class="page story-page">
+    <img src="images/page-16.svg" 
+         alt="Page 16 illustration" 
+         class="illustration" />
+    <div class="text">
+      'True kindness,' she continued, 'means being gentle and helpful, even when things are difficult. It means choosing to do good even when no one is watching.'
+    </div>
+    <div class="page-number">16</div>
+  </div>
+  
+
+  <!-- Page 17 -->
+  <div class="page story-page">
+    <img src="images/page-17.svg" 
+         alt="Page 17 illustration" 
+         class="illustration" />
+    <div class="text">
+      They walked to a patch of lavender flowers swaying in the breeze. 'These teach us about patience,' Grandmother Fatima said. 'See how they grow slowly but beautifully?'
+    </div>
+    <div class="page-number">17</div>
+  </div>
+  
+
+  <!-- Page 18 -->
+  <div class="page story-page">
+    <img src="images/page-18.svg" 
+         alt="Page 18 illustration" 
+         class="illustration" />
+    <div class="text">
+      'Good things take time,' she explained. 'Whether learning a new skill or growing into our best selves, we must be patient like these lovely flowers.'
+    </div>
+    <div class="page-number">18</div>
+  </div>
+  
+
+  <!-- Page 19 -->
+  <div class="page story-page">
+    <img src="images/page-19.svg" 
+         alt="Page 19 illustration" 
+         class="illustration" />
+    <div class="text">
+      Near the fountain, they found white jasmine flowers climbing a trellis. 'Jasmine teaches us about modesty and humility,' Grandmother Fatima said.
+    </div>
+    <div class="page-number">19</div>
+  </div>
+  
+
+  <!-- Page 20 -->
+  <div class="page story-page">
+    <img src="images/page-20.svg" 
+         alt="Page 20 illustration" 
+         class="illustration" />
+    <div class="text">
+      'These flowers don't shout for attention, but their beautiful fragrance fills the whole garden. True goodness doesn't need to boast—it speaks for itself.'
+    </div>
+    <div class="page-number">20</div>
+  </div>
+  
+
+  <!-- Page 21 -->
+  <div class="page story-page">
+    <img src="images/page-21.svg" 
+         alt="Page 21 illustration" 
+         class="illustration" />
+    <div class="text">
+      As the afternoon went on, they learned about the courage of the tall palm trees, the honesty of the clear fountain water, and the generosity of the fruit-bearing orange trees.
+    </div>
+    <div class="page-number">21</div>
+  </div>
+  
+
+  <!-- Page 22 -->
+  <div class="page story-page">
+    <img src="images/page-22.svg" 
+         alt="Page 22 illustration" 
+         class="illustration" />
+    <div class="text">
+      Finally, they reached a special spot where flowers of many colors grew together in perfect harmony. 'This garden's greatest lesson,' Grandmother Fatima said.
+    </div>
+    <div class="page-number">22</div>
+  </div>
+  
+
+  <!-- Page 23 -->
+  <div class="page story-page">
+    <img src="images/page-23.svg" 
+         alt="Page 23 illustration" 
+         class="illustration" />
+    <div class="text">
+      'Just like these flowers are different but grow together beautifully, people from different backgrounds can live together in peace and friendship if they choose kindness and respect.'
+    </div>
+    <div class="page-number">23</div>
+  </div>
+  
+
+  <!-- Page 24 -->
+  <div class="page story-page">
+    <img src="images/page-24.svg" 
+         alt="Page 24 illustration" 
+         class="illustration" />
+    <div class="text">
+      Amira looked at Layla and smiled. Even though they were different, they were the best of friends. 'I understand now,' Amira said. 'The garden is like the whole world!'
+    </div>
+    <div class="page-number">24</div>
+  </div>
+  
+
+  <!-- Page 25 -->
+  <div class="page story-page">
+    <img src="images/page-25.svg" 
+         alt="Page 25 illustration" 
+         class="illustration" />
+    <div class="text">
+      Grandmother Fatima smiled warmly. 'You have learned well, dear children. This garden will always be here for you, whenever you need to remember these lessons.'
+    </div>
+    <div class="page-number">25</div>
+  </div>
+  
+
+  <!-- Page 26 -->
+  <div class="page story-page">
+    <img src="images/page-26.svg" 
+         alt="Page 26 illustration" 
+         class="illustration" />
+    <div class="text">
+      'Can we come back tomorrow?' Layla asked hopefully. 'Of course,' Grandmother Fatima replied. 'The garden welcomes all who seek to learn and grow.'
+    </div>
+    <div class="page-number">26</div>
+  </div>
+  
+
+  <!-- Page 27 -->
+  <div class="page story-page">
+    <img src="images/page-27.svg" 
+         alt="Page 27 illustration" 
+         class="illustration" />
+    <div class="text">
+      As Amira and Layla walked home through the park, they talked excitedly about everything they had learned. The world seemed brighter and full of possibilities.
+    </div>
+    <div class="page-number">27</div>
+  </div>
+  
+
+  <!-- Page 28 -->
+  <div class="page story-page">
+    <img src="images/page-28.svg" 
+         alt="Page 28 illustration" 
+         class="illustration" />
+    <div class="text">
+      That evening at dinner, Amira told her family about the secret garden and its beautiful lessons. Her parents listened with proud smiles.
+    </div>
+    <div class="page-number">28</div>
+  </div>
+  
+
+  <!-- Page 29 -->
+  <div class="page story-page">
+    <img src="images/page-29.svg" 
+         alt="Page 29 illustration" 
+         class="illustration" />
+    <div class="text">
+      'You've discovered something very special, habibti,' her mother said. 'The most important gardens are the ones we grow in our hearts.'
+    </div>
+    <div class="page-number">29</div>
+  </div>
+  
+
+  <!-- Page 30 -->
+  <div class="page story-page">
+    <img src="images/page-30.svg" 
+         alt="Page 30 illustration" 
+         class="illustration" />
+    <div class="text">
+      That night, before bed, Amira looked out her window at the stars above Dubai. She thought about all the wonderful lessons: gratitude, kindness, patience, modesty, and harmony.
+    </div>
+    <div class="page-number">30</div>
+  </div>
+  
+
+  <!-- Page 31 -->
+  <div class="page story-page">
+    <img src="images/page-31.svg" 
+         alt="Page 31 illustration" 
+         class="illustration" />
+    <div class="text">
+      She wrote in her journal: 'Today I found a secret garden that taught me how to grow a beautiful garden in my own heart. I will try to practice these lessons every day.'
+    </div>
+    <div class="page-number">31</div>
+  </div>
+  
+
+  <!-- Page 32 -->
+  <div class="page story-page">
+    <img src="images/page-32.svg" 
+         alt="Page 32 illustration" 
+         class="illustration" />
+    <div class="text">
+      And from that day on, whenever Amira faced a challenge, she remembered the secret garden and the lessons it taught. She grew into a kind, patient, grateful person who made the world a little brighter—just like the flowers in Grandmother Fatima's garden. The End.
+    </div>
+    <div class="page-number">32</div>
+  </div>
+  
+  
+  <!-- Back Matter -->
+  <div class="page">
+    <div class="copyright">
+      <h2>About This Book</h2>
+      <p>This 32-page children's book was created using NoorStudio's AI-powered publishing platform.</p>
+      <p>Character consistency maintained across all illustrations using advanced AI technology.</p>
+      <p>For more information, visit NoorStudio.com</p>
+    </div>
+  </div>
+</body>
+</html>

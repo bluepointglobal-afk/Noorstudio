@@ -10,7 +10,10 @@ import {
   buildCharacterPosePrompt,
   PoseType,
   ALL_POSE_TYPES,
+  STYLE_PROMPTS,
+  STYLE_TECHNICAL_DETAILS,
 } from "@/lib/ai/imagePrompts";
+import { buildImprovedCharacterPrompt } from "@/lib/ai/improvedPrompts";
 import { createLabeledPoseSheetGrid } from "@/lib/utils/imageGrid";
 
 // ============================================
@@ -309,82 +312,56 @@ const STYLE_DESCRIPTIONS: Record<string, string> = {
 /**
  * Build prompt for initial character generation (front-facing hero image).
  * This creates the base reference that all poses will be based on.
- * ENHANCED with identity anchoring to establish immutable traits.
+ * UPDATED: Now uses Phase 2 improved prompts with better AI compliance.
  */
-export function buildCharacterPrompt(character: StoredCharacter | CreateCharacterInput & { name: string; role: string; ageRange: string; traits: string[]; colorPalette: string[] }): string {
-  const { visualDNA, modestyRules, name, role, ageRange, traits, colorPalette } = character;
+export function buildCharacterPrompt(character: StoredCharacter | CreateCharacterInput & { name: string; role: string; ageRange: string; traits: string[]; colorPalette: string[] }): { prompt: string; negativePrompt: string } {
+  const { visualDNA, name, role, ageRange, traits, colorPalette } = character;
 
-  const styleDescription = STYLE_DESCRIPTIONS[visualDNA.style] || STYLE_DESCRIPTIONS["pixar-3d"];
+  const stylePrompt = STYLE_PROMPTS[visualDNA.style] || STYLE_PROMPTS["pixar-3d"];
+  const styleTechnical = STYLE_TECHNICAL_DETAILS[visualDNA.style] || STYLE_TECHNICAL_DETAILS["pixar-3d"];
 
   // Build personality/expression guidance from traits
   const traitGuidance = traits.length > 0
-    ? `Personality: ${traits.join(", ")} - reflect this in facial expression and posture.`
+    ? `Personality traits: ${traits.join(", ")} - reflect this in facial expression and posture.`
     : "";
 
-  // Build color guidance
-  const colorGuidance = colorPalette.length > 0
-    ? `Primary color palette for clothing: ${colorPalette.slice(0, 3).join(", ")}`
-    : "";
+  const fullStylePrompt = `${stylePrompt}
 
-  // Build comprehensive modesty rules with strong enforcement language
-  const modestyGuidelines = [
-    modestyRules.hijabAlways
-      ? "!!! HIJAB MANDATORY !!! - Must wear hijab covering ALL hair completely"
-      : "",
-    modestyRules.longSleeves ? "Long sleeves REQUIRED - no bare arms visible" : "",
-    modestyRules.looseClothing ? "Loose-fitting modest clothing ONLY - no tight or form-fitting" : "",
-    modestyRules.notes ? `Custom requirements: ${modestyRules.notes}` : "",
-  ].filter(Boolean).join("\n- ");
-
-  return `## CHARACTER DESIGN BRIEF: "${name}"
-This is a REFERENCE IMAGE that will be used for all future illustrations.
-The traits established here become LOCKED and IMMUTABLE.
-
-=== ART STYLE (LOCKED) ===
-${styleDescription}
-Art Style ID: ${visualDNA.style}
-This exact style will be used in all poses and illustrations.
-
-=== CHARACTER IDENTITY DOCUMENT ===
-| Trait | Value | Lock Status |
-|-------|-------|-------------|
-| Name | ${name} | 🔒 LOCKED |
-| Role | ${role} | 🔒 LOCKED |
-| Age | ${ageRange} years old | 🔒 LOCKED |
-| Skin Tone | ${visualDNA.skinTone} | 🔒 LOCKED |
-| Head/Hair | ${visualDNA.hairOrHijab} | 🔒 LOCKED |
-| Outfit Style | ${visualDNA.outfitRules} | 🔒 LOCKED |
-| Accessories | ${visualDNA.accessories || "None"} | 🔒 LOCKED |
-${colorGuidance ? `| Color Palette | ${colorPalette.slice(0, 3).join(", ")} | 🔒 LOCKED |` : ""}
+${styleTechnical}
 
 ${traitGuidance}
 
-=== MODESTY REQUIREMENTS (MANDATORY - NON-NEGOTIABLE) ===
-${modestyGuidelines || "- Modest, culturally appropriate Islamic children's illustration style"}
+This is a REFERENCE IMAGE that will be used for all future illustrations.
+The traits established here become LOCKED and IMMUTABLE.
 
-=== OUTPUT SPECIFICATIONS ===
+OUTPUT SPECIFICATIONS:
 - FRONT-FACING full-body character portrait
 - Clean solid color or simple gradient background
 - Character centered in frame, well-lit from front
 - Warm, friendly, approachable expression
 - Professional children's book character quality
-- High detail on face and distinguishing features
+- High detail on face and distinguishing features`;
 
-=== CRITICAL NO-TEXT RULE ===
-!!! DO NOT add any text, labels, names, or words to the image !!!
-The character's name is "${name}" but do NOT render it.
-This is a VISUAL reference only.
+  // Use improved prompt builder that includes critical attributes block
+  // and comprehensive negative prompts
+  const characterAsStoredCharacter: StoredCharacter = {
+    ...(character as any),
+    id: (character as any).id || 'temp',
+    status: 'draft' as AssetStatus,
+    version: 1,
+    imageUrl: '',
+    poses: [],
+    poseSheetGenerated: false,
+    versions: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
-=== QUALITY CHECKLIST ===
-Before finalizing, verify:
-□ Face is distinctive and memorable
-□ Skin tone matches: ${visualDNA.skinTone}
-□ Hair/hijab clearly shows: ${visualDNA.hairOrHijab}
-${modestyRules.hijabAlways ? "□ Hijab is visible and covers all hair" : ""}
-□ Clothing is modest and matches description
-□ Art style is clearly ${visualDNA.style}
-□ No text or labels anywhere
-□ Character is appealing to young Muslim children`.trim();
+  return buildImprovedCharacterPrompt(
+    characterAsStoredCharacter,
+    fullStylePrompt,
+    'front view, standing, friendly expression'
+  );
 }
 
 
@@ -655,6 +632,7 @@ export async function generateCharacterReferenceSheet(
  * Generate the initial character image (hero/reference image).
  * This is a SINGLE API call that creates the base character design.
  * User must approve this before generating poses.
+ * UPDATED: Now uses improved prompts with negative prompt support.
  */
 export async function generateCharacterImage(
   characterId: string,
@@ -666,8 +644,11 @@ export async function generateCharacterImage(
   onProgress?.("Generating character...");
 
   try {
+    const { prompt, negativePrompt } = buildCharacterPrompt(character);
+    
     const request: ImageGenerationRequest = {
-      prompt: buildCharacterPrompt(character),
+      prompt,
+      negativePrompt,
       style: character.visualDNA.style || "pixar-3d",
       width: 768,
       height: 1024, // Portrait orientation for character
