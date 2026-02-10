@@ -1,4 +1,3 @@
-// P0-1 Fix: Diagnose empty page rendering issue
 import { Link } from "react-router-dom";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,6 @@ import { BookCoverCard } from "@/components/shared/BookCoverCard";
 import { PoseGrid } from "@/components/shared/PoseGrid";
 import { ArrowRight, BookOpen, Users, Layout } from "lucide-react";
 import { demoCharacters, demoBooks } from "@/lib/demo-data";
-import { useEffect } from "react";
 
 const exampleCharacters = demoCharacters.map(c => ({
   name: c.name,
@@ -27,17 +25,8 @@ const exampleBooks = demoBooks.map(b => ({
 }));
 
 export default function ExamplesPage() {
-  useEffect(() => {
-    console.log("ExamplesPage mounted", { charCount: exampleCharacters.length, bookCount: exampleBooks.length });
-  }, []);
-
   return (
     <PublicLayout>
-      {/* Diagnostic header */}
-      <div style={{ background: "#f0f0f0", padding: "20px", textAlign: "center", fontSize: "16px", fontWeight: "bold" }}>
-        Examples Page Loaded Successfully ({exampleCharacters.length} characters, {exampleBooks.length} books)
-      </div>
-
       {/* Hero */}
       <section className="py-20 lg:py-28 bg-gradient-subtle">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">

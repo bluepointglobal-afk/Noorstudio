@@ -97,11 +97,6 @@ const creditInfo = [
 export default function PricingPage() {
   return (
     <PublicLayout>
-      {/* Diagnostic header */}
-      <div style={{ background: "#f0f0f0", padding: "20px", textAlign: "center", fontSize: "16px", fontWeight: "bold" }}>
-        Pricing Page Loaded Successfully ({pricingTiers.length} tiers)
-      </div>
-
       {/* Hero */}
       <section className="py-20 lg:py-28 bg-gradient-subtle">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
