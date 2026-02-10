@@ -1,3 +1,4 @@
+// P0-2 Fix: Force rebuild to resolve empty page rendering
 import { Link } from "react-router-dom";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
