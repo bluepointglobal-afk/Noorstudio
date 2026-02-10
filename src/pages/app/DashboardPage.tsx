@@ -2,14 +2,15 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Users, BookOpen, FolderKanban, Clock, Sparkles, Trash2, RefreshCw, Bug } from "lucide-react";
+import { Plus, Users, BookOpen, FolderKanban, Clock, Sparkles, Trash2, RefreshCw, Bug, Play } from "lucide-react";
 import { useState, useEffect } from "react";
-import { listProjects, StoredProject, getCompletedStagesCount, clearAllProjects } from "@/lib/storage/projectsStore";
-import { getCharacters, clearAllCharacters } from "@/lib/storage/charactersStore";
+import { listProjects, StoredProject, getCompletedStagesCount, clearAllProjects, createProject } from "@/lib/storage/projectsStore";
+import { getCharacters, clearAllCharacters, createCharacter } from "@/lib/storage/charactersStore";
 import { clearAllKnowledgeBases } from "@/lib/storage/knowledgeBaseStore";
 import { resetCredits } from "@/lib/storage/creditsStore";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { demoCharacters, demoBooks } from "@/lib/demo-data";
 
 function formatTimeAgo(dateString: string): string {
   const date = new Date(dateString);
@@ -71,6 +72,51 @@ export default function DashboardPage() {
     toast({
       title: "All data cleared",
       description: "Your workspace has been reset. Refresh the page to re-seed demo data.",
+    });
+  };
+
+  const handleTryDemoMode = () => {
+    // Seed 3 demo characters
+    const demoCharacterIds: string[] = [];
+    demoCharacters.slice(0, 3).forEach((char) => {
+      const created = createCharacter({
+        name: `${char.name} (Demo)`,
+        role: char.role,
+        ageRange: char.ageRange,
+        traits: char.traits,
+        speechStyle: char.speechStyle,
+        appearance: char.appearance,
+        modestyRules: char.modestyRules,
+        colorPalette: char.colorPalette,
+        knowledgeLevel: char.knowledgeLevel,
+      });
+      demoCharacterIds.push(created.id);
+    });
+
+    // Seed 2 demo projects (books)
+    demoBooks.slice(0, 2).forEach((book) => {
+      createProject({
+        title: `${book.title} (Demo)`,
+        universeId: "demo-universe",
+        universeName: "Demo Universe",
+        knowledgeBaseId: "demo-kb",
+        knowledgeBaseName: "Demo Knowledge Base",
+        ageRange: book.ageRange,
+        templateType: book.category as any,
+        synopsis: `A demonstration project for trying out ${book.title}`,
+        learningObjective: "Experience the full NoorStudio workflow",
+        setting: "Islamic children's literature",
+        characterIds: [demoCharacterIds[0]],
+        layoutStyle: "split-page",
+        trimSize: "8.5x8.5",
+        exportTargets: ["pdf"],
+      });
+    });
+
+    loadData();
+    toast({
+      title: "Demo mode activated! 🎉",
+      description: "Try editing the demo characters and books. Your changes are saved locally.",
     });
   };
 
@@ -201,15 +247,24 @@ export default function DashboardPage() {
                 <Sparkles className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-lg font-semibold mb-2">No Projects Yet</h3>
-              <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                 Create your first book project to start generating Islamic children's stories.
               </p>
-              <Link to="/app/books/new">
-                <Button variant="hero">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Book
+              <div className="flex gap-3 justify-center flex-wrap">
+                <Button 
+                  variant="hero"
+                  onClick={handleTryDemoMode}
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Try Demo Mode
                 </Button>
-              </Link>
+                <Link to="/app/books/new">
+                  <Button variant="outline">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Your First Book
+                  </Button>
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
