@@ -733,6 +733,23 @@ export default function ProjectWorkspacePage() {
           generatedAt: new Date().toISOString(),
         });
 
+        // Save chapter versions (P2-3) if this is a chapters stage
+        if (stageId === "chapters" && Array.isArray(artifactData)) {
+          for (const chapter of artifactData) {
+            if (chapter.chapterNumber && chapter.content && chapter.title) {
+              saveChapterVersion(project.id, {
+                chapterNumber: chapter.chapterNumber,
+                content: chapter.content,
+                title: chapter.title,
+                wordCount: chapter.wordCount || 0,
+                author: "generated",
+                vocabularyNotes: chapter.vocabularyNotes,
+                islamicAdabChecks: chapter.islamicAdabChecks,
+              });
+            }
+          }
+        }
+
         // Mark stage as completed
         updatePipelineStage(project.id, stageId, {
           status: "completed",
@@ -865,6 +882,23 @@ export default function ProjectWorkspacePage() {
           content: artifactData,
           generatedAt: new Date().toISOString(),
         });
+
+        // Save chapter versions (P2-3) if this is a chapters stage
+        if (stageId === "chapters" && Array.isArray(artifactData)) {
+          for (const chapter of artifactData) {
+            if (chapter.chapterNumber && chapter.content && chapter.title) {
+              saveChapterVersion(project.id, {
+                chapterNumber: chapter.chapterNumber,
+                content: chapter.content,
+                title: chapter.title,
+                wordCount: chapter.wordCount || 0,
+                author: "recovered",
+                vocabularyNotes: chapter.vocabularyNotes,
+                islamicAdabChecks: chapter.islamicAdabChecks,
+              });
+            }
+          }
+        }
 
         // Mark as completed
         updatePipelineStage(project.id, stageId as ProjectStage, {
@@ -1266,6 +1300,17 @@ export default function ProjectWorkspacePage() {
             _structured: ch,
           };
           byNumber.set(updatedItem.chapterNumber, updatedItem);
+
+          // Save chapter version (P2-3)
+          saveChapterVersion(project.id, {
+            chapterNumber: ch.chapter_number,
+            content: ch.text,
+            title: ch.chapter_title,
+            wordCount: updatedItem.wordCount,
+            author: "regenerated",
+            vocabularyNotes: ch.vocabulary_notes,
+            islamicAdabChecks: ch.islamic_adab_checks,
+          });
         }
 
         const merged = Array.from(byNumber.values()).sort((a, b) => a.chapterNumber - b.chapterNumber);
