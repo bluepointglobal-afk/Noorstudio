@@ -261,13 +261,22 @@ export async function runChaptersStage(
         const outlineChapter = outline.chapters[chapterIndex];
         const chapterNum = chapterIndex + 1;
 
+        if (!previousSummary && chapterNum > 1) {
+          const prevText = existingChapterTextByNumber.get(chapterNum - 1);
+          if (prevText) {
+            previousSummary = `Chapter ${chapterNum - 1}: ${prevText.substring(0, 200)}...`;
+          }
+        }
+
+        const generatedCountSoFar = generatedChapters.length;
+
         onProgress({
           stage: "chapters",
           status: "running",
-          progress: Math.round(((chapterIndex + 1) / totalChapters) * 90) + 5,
-          message: `Generating Chapter ${chapterNum}...`,
+          progress: Math.round(((generatedCountSoFar + 1) / Math.max(1, chaptersToGenerateCount)) * 90) + 5,
+          message: `Generating Chapter ${chapterNum}/${totalChapters}...`,
           subProgress: {
-            current: chapterIndex + 1,
+            current: chapterNum,
             total: totalChapters,
             label: outlineChapter.title,
           },

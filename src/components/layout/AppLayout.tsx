@@ -1,8 +1,8 @@
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, Users, BookOpen } from "lucide-react";
+import { Bell, Search, Users, BookOpen, Menu, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getBalances, seedDefaultBalancesIfEmpty, CreditBalances } from "@/lib/storage/creditsStore";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,8 @@ function CreditIndicator({ type, current, icon: Icon }: { type: string; current:
 
 export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [credits, setCredits] = useState<CreditBalances>({ characterCredits: 0, bookCredits: 0, plan: "author" });
 
   // Load credits on mount and set up refresh
@@ -55,6 +57,11 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       window.removeEventListener("storage", handleStorage);
     };
   }, []);
+
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-background">

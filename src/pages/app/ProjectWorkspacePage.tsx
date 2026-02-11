@@ -277,6 +277,21 @@ function ParseErrorBanner({
   );
 }
 
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+      fill="currentColor"
+    >
+      <path d="M19.11 17.17c-.29-.14-1.71-.84-1.98-.94-.26-.1-.45-.14-.64.14-.19.29-.74.94-.9 1.13-.16.19-.33.21-.62.07-.29-.14-1.21-.45-2.31-1.43-.86-.77-1.44-1.72-1.61-2.01-.17-.29-.02-.45.13-.59.13-.13.29-.33.43-.5.14-.17.19-.29.29-.48.1-.19.05-.36-.02-.5-.07-.14-.64-1.55-.88-2.12-.23-.55-.47-.48-.64-.49l-.55-.01c-.19 0-.5.07-.76.36-.26.29-1  .98-1 2.39 0 1.41 1.03 2.77 1.17 2.96.14.19 2.03 3.1 4.93 4.34.69.3 1.23.48 1.65.61.69.22 1.32.19 1.82.12.56-.08 1.71-.7 1.95-1.37.24-.67.24-1.24.17-1.37-.07-.12-.26-.19-.55-.33z" />
+      <path d="M16.01 3.2C8.94 3.2 3.2 8.94 3.2 16.01c0 2.25.59 4.44 1.71 6.38L3 29l6.79-1.78c1.87 1.02 3.98 1.56 6.22 1.56h.01c7.07 0 12.81-5.74 12.81-12.81S23.08 3.2 16.01 3.2zm0 23.25h-.01c-2.03 0-4.02-.55-5.75-1.6l-.41-.24-4.03 1.06 1.08-3.93-.27-.43a10.42 10.42 0 0 1-1.62-5.61c0-5.75 4.68-10.43 10.43-10.43S26.44 9.95 26.44 15.7c0 5.75-4.68 10.75-10.43 10.75z" />
+    </svg>
+  );
+}
+
 export default function ProjectWorkspacePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1256,6 +1271,21 @@ export default function ProjectWorkspacePage() {
       setIsSharing(false);
     }
   };
+
+  const handleShareOnWhatsApp = useCallback(() => {
+    const bookTitle = project?.title || "My Book";
+    const text = `Check out my new children's book created with NoorStudio! ${bookTitle}`;
+
+    // WhatsApp universal deep link. On desktop it opens WhatsApp Web; on mobile it opens the app.
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      // Fallback if popups are blocked.
+      window.location.href = url;
+    }
+  }, [project?.title]);
 
   return (
     <AppLayout
