@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import { CreditBadge } from "@/components/shared/CreditBadge";
 import { demoUserCredits } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ const bottomNavItems = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const { isRTL } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const credits = demoUserCredits;
 
@@ -56,6 +58,7 @@ export function AppSidebar() {
         to={item.href}
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
+          isRTL && "flex-row-reverse",
           isActive
             ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-gold"
             : highlight
@@ -72,13 +75,14 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 h-screen bg-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 z-40",
+        "fixed top-0 h-screen bg-sidebar flex flex-col transition-all duration-300 z-40",
+        isRTL ? "right-0 border-l border-sidebar-border" : "left-0 border-r border-sidebar-border",
         collapsed ? "w-16" : "w-64"
       )}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
-        <Link to="/" className="flex items-center gap-2">
+      <div className={cn("h-16 flex items-center justify-between px-4 border-b border-sidebar-border", isRTL && "flex-row-reverse")}>
+        <Link to="/" className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
           <div className="w-9 h-9 rounded-xl bg-sidebar-primary flex items-center justify-center shrink-0">
             <Sparkles className="w-5 h-5 text-sidebar-primary-foreground" />
           </div>
@@ -93,9 +97,17 @@ export function AppSidebar() {
           className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors text-sidebar-foreground/60 hover:text-sidebar-foreground"
         >
           {collapsed ? (
-            <ChevronRight className="w-4 h-4" />
+            isRTL ? (
+              <ChevronLeft className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )
           ) : (
-            <ChevronLeft className="w-4 h-4" />
+            isRTL ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )
           )}
         </button>
       </div>
@@ -157,7 +169,8 @@ export function AppSidebar() {
         <div
           className={cn(
             "flex items-center gap-3 p-2 rounded-xl bg-sidebar-accent",
-            collapsed && "justify-center"
+            collapsed && "justify-center",
+            isRTL && "flex-row-reverse"
           )}
         >
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-semibold shrink-0">

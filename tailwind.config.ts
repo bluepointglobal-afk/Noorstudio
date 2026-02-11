@@ -1,5 +1,33 @@
 import animate from "tailwindcss-animate";
 
+// RTL support plugin
+function rtlPlugin({ addUtilities }: any) {
+  addUtilities({
+    // Text direction utilities
+    "[dir='rtl']": {
+      direction: "rtl",
+    },
+    "[dir='ltr']": {
+      direction: "ltr",
+    },
+    // Flip horizontal margins/padding for RTL
+    "[dir='rtl'] .mr-auto": {
+      marginRight: "auto",
+      marginLeft: "0",
+    },
+    "[dir='rtl'] .ml-auto": {
+      marginLeft: "auto",
+      marginRight: "0",
+    },
+    "[dir='rtl'] .text-right": {
+      textAlign: "left",
+    },
+    "[dir='rtl'] .text-left": {
+      textAlign: "right",
+    },
+  });
+}
+
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
@@ -162,5 +190,5 @@ export default {
       },
     },
   },
-  plugins: [animate],
+  plugins: [animate, rtlPlugin],
 } satisfies Config;

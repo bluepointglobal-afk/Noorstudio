@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getBalances, seedDefaultBalancesIfEmpty, CreditBalances } from "@/lib/storage/creditsStore";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -34,6 +35,7 @@ function CreditIndicator({ type, current, icon: Icon }: { type: string; current:
 
 export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const navigate = useNavigate();
+  const { isRTL } = useLanguage();
   const [credits, setCredits] = useState<CreditBalances>({ characterCredits: 0, bookCredits: 0, plan: "author" });
 
   // Load credits on mount and set up refresh
@@ -61,7 +63,12 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       <AppSidebar />
 
       {/* Top Bar */}
-      <header className="fixed top-0 left-64 right-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-6">
+      <header 
+        className={cn(
+          "fixed top-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-6",
+          isRTL ? "right-64 left-0" : "left-64 right-0"
+        )}
+      >
         <div className="flex items-center gap-4 flex-1">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -97,7 +104,7 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       </header>
 
       {/* Main Content */}
-      <main className="ml-64 pt-16 min-h-screen">
+      <main className={cn("pt-16 min-h-screen", isRTL ? "mr-64" : "ml-64")}>
         {(title || actions) && (
           <div className="border-b border-border bg-background">
             <div className="px-6 py-6 flex items-center justify-between">

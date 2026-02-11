@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Sparkles } from "lucide-react";
+import { LanguageToggle } from "./LanguageToggle";
 
 const navLinks = [
   { href: "/product", label: "Product" },
@@ -51,6 +52,7 @@ export function Navbar() {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-3">
+            <LanguageToggle />
             {isAppRoute ? (
               <Link to="/">
                 <Button variant="ghost" size="sm">
@@ -105,6 +107,9 @@ export function Navbar() {
                   {link.label}
                 </Link>
               ))}
+              <div className="px-4 py-3 border-t border-border/50 mt-2">
+                <LanguageToggle />
+              </div>
               <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50">
                 <Link to="/app/dashboard" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="outline" className="w-full">
