@@ -174,6 +174,12 @@ const generateMockExport = () => [
     fileSize: 2500000,
     generatedAt: new Date().toISOString(),
   },
+  {
+    format: "epub" as const,
+    fileUrl: "/demo/exports/book-preview.epub",
+    fileSize: 1800000,
+    generatedAt: new Date().toISOString(),
+  },
 ];
 
 // ============================================
@@ -374,13 +380,13 @@ export class MockJobRunner {
         "Preparing files...",
         "Optimizing images...",
         "Generating PDF...",
+        "Generating EPUB...",
         "Creating print-ready version...",
         "Checking color profiles...",
         "Validating output...",
         "Compressing files...",
         "Running quality check...",
         "Packaging files...",
-        "Completing export...",
       ],
       completed: ["Done!"],
     };

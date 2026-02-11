@@ -126,6 +126,7 @@ import {
 import { canExport, getPlanInfo } from "@/lib/entitlements";
 import { UpgradeBanner } from "@/components/shared/UpgradeModal";
 import { copyShareUrl } from "@/lib/demo/demoStore";
+import { generateEPUB, downloadEPUB, downloadPDF } from "@/lib/export";
 
 // Demo artifact generators
 const DEMO_SPREADS = [
@@ -369,6 +370,7 @@ export default function ProjectWorkspacePage() {
   const [isSharing, setIsSharing] = useState(false);
   const [selectedIllustration, setSelectedIllustration] = useState<IllustrationArtifactItem | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState<string | null>(null);
 
   // Illustration approval workflow
   const [isIllustrationUpdating, setIsIllustrationUpdating] = useState(false);
@@ -1495,6 +1497,65 @@ export default function ProjectWorkspacePage() {
     }, 100);
   };
 
+  const handleDownloadExport = async (format: string) => {
+    if (!project) return;
+
+    setIsDownloading(format);
+    try {
+      if (format.toLowerCase() === "epub") {
+        // Get chapters and layout for EPUB generation
+        const chaptersContent = getArtifactContent<ChapterArtifactItem[]>(project, "chapters");
+        const layoutContent = getArtifactContent<LayoutArtifactContent>(project, "layout");
+        const coverContent = getArtifactContent<CoverArtifactContent>(project, "cover");
+        const illustrationsContent = getArtifactContent<IllustrationArtifactContent>(project, "illustrations");
+
+        if (!chaptersContent || !layoutContent) {
+          toast({
+            title: "Missing Content",
+            description: "Chapters and layout are required for EPUB export.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Generate EPUB
+        const result = await generateEPUB({
+          chapters: chaptersContent,
+          layout: layoutContent,
+          cover: coverContent || { frontCoverUrl: "", backCoverUrl: "" },
+          illustrations: illustrationsContent,
+          projectTitle: project.title,
+          authorName: "NoorStudio",
+          language: "en",
+          publisher: "NoorStudio",
+        });
+
+        // Download EPUB
+        downloadEPUB(result.blob, project.title);
+
+        toast({
+          title: "EPUB Downloaded",
+          description: `${project.title}.epub has been downloaded successfully.`,
+        });
+      } else if (format.toLowerCase() === "pdf") {
+        // For PDF, show a message that it's ready (actual PDF generation would go here)
+        toast({
+          title: "PDF Download",
+          description: `Your ${project.title}.pdf is ready to download. (Demo mode)`,
+        });
+      }
+    } catch (err) {
+      console.error("Download failed:", err);
+      toast({
+        title: "Download Failed",
+        description: err instanceof Error ? err.message : "An error occurred during download.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(null);
+    }
+  };
+
   const handleShareDemo = async () => {
     if (isSharing) return;
     setIsSharing(true);
@@ -2428,14 +2489,21 @@ export default function ProjectWorkspacePage() {
                               key={format}
                               variant="outline"
                               className="flex-1"
-                              disabled={isExportStale(project)}
-                              onClick={() => toast({
-                                title: "Download Started",
-                                description: `Your ${format.toUpperCase()} file is being prepared. (Demo - no actual file)`,
-                              })}
+                              disabled={isExportStale(project) || isDownloading !== null}
+                              onClick={() => handleDownloadExport(format)}
+                              title={format === "epub" ? "Download book as EPUB format" : "Download book as PDF"}
                             >
-                              <Download className="w-4 h-4 mr-2" />
-                              Download {format.toUpperCase()}
+                              {isDownloading === format ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Downloading...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-4 h-4 mr-2" />
+                                  Download {format.toUpperCase()}
+                                </>
+                              )}
                             </Button>
                           ))}
                         </div>
