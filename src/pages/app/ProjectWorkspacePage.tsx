@@ -1103,6 +1103,124 @@ export default function ProjectWorkspacePage() {
     }
   };
 
+  const handleGenerateAllChapters = () => {
+    setActiveArtifactTab("chapters");
+    handleRunStage("chapters");
+  };
+
+  const handleRegenerateChapter = async (chapterNumber: number) => {
+    if (!project) return;
+
+    const outlineContent = getArtifactContent<{ _structured?: OutlineOutput }>(project, "outline");
+    const outline = outlineContent?._structured;
+
+    if (!outline) {
+      toast({
+        title: "Missing outline",
+        description: "Generate the outline first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (runningStage) return;
+
+    setRunningStage("chapters");
+    setStageSubProgress(null);
+
+    const token = new CancelToken();
+    setCancelToken(token);
+
+    updatePipelineStage(project.id, "chapters", {
+      status: "running",
+      progress: 0,
+      message: `Regenerating Chapter ${chapterNumber}/${outline.chapters.length}...`,
+    });
+    refreshProject();
+
+    const onAIProgress = (progress: StageRunnerProgress) => {
+      updatePipelineStage(project.id, "chapters", {
+        status: progress.status as PipelineStageState["status"],
+        progress: progress.progress,
+        message: progress.message,
+      });
+      setStageSubProgress(progress.subProgress || null);
+      refreshProject();
+    };
+
+    try {
+      const result = await runChaptersStage(
+        project,
+        outline,
+        characters,
+        kbRules,
+        onAIProgress,
+        token,
+        { chapterNumbers: [chapterNumber] }
+      );
+
+      if (result.success && result.data?.chapters?.length) {
+        const existing = getArtifactContent<ChapterArtifactItem[]>(project, "chapters") || [];
+        const byNumber = new Map(existing.map((c) => [c.chapterNumber, c] as const));
+
+        for (const ch of result.data.chapters) {
+          const updatedItem: ChapterArtifactItem = {
+            chapterNumber: ch.chapter_number,
+            title: ch.chapter_title,
+            content: ch.text,
+            wordCount: ch.text.split(/\s+/).length,
+            vocabularyNotes: ch.vocabulary_notes,
+            islamicAdabChecks: ch.islamic_adab_checks,
+            _structured: ch,
+          };
+          byNumber.set(updatedItem.chapterNumber, updatedItem);
+        }
+
+        const merged = Array.from(byNumber.values()).sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+        addArtifact(project.id, "chapters", {
+          type: "chapters" as const,
+          content: merged,
+          generatedAt: new Date().toISOString(),
+        });
+
+        updatePipelineStage(project.id, "chapters", {
+          status: "completed",
+          progress: 100,
+          message: `Chapter ${chapterNumber} regenerated`,
+        });
+
+        refreshProject();
+
+        toast({
+          title: "Chapter regenerated",
+          description: `Chapter ${chapterNumber} was regenerated.`,
+        });
+      } else {
+        throw new Error(result.error || "Failed to regenerate chapter");
+      }
+    } catch (err) {
+      console.error("Failed to regenerate chapter:", err);
+      updatePipelineStage(project.id, "chapters", {
+        status: "error",
+        progress: 0,
+        message: err instanceof Error ? err.message : "Failed to regenerate chapter",
+      });
+      refreshProject();
+
+      toast({
+        title: "Regeneration failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunningStage(null);
+      setCancelToken(null);
+      setStageSubProgress(null);
+    }
+  };
+
+
   const getStageIcon = (stageId: string) => {
     switch (stageId) {
       case "outline":
@@ -1708,7 +1826,15 @@ export default function ProjectWorkspacePage() {
                     stageLabel="Chapters"
                   />
                 )}
-                <h3 className="font-semibold mb-4">Chapter Preview</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Chapter Preview</h3>
+                  {!chaptersArtifact && (
+                    <Button onClick={handleGenerateAllChapters} disabled={!hasOutline || runningStage === "chapters"} variant="hero" size="sm">
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate All Chapters
+                    </Button>
+                  )}
+                </div>
                 {chaptersArtifact && (
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-6">
@@ -1718,9 +1844,21 @@ export default function ProjectWorkspacePage() {
                             <h4 className="font-semibold">
                               Chapter {chapter.chapterNumber}: {chapter.title}
                             </h4>
-                            <Badge variant="outline" className="text-xs">
-                              {chapter.wordCount} words
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {chapter.wordCount} words
+                              </Badge>
+                              <Button
+                                onClick={() => handleRegenerateChapter(chapter.chapterNumber)}
+                                disabled={runningStage === "chapters"}
+                                variant="outline"
+                                size="xs"
+                                className="text-xs"
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                Regen
+                              </Button>
+                            </div>
                           </div>
                           <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                             {chapter.content}
@@ -1916,6 +2054,15 @@ export default function ProjectWorkspacePage() {
                               Stale
                             </Badge>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleShareOnWhatsApp}
+                            title="Share on WhatsApp"
+                          >
+                            <WhatsAppIcon className="w-4 h-4 mr-1 text-green-600" />
+                            Share on WhatsApp
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
