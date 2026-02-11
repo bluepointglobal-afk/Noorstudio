@@ -34,7 +34,52 @@ import { canCreateCharacter } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { CharacterRefinementPanel, QuickAdjustments } from "@/components/characters/CharacterRefinementPanel";
 
+const characterTemplates = [
+  {
+    id: "scholar",
+    label: "Scholar",
+    description: "Wise and thoughtful",
+    traits: ["wise", "curious", "patient"],
+    role: "Scholar",
+    ageRange: "10-14",
+  },
+  {
+    id: "adventurer",
+    label: "Adventurer",
+    description: "Brave and daring",
+    traits: ["brave", "adventurous", "determined"],
+    role: "Adventurer",
+    ageRange: "10-14",
+  },
+  {
+    id: "artist",
+    label: "Artist",
+    description: "Creative and expressive",
+    traits: ["creative", "thoughtful", "playful"],
+    role: "Artist",
+    ageRange: "10-14",
+  },
+  {
+    id: "helper",
+    label: "Helper",
+    description: "Kind and caring",
+    traits: ["kind", "helpful", "caring"],
+    role: "Helper",
+    ageRange: "10-14",
+  },
+  {
+    id: "custom",
+    label: "Create Custom Character",
+    description: "Build from scratch with your description",
+    traits: [],
+    role: "Custom",
+    ageRange: "",
+    isCustom: true,
+  },
+];
+
 const steps = [
+  { id: 0, title: "Template", icon: User, description: "Choose creation path" },
   { id: 1, title: "Persona", icon: User, description: "Name, role, traits" },
   { id: 2, title: "Visual DNA", icon: Palette, description: "Appearance & modesty" },
   { id: 3, title: "Character", icon: Sparkles, description: "Generate & refine" },
@@ -57,7 +102,8 @@ const POSE_SHEET_COST = 8;               // 12-pose sheet (single API call)
 export default function CharacterCreatePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -122,6 +168,8 @@ export default function CharacterCreatePage() {
 
   const canProceed = () => {
     switch (currentStep) {
+      case 0:
+        return selectedTemplate !== null;
       case 1:
         return formData.name.trim() && formData.role.trim() && formData.ageRange;
       case 2:
@@ -137,14 +185,28 @@ export default function CharacterCreatePage() {
   };
 
   const handleNextStep = () => {
-    // Check character limit when moving past Step 1
-    if (currentStep === 1) {
+    // Check character limit when moving past Step 0
+    if (currentStep === 0) {
       const check = canCreateCharacter(characterCount);
       if (!check.allowed) {
         setShowUpgradeModal(true);
         return;
       }
+      
+      // Apply template data if a template is selected
+      if (selectedTemplate && selectedTemplate !== "custom") {
+        const template = characterTemplates.find(t => t.id === selectedTemplate);
+        if (template) {
+          setFormData((prev) => ({
+            ...prev,
+            role: template.role,
+            ageRange: template.ageRange,
+            traits: template.traits,
+          }));
+        }
+      }
     }
+    
     setCurrentStep((s) => s + 1);
   };
 
@@ -599,6 +661,80 @@ export default function CharacterCreatePage() {
 
       {/* Step Content */}
       <div className="card-glow p-8 max-w-2xl mx-auto">
+        {/* Step 0: Template Selection */}
+        {currentStep === 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Choose Your Path</h2>
+                <p className="text-muted-foreground">Start with a template or create a fully custom character</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {characterTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => setSelectedTemplate(template.id)}
+                  className={cn(
+                    "p-6 rounded-xl border-2 transition-all text-left hover:shadow-lg",
+                    selectedTemplate === template.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-muted/50 hover:border-primary/50"
+                  )}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-lg">{template.label}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
+                    </div>
+                    {selectedTemplate === template.id && (
+                      <Check className="w-5 h-5 text-primary flex-shrink-0 mt-1" />
+                    )}
+                  </div>
+                  
+                  {!template.isCustom && (
+                    <div className="space-y-2 mt-4">
+                      <div className="text-xs text-muted-foreground">
+                        <p><strong>Role:</strong> {template.role}</p>
+                        <p><strong>Age:</strong> {template.ageRange}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {template.traits.map((trait) => (
+                          <Badge key={trait} variant="secondary" className="text-xs capitalize">
+                            {trait}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {template.isCustom && (
+                    <div className="text-xs text-muted-foreground mt-4">
+                      Define everything from scratch with full creative control
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+              <div className="flex gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-900 mb-1">Quick Start vs Custom</p>
+                  <p className="text-sm text-blue-800">
+                    Templates give you a head start with suggested attributes, while "Create Custom Character" lets you describe exactly what you want.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Persona */}
         {currentStep === 1 && (
           <div className="space-y-6">
@@ -1198,12 +1334,12 @@ export default function CharacterCreatePage() {
           <Button
             variant="outline"
             onClick={() => setCurrentStep((s) => s - 1)}
-            disabled={currentStep === 1}
+            disabled={currentStep === 0}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Previous
           </Button>
-          {/* Only show Next for steps 1-2. Steps 3-4 have their own action buttons */}
+          {/* Only show Next for steps 0-2. Steps 3-4 have their own action buttons */}
           {currentStep < 3 && (
             <Button
               variant="hero"
