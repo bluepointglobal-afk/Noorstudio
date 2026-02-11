@@ -1644,7 +1644,32 @@ export default function ProjectWorkspacePage() {
                           : stageInfo?.description}
                       </p>
                       {stage.status === "running" && (
-                        <Progress value={stage.progress} className="h-1.5 mt-2" />
+                        <div className="space-y-2 mt-3">
+                          {/* Main progress bar */}
+                          <Progress value={stage.progress} className="h-2" />
+                          
+                          {/* Sub-progress information */}
+                          {runningStage === stage.name && stageSubProgress && (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {stageSubProgress.label}
+                              </span>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {stageSubProgress.current} / {stageSubProgress.total}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Overall progress percentage */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              Overall Progress
+                            </span>
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {Math.round(stage.progress)}%
+                            </span>
+                          </div>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
