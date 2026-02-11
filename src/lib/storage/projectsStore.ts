@@ -96,6 +96,39 @@ export interface MetaArtifact {
 
 export type ProjectArtifact = TextArtifact | ImageArtifact | ExportArtifact | MetaArtifact;
 
+// ============================================
+// Sharing & Permissions Types
+// ============================================
+
+export type ProjectPermission = "view" | "edit";
+
+export interface ProjectShare {
+  email: string;
+  permission: ProjectPermission;
+  sharedAt: string;
+}
+
+// ============================================
+// Chapter Versioning Types (P2-3)
+// ============================================
+
+export interface ChapterVersion {
+  versionId: string;
+  chapterNumber: number;
+  content: string;
+  title: string;
+  wordCount: number;
+  timestamp: string;
+  author?: string; // For collaborative editing
+  vocabularyNotes?: string;
+  islamicAdabChecks?: string;
+}
+
+export interface ChapterHistory {
+  chapterNumber: number;
+  versions: ChapterVersion[]; // Last 10 versions
+}
+
 export interface StoredProject {
   id: string;
   title: string;
@@ -138,6 +171,13 @@ export interface StoredProject {
   exportPackage?: ExportPackage;
   exportHistory?: ExportHistory[];
   changeTracker?: ProjectChangeTracker;
+
+  // Collaborative Sharing (P2-2)
+  sharedWith?: ProjectShare[];
+  shareTokens?: Record<string, { permission: ProjectPermission; createdAt: string }>;
+
+  // Chapter Versioning (P2-3)
+  chapterHistory?: Record<number, ChapterHistory>;
 }
 
 // ============================================
@@ -707,4 +747,185 @@ export function getExportSummary(project: StoredProject): {
     totalSize: `${totalSizeMB.toFixed(1)} MB`,
     formats: pkg.exportTargets.map((t) => t.toUpperCase()),
   };
+}
+
+// ============================================
+// Chapter Versioning (P2-3)
+// ============================================
+
+function generateVersionId(): string {
+  return `v-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export interface SaveChapterVersionInput {
+  chapterNumber: number;
+  content: string;
+  title: string;
+  wordCount: number;
+  author?: string;
+  vocabularyNotes?: string;
+  islamicAdabChecks?: string;
+}
+
+/**
+ * Save a new version of a chapter and maintain history (last 10 versions)
+ */
+export function saveChapterVersion(projectId: string, input: SaveChapterVersionInput): StoredProject | null {
+  const project = getProject(projectId);
+  if (!project) return null;
+
+  const now = new Date().toISOString();
+  const chapterHistory = project.chapterHistory || {};
+  const chapterNum = input.chapterNumber;
+
+  const newVersion: ChapterVersion = {
+    versionId: generateVersionId(),
+    chapterNumber: chapterNum,
+    content: input.content,
+    title: input.title,
+    wordCount: input.wordCount,
+    timestamp: now,
+    author: input.author,
+    vocabularyNotes: input.vocabularyNotes,
+    islamicAdabChecks: input.islamicAdabChecks,
+  };
+
+  // Get or create history for this chapter
+  const history = chapterHistory[chapterNum] || {
+    chapterNumber: chapterNum,
+    versions: [],
+  };
+
+  // Add new version to the beginning
+  history.versions.unshift(newVersion);
+
+  // Keep only last 10 versions
+  if (history.versions.length > 10) {
+    history.versions = history.versions.slice(0, 10);
+  }
+
+  chapterHistory[chapterNum] = history;
+
+  return updateProject(projectId, { chapterHistory });
+}
+
+/**
+ * Get the version history for a specific chapter
+ */
+export function getChapterHistory(projectId: string, chapterNumber: number): ChapterVersion[] {
+  const project = getProject(projectId);
+  if (!project || !project.chapterHistory) return [];
+
+  const history = project.chapterHistory[chapterNumber];
+  return history ? history.versions : [];
+}
+
+/**
+ * Restore a chapter to a specific version
+ */
+export function restoreChapterVersion(projectId: string, versionId: string): StoredProject | null {
+  const project = getProject(projectId);
+  if (!project || !project.chapterHistory) return null;
+
+  // Find the version across all chapters
+  let versionToRestore: ChapterVersion | null = null;
+  let chapterNum = 0;
+
+  for (const [chapNum, history] of Object.entries(project.chapterHistory)) {
+    const version = history.versions.find((v) => v.versionId === versionId);
+    if (version) {
+      versionToRestore = version;
+      chapterNum = parseInt(chapNum, 10);
+      break;
+    }
+  }
+
+  if (!versionToRestore) return null;
+
+  // Update the chapter in the chapters artifact
+  const chaptersContent = getArtifactContent<Array<{ chapterNumber: number; [key: string]: unknown }>>(project, "chapters");
+  if (!chaptersContent) return null;
+
+  const updatedChapters = chaptersContent.map((ch) => {
+    if (ch.chapterNumber === chapterNum) {
+      return {
+        ...ch,
+        content: versionToRestore.content,
+        title: versionToRestore.title,
+        wordCount: versionToRestore.wordCount,
+        vocabularyNotes: versionToRestore.vocabularyNotes,
+        islamicAdabChecks: versionToRestore.islamicAdabChecks,
+      };
+    }
+    return ch;
+  });
+
+  // Save updated chapters
+  addArtifact(projectId, "chapters", {
+    type: "chapters",
+    content: updatedChapters,
+    generatedAt: new Date().toISOString(),
+  });
+
+  // Create a version entry for the restoration
+  saveChapterVersion(projectId, {
+    chapterNumber: chapterNum,
+    content: versionToRestore.content,
+    title: versionToRestore.title,
+    wordCount: versionToRestore.wordCount,
+    author: "restored",
+  });
+
+  return getProject(projectId);
+}
+
+// ============================================
+// Collaborative Sharing & Permissions (P2-2)
+// ============================================
+
+export interface PermissionCheckResult {
+  allowed: boolean;
+  permission?: ProjectPermission;
+  reason?: string;
+}
+
+/**
+ * Check if a user has permission to edit a project
+ * For MVP: assumes single device/user. In production, would check against currentUserId.
+ * Returns true if project has no sharing configured (owner access) or if user has edit permission.
+ */
+export function canEditProject(projectId: string): boolean {
+  const project = getProject(projectId);
+  if (!project) return false;
+
+  // If no sharing configured, owner can edit
+  if (!project.sharedWith || project.sharedWith.length === 0) {
+    return true;
+  }
+
+  // For MVP on single device: assume current user is owner
+  // In production, check against project.ownerId and current user's ID
+  return true;
+}
+
+/**
+ * Check if a user has view permission for a project
+ * For MVP: all users with project access have at minimum view permission
+ */
+export function canViewProject(projectId: string): boolean {
+  const project = getProject(projectId);
+  if (!project) return false;
+
+  // Owner can always view
+  // Collaborators with view or edit permission can view
+  return true;
+}
+
+/**
+ * Get all collaborators for a project
+ */
+export function getProjectCollaborators(projectId: string): ProjectShare[] {
+  const project = getProject(projectId);
+  if (!project) return [];
+  return project.sharedWith || [];
 }

@@ -68,6 +68,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CreditConfirmModal } from "@/components/shared/CreditConfirmModal";
 import { LayoutPreview } from "@/components/shared/LayoutPreview";
+import { ShareProjectModal } from "@/components/shared/ShareProjectModal";
 import { useToast } from "@/hooks/use-toast";
 import { generateImage, ImageGenerationRequest } from "@/lib/ai/providers/imageProvider";
 import { mockJobRunner, JobProgressEvent } from "@/lib/jobs/mockJobRunner";
@@ -105,6 +106,10 @@ import {
   ExportPackage,
   ExportFile,
   getArtifactContent,
+  getChapterHistory,
+  restoreChapterVersion,
+  saveChapterVersion,
+  ChapterVersion,
 } from "@/lib/storage/projectsStore";
 import {
   getCharacter,
@@ -363,11 +368,17 @@ export default function ProjectWorkspacePage() {
   const [stageSubProgress, setStageSubProgress] = useState<StageRunnerProgress["subProgress"] | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [selectedIllustration, setSelectedIllustration] = useState<IllustrationArtifactItem | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Illustration approval workflow
   const [isIllustrationUpdating, setIsIllustrationUpdating] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState<string>("");
+
+  // Chapter history modal state
+  const [showChapterHistoryModal, setShowChapterHistoryModal] = useState(false);
+  const [selectedChapterForHistory, setSelectedChapterForHistory] = useState<number | null>(null);
+  const [chapterVersions, setChapterVersions] = useState<ChapterVersion[]>([]);
 
   const artifactsRef = useRef<HTMLDivElement>(null);
 
@@ -1159,6 +1170,36 @@ export default function ProjectWorkspacePage() {
     handleRunStage("chapters");
   };
 
+  // Chapter history handlers
+  const handleOpenChapterHistory = (chapterNumber: number) => {
+    if (!project) return;
+    
+    const versions = getChapterHistory(project.id, chapterNumber);
+    setChapterVersions(versions);
+    setSelectedChapterForHistory(chapterNumber);
+    setShowChapterHistoryModal(true);
+  };
+
+  const handleRestoreChapterVersion = (versionId: string) => {
+    if (!project) return;
+
+    const restoredProject = restoreChapterVersion(project.id, versionId);
+    if (restoredProject) {
+      refreshProject();
+      toast({
+        title: "Chapter Restored",
+        description: "The chapter has been restored to the selected version.",
+      });
+      setShowChapterHistoryModal(false);
+    } else {
+      toast({
+        title: "Restore Failed",
+        description: "Could not restore the chapter version.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleRegenerateChapter = async (chapterNumber: number) => {
     if (!project) return;
 
@@ -1462,6 +1503,14 @@ export default function ProjectWorkspacePage() {
       subtitle={`${project.templateType} • Ages ${project.ageRange}`}
       actions={
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsShareModalOpen(true)}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Share Project
+          </Button>
           <Button variant="outline" size="sm" onClick={handleShareDemo} disabled={isSharing}>
             {isSharing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1926,6 +1975,16 @@ export default function ProjectWorkspacePage() {
                               <Badge variant="outline" className="text-xs">
                                 {chapter.wordCount} words
                               </Badge>
+                              <Button
+                                onClick={() => handleOpenChapterHistory(chapter.chapterNumber)}
+                                variant="outline"
+                                size="xs"
+                                className="text-xs"
+                                title="View chapter version history"
+                              >
+                                <History className="w-3 h-3 mr-1" />
+                                History
+                              </Button>
                               <Button
                                 onClick={() => handleRegenerateChapter(chapter.chapterNumber)}
                                 disabled={runningStage === "chapters"}
@@ -2631,6 +2690,100 @@ follows Islamic guidelines for children's content.
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Chapter History Modal */}
+      <Dialog open={showChapterHistoryModal} onOpenChange={setShowChapterHistoryModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedChapterForHistory ? `Chapter ${selectedChapterForHistory} History` : "Chapter History"}
+            </DialogTitle>
+          </DialogHeader>
+          {chapterVersions.length > 0 ? (
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-4">
+                {chapterVersions.map((version, index) => (
+                  <div
+                    key={version.versionId}
+                    className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant={index === 0 ? "default" : "outline"} className="text-xs">
+                            {index === 0 ? "Current" : `v${chapterVersions.length - index}`}
+                          </Badge>
+                          <span className="text-sm font-medium">{version.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {new Date(version.timestamp).toLocaleString()}
+                          {version.author && (
+                            <>
+                              <span>•</span>
+                              <span>{version.author}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {version.wordCount} words
+                      </div>
+                    </div>
+
+                    {version.vocabularyNotes && (
+                      <div className="mb-2 p-2 bg-muted/50 rounded text-xs">
+                        <p className="font-medium mb-1">Vocabulary Notes:</p>
+                        <p className="text-muted-foreground line-clamp-2">{version.vocabularyNotes}</p>
+                      </div>
+                    )}
+
+                    {version.islamicAdabChecks && (
+                      <div className="mb-3 p-2 bg-muted/50 rounded text-xs">
+                        <p className="font-medium mb-1">Islamic Adab Checks:</p>
+                        <p className="text-muted-foreground line-clamp-2">{version.islamicAdabChecks}</p>
+                      </div>
+                    )}
+
+                    <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
+                      {version.content}
+                    </p>
+
+                    {index > 0 && (
+                      <Button
+                        onClick={() => handleRestoreChapterVersion(version.versionId)}
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-2" />
+                        Restore This Version
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <History className="w-12 h-12 mb-3 opacity-50" />
+              <p className="text-sm">No version history available for this chapter yet.</p>
+            </div>
+          )}
+          <Button variant="outline" onClick={() => setShowChapterHistoryModal(false)} className="w-full mt-4">
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {project && (
+        <ShareProjectModal
+          isOpen={isShareModalOpen}
+          onOpenChange={setIsShareModalOpen}
+          projectId={project.id}
+          projectTitle={project.title}
+        />
+      )}
     </AppLayout >
   );
 }
