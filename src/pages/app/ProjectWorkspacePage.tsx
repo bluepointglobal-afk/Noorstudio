@@ -1588,12 +1588,11 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const handleShareOnWhatsApp = useCallback(() => {
-    const bookTitle = project?.title || "My Book";
-    const text = `Check out my new children's book created with NoorStudio! ${bookTitle}`;
+  const handleShareOnWhatsApp = () => {
+    const shareText = "Check out my children's book created with NoorStudio!";
 
     // WhatsApp universal deep link. On desktop it opens WhatsApp Web; on mobile it opens the app.
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
     try {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -1601,7 +1600,7 @@ export default function ProjectWorkspacePage() {
       // Fallback if popups are blocked.
       window.location.href = url;
     }
-  }, [project?.title]);
+  };
 
   return (
     <AppLayout
