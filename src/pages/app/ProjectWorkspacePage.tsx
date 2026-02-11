@@ -126,7 +126,7 @@ import {
 import { canExport, getPlanInfo } from "@/lib/entitlements";
 import { UpgradeBanner } from "@/components/shared/UpgradeModal";
 import { copyShareUrl } from "@/lib/demo/demoStore";
-import { generateEPUB, downloadEPUB, downloadPDF } from "@/lib/export";
+import { generateEPUB, downloadEPUB, generatePDF, downloadPDF } from "@/lib/export";
 
 // Demo artifact generators
 const DEMO_SPREADS = [
@@ -1536,10 +1536,35 @@ export default function ProjectWorkspacePage() {
           description: `${project.title}.epub has been downloaded successfully.`,
         });
       } else if (format.toLowerCase() === "pdf") {
-        // For PDF, show a message that it's ready (actual PDF generation would go here)
+        // Get chapters, layout and cover for PDF generation
+        const chaptersContent = getArtifactContent<ChapterArtifactItem[]>(project, "chapters");
+        const layoutContent = getArtifactContent<LayoutArtifactContent>(project, "layout");
+        const coverContent = getArtifactContent<CoverArtifactContent>(project, "cover");
+
+        if (!chaptersContent || !layoutContent) {
+          toast({
+            title: "Missing Content",
+            description: "Chapters and layout are required for PDF export.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Generate PDF
+        const result = await generatePDF({
+          chapters: chaptersContent,
+          layout: layoutContent,
+          cover: coverContent || { frontCoverUrl: "", backCoverUrl: "" },
+          projectTitle: project.title,
+          authorName: "NoorStudio",
+        });
+
+        // Download PDF
+        downloadPDF(result.blob, project.title);
+
         toast({
-          title: "PDF Download",
-          description: `Your ${project.title}.pdf is ready to download. (Demo mode)`,
+          title: "PDF Downloaded",
+          description: `${project.title}.pdf has been downloaded successfully.`,
         });
       }
     } catch (err) {
@@ -2486,28 +2511,46 @@ export default function ProjectWorkspacePage() {
                       <div>
                         <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Export Formats</p>
                         <div className="flex gap-3">
-                          {project.exportPackage.exportTargets.map((format) => (
-                            <Button
-                              key={format}
-                              variant="outline"
-                              className="flex-1"
-                              disabled={isExportStale(project) || isDownloading !== null}
-                              onClick={() => handleDownloadExport(format)}
-                              title={format === "epub" ? "Download book as EPUB format" : "Download book as PDF"}
-                            >
-                              {isDownloading === format ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Downloading...
-                                </>
-                              ) : (
-                                <>
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Download {format.toUpperCase()}
-                                </>
-                              )}
-                            </Button>
-                          ))}
+                          {/* PDF Download Button */}
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            disabled={isExportStale(project) || isDownloading !== null}
+                            onClick={() => handleDownloadExport("pdf")}
+                            title="Download book as PDF"
+                          >
+                            {isDownloading === "pdf" ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download PDF
+                              </>
+                            )}
+                          </Button>
+                          {/* EPUB Download Button */}
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            disabled={isExportStale(project) || isDownloading !== null}
+                            onClick={() => handleDownloadExport("epub")}
+                            title="Download book as EPUB format"
+                          >
+                            {isDownloading === "epub" ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download EPUB
+                              </>
+                            )}
+                          </Button>
                         </div>
                       </div>
                     </div>
