@@ -22,6 +22,7 @@ export const translations = {
     billing: "Billing",
     settings: "Settings",
     help: "Help",
+    newBook: "New Book", 
 
     // Common Buttons & Actions
     create: "Create",
@@ -41,7 +42,8 @@ export const translations = {
 
     // Common Labels
     search: "Search",
-    loading: "Loading...",
+    searchPlaceholder: "Search characters, books, projects...",
+    loading: "Loading...", 
     error: "Error",
     success: "Success",
     warning: "Warning",
@@ -88,6 +90,7 @@ export const translations = {
     billing: "الفواتير",
     settings: "الإعدادات",
     help: "المساعدة",
+    newBook: "كتاب جديد", 
 
     // Common Buttons & Actions
     create: "إنشاء",
@@ -107,7 +110,8 @@ export const translations = {
 
     // Common Labels
     search: "بحث",
-    loading: "جاري التحميل...",
+    searchPlaceholder: "ابحث عن الشخصيات والكتب والمشاريع...",
+    loading: "جاري التحميل...", 
     error: "خطأ",
     success: "نجح",
     warning: "تحذير",

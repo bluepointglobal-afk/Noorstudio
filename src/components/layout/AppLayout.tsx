@@ -36,7 +36,7 @@ function CreditIndicator({ type, current, icon: Icon }: { type: string; current:
 export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isRTL } = useLanguage();
+  const { isRTL, t } = useLanguage();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [credits, setCredits] = useState<CreditBalances>({ characterCredits: 0, bookCredits: 0, plan: "author" });
 
@@ -131,10 +131,15 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
           </Button>
 
           <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground",
+                isRTL ? "right-3" : "left-3"
+              )}
+            />
             <Input
-              placeholder="Search characters, books, projects..."
-              className="pl-10 bg-muted/50 border-border/50"
+              placeholder={t("searchPlaceholder")}
+              className={cn(isRTL ? "pr-10" : "pl-10", "bg-muted/50 border-border/50")}
             />
           </div>
         </div>
