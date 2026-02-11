@@ -1,4 +1,5 @@
 // P0-2 Fix: Force rebuild to resolve empty page rendering
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
 const pricingTiers = [
   {
     name: "Free Trial",
-    price: "$0",
+    usdPrice: 0,
     period: " / 7 days",
     description: "Try NoorStudio with a lightweight trial before you upgrade.",
     features: [
@@ -29,7 +30,7 @@ const pricingTiers = [
   },
   {
     name: "Creator",
-    price: "$29",
+    usdPrice: 29,
     period: "/month",
     description: "For individual authors getting started with Islamic children's books.",
     features: [
@@ -50,7 +51,7 @@ const pricingTiers = [
   },
   {
     name: "Author",
-    price: "$79",
+    usdPrice: 79,
     period: "/month",
     description: "For serious authors and small publishers building a catalog.",
     features: [
@@ -73,7 +74,7 @@ const pricingTiers = [
   },
   {
     name: "Studio",
-    price: "$199",
+    usdPrice: 199,
     period: "/month",
     description: "For publishing teams, schools, and organizations.",
     features: [
@@ -119,7 +120,44 @@ const creditInfo = [
   },
 ];
 
+const STORAGE_KEY = "noorstudio:pricingCurrency";
+const USD_TO_SAR = 3.75;
+
+type PricingCurrency = "USD" | "SAR";
+
+type PricingTier = (typeof pricingTiers)[number];
+
+function formatTierPrice(usdPrice: PricingTier["usdPrice"], currency: PricingCurrency) {
+  if (currency === "USD") return `$${usdPrice}`;
+  const sar = Math.round(usdPrice * USD_TO_SAR);
+  return `﷼${sar}`;
+}
+
 export default function PricingPage() {
+  const [currency, setCurrency] = useState<PricingCurrency>("SAR");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "USD" || saved === "SAR") setCurrency(saved);
+    } catch {
+      // Ignore (e.g. blocked storage)
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, currency);
+    } catch {
+      // Ignore
+    }
+  }, [currency]);
+
+  const pricingCopy = useMemo(
+    () => "Prices in Saudi Riyal (SAR). USD pricing available.",
+    []
+  );
+
   return (
     <PublicLayout>
       {/* Hero */}
@@ -136,6 +174,30 @@ export default function PricingPage() {
       {/* Pricing Cards */}
       <section className="py-16 lg:py-24">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row max-w-6xl mx-auto mb-8">
+            <div className="inline-flex items-center rounded-xl border bg-background p-1">
+              <Button
+                type="button"
+                size="sm"
+                variant={currency === "USD" ? "secondary" : "ghost"}
+                className="rounded-lg"
+                onClick={() => setCurrency("USD")}
+              >
+                USD
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={currency === "SAR" ? "secondary" : "ghost"}
+                className="rounded-lg"
+                onClick={() => setCurrency("SAR")}
+              >
+                SAR
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center sm:text-right">{pricingCopy}</p>
+          </div>
+
           <div className="grid md:grid-cols-4 gap-8 max-w-6xl mx-auto">
             {pricingTiers.map((tier, i) => (
               <div
@@ -157,7 +219,9 @@ export default function PricingPage() {
                 </div>
 
                 <div className="mb-8">
-                  <span className="text-5xl font-bold text-foreground">{tier.price}</span>
+                  <span className="text-5xl font-bold text-foreground">
+                    {formatTierPrice(tier.usdPrice, currency)}
+                  </span>
                   <span className="text-muted-foreground">{tier.period}</span>
                 </div>
 

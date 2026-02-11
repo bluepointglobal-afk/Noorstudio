@@ -1,8 +1,8 @@
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, Users, BookOpen } from "lucide-react";
+import { Bell, Search, Users, BookOpen, Menu, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getBalances, seedDefaultBalancesIfEmpty, CreditBalances } from "@/lib/storage/creditsStore";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -35,7 +35,9 @@ function CreditIndicator({ type, current, icon: Icon }: { type: string; current:
 
 export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isRTL } = useLanguage();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [credits, setCredits] = useState<CreditBalances>({ characterCredits: 0, bookCredits: 0, plan: "author" });
 
   // Load credits on mount and set up refresh
@@ -58,18 +60,76 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
     };
   }, []);
 
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar />
+      {/* Desktop sidebar (unchanged behavior) */}
+      <div className="hidden md:block">
+        <AppSidebar />
+      </div>
+
+      {/* Mobile drawer + backdrop */}
+      <div className="md:hidden">
+        {mobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+
+        <div
+          className={cn(
+            "[&>aside]:transition-transform [&>aside]:duration-300 [&>aside]:ease-out [&>aside]:z-50 [&>aside]:w-64 [&>aside]:shadow-xl",
+            isRTL ? "[&>aside]:translate-x-full [&>aside]:-translate-x-0" : "[&>aside]:-translate-x-full",
+            mobileSidebarOpen && (isRTL ? "[&>aside]:-translate-x-0" : "[&>aside]:translate-x-0")
+          )}
+        >
+          <AppSidebar />
+
+          {mobileSidebarOpen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "fixed top-3 z-[60] bg-background/80 backdrop-blur border",
+                isRTL ? "right-[15.25rem]" : "left-[15.25rem]"
+              )}
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-label="Close sidebar"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Top Bar */}
-      <header 
+      <header
         className={cn(
-          "fixed top-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-6",
-          isRTL ? "right-64 left-0" : "left-64 right-0"
+          "fixed top-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-4 md:px-6",
+          isRTL ? "right-0 md:right-64 left-0 md:left-auto" : "left-0 md:left-64 right-0 md:right-auto"
         )}
       >
-        <div className="flex items-center gap-4 flex-1">
+        <div className="flex items-center gap-3 md:gap-4 flex-1">
+          {/* Mobile menu button */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Open sidebar"
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -85,16 +145,8 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
             className="hidden md:flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             title="View billing & credits"
           >
-            <CreditIndicator
-              type="character"
-              current={credits.characterCredits}
-              icon={Users}
-            />
-            <CreditIndicator
-              type="book"
-              current={credits.bookCredits}
-              icon={BookOpen}
-            />
+            <CreditIndicator type="character" current={credits.characterCredits} icon={Users} />
+            <CreditIndicator type="book" current={credits.bookCredits} icon={BookOpen} />
           </button>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="w-5 h-5" />
@@ -104,7 +156,7 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       </header>
 
       {/* Main Content */}
-      <main className={cn("pt-16 min-h-screen", isRTL ? "mr-64" : "ml-64")}>
+      <main className={cn("pt-16 min-h-screen", isRTL ? "md:mr-64" : "md:ml-64")}>
         {(title || actions) && (
           <div className="border-b border-border bg-background">
             <div className="px-6 py-6 flex items-center justify-between">
