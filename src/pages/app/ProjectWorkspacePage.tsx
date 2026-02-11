@@ -11,6 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -290,6 +295,52 @@ function WhatsAppIcon({ className }: { className?: string }) {
       <path d="M16.01 3.2C8.94 3.2 3.2 8.94 3.2 16.01c0 2.25.59 4.44 1.71 6.38L3 29l6.79-1.78c1.87 1.02 3.98 1.56 6.22 1.56h.01c7.07 0 12.81-5.74 12.81-12.81S23.08 3.2 16.01 3.2zm0 23.25h-.01c-2.03 0-4.02-.55-5.75-1.6l-.41-.24-4.03 1.06 1.08-3.93-.27-.43a10.42 10.42 0 0 1-1.62-5.61c0-5.75 4.68-10.43 10.43-10.43S26.44 9.95 26.44 15.7c0 5.75-4.68 10.75-10.43 10.75z" />
     </svg>
   );
+}
+
+// Helper function to get disable reason for a stage
+function getDisabledReason(
+  stageId: string,
+  project: StoredProject | null,
+  canRun: boolean,
+  stageStatus: string
+): string | null {
+  if (!project) return null;
+
+  // If running, no reason needed (different UI)
+  if (stageStatus === "running") return null;
+
+  // If completed or can run, no reason
+  if (stageStatus === "completed" || canRun) return null;
+
+  // Get the stage info
+  const stageInfo = PIPELINE_STAGES.find((s) => s.id === stageId);
+
+  // Determine dependency based on stage
+  switch (stageId) {
+    case "outline":
+      return "Complete project setup to generate outline";
+
+    case "chapters":
+      return "Complete Outline stage first";
+
+    case "humanize":
+      return "Complete Chapters stage first before humanizing";
+
+    case "illustrations":
+      return "Generate chapters before creating illustrations";
+
+    case "cover":
+      return "Generate chapters or outline first before creating cover";
+
+    case "layout":
+      return "Generate chapters and illustrations before creating layout";
+
+    case "export":
+      return "Complete all required stages before exporting";
+
+    default:
+      return "This stage cannot run yet. Complete previous stages first";
+  }
 }
 
 export default function ProjectWorkspacePage() {
@@ -1513,41 +1564,68 @@ export default function ProjectWorkspacePage() {
                           <RotateCcw className="w-4 h-4" />
                         </Button>
                       )}
-                      <Button
-                        variant={stage.status === "completed" ? "outline" : "hero"}
-                        size="sm"
-                        disabled={
+                      {(() => {
+                        const isDisabled =
                           (!canRun && stage.status !== "completed") ||
-                          stage.status === "running"
+                          stage.status === "running";
+                        const disabledReason = getDisabledReason(
+                          stage.name,
+                          project,
+                          canRun,
+                          stage.status
+                        );
+
+                        const button = (
+                          <Button
+                            variant={stage.status === "completed" ? "outline" : "hero"}
+                            size="sm"
+                            disabled={isDisabled}
+                            onClick={() =>
+                              (stage.status === "completed" || stage.status === "error")
+                                ? viewArtifact(stage.name)
+                                : handleRunStage(stage.name)
+                            }
+                          >
+                            {stage.status === "completed" ? (
+                              <>
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </>
+                            ) : stage.status === "error" && project.artifacts[stage.name as ProjectStage]?.content ? (
+                              <>
+                                <AlertTriangle className="w-4 h-4 mr-1" />
+                                Review
+                              </>
+                            ) : stage.status === "running" ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                Running
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4 mr-1" />
+                                Run
+                              </>
+                            )}
+                          </Button>
+                        );
+
+                        // Wrap with tooltip if disabled and has a reason
+                        if (isDisabled && disabledReason) {
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                {button}
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-center">
+                                {disabledReason}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
                         }
-                        onClick={() =>
-                          (stage.status === "completed" || stage.status === "error")
-                            ? viewArtifact(stage.name)
-                            : handleRunStage(stage.name)
-                        }
-                      >
-                        {stage.status === "completed" ? (
-                          <>
-                            <Eye className="w-4 h-4 mr-1" />
-                            View
-                          </>
-                        ) : stage.status === "error" && project.artifacts[stage.name as ProjectStage]?.content ? (
-                          <>
-                            <AlertTriangle className="w-4 h-4 mr-1" />
-                            Review
-                          </>
-                        ) : stage.status === "running" ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                            Running
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-4 h-4 mr-1" />
-                            Run
-                          </>
-                        )}
-                      </Button>
+
+                        return button;
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -2286,6 +2364,12 @@ export default function ProjectWorkspacePage() {
                     <p className="text-sm text-muted-foreground mb-4">
                       Run the Export stage to generate your book package.
                     </p>
+                    <div className="flex justify-center">
+                      <Button variant="outline" onClick={handleShareOnWhatsApp}>
+                        <WhatsAppIcon className="w-4 h-4 mr-2 text-green-600" />
+                        Share on WhatsApp
+                      </Button>
+                    </div>
                   </div>
                 )}
               </TabsContent>
