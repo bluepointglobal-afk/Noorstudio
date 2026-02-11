@@ -1587,7 +1587,8 @@ export default function ProjectWorkspacePage() {
   };
 
   const handleShareOnWhatsApp = () => {
-    const shareText = "Check out my children's book created with NoorStudio!";
+    const bookTitle = project?.title || "my children's book";
+    const shareText = `Check out my new children's book created with NoorStudio! ${bookTitle}`;
 
     // WhatsApp universal deep link. On desktop it opens WhatsApp Web; on mobile it opens the app.
     const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
