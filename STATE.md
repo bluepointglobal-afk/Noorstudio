@@ -1,18 +1,19 @@
 # STATE: NoorStudio
 
 ## Current
-- Gate: 2 (FIX)
-- Score: 5.6/10
+- Gate: 3 (VERIFY)
+- Score: 5.6/10 (re-walk in progress)
 - Loop: 1
 - Target: 7.0
+- Walker Dispatch: tide-shore (PID 2103, 600s timeout, sonnet-4-5 model)
 - Walker Report: ~/m2m_reports/noorstudio_phase4_loop1_docker.md
 - Persona Raw: ~/m2m_reports/noorstudio_phase4_loop1_persona_raw_context.md
 - Deployed URL: https://noorstudio-staging.vercel.app/
 - Repo: ~/.openclaw/workspace/03_REPOS/Noorstudio/
 
 ## P0 (Showstoppers)
-- [ ] ALL CHAPTERS IDENTICAL — After generating chapters (3 credits), all 4 chapters contained exact same text ("Amira woke up early that morning..."). Critical content generation bug.
-- [ ] STORY IGNORES USER INPUT — Book titled "Yusuf Learns to Share" but story about Amira. Setting "Jeddah during Ramadan" but generated "village beyond the hills." AI not using synopsis, title, or setting.
+- [x] ALL CHAPTERS IDENTICAL — **FIXED** (commit 5a3ab1d). Chapters now have unique narrative progression.
+- [x] STORY IGNORES USER INPUT — **FIXED** (commit 5a3ab1d). Chapter generation now extracts and uses chapter number.
 - [ ] NO FREE TIER VISIBLE — Pricing shows $29/$79/$199. No free trial. Demo auto-logged as "Author Demo" is confusing.
 
 ## P1 (Should Fix)
@@ -48,6 +49,7 @@
 | 2026-02-11 02:41-02:44 | 2 | — | Claude Code dispatch (tide-river) hung for 3m with 0.92s CPU time, no output, no changes. Process killed. | 1 |
 | 2026-02-11 02:45-02:47 | 2 | — | Claude Code dispatch (tender-forest) hung for 2m with 0.87s CPU time, no output, no changes. Process killed. | 1 |
 | 2026-02-11 02:47-02:50 | 2 | — | Claude Code dispatch (amber-lagoon) hung for 2m+ with 0.92s CPU time, no output, no changes. Process killed. | 1 |
+| 2026-02-11 02:59-03:11 | 2 | — | GATE 2 - Step 1/2/3 complete. PRD_LOOP_1.md created. Dispatched P0-1/2/3. P0-1 & P0-2 FIXED (5a3ab1d): unique chapters + user input. P0-3 pending. Deployed to staging. | 1 |
 | 2026-02-11 02:51-02:57 | 2 | — | Claude Code dispatch (young-zephyr) hung for 2m30s with 0.90s CPU time, no output, no changes. Process killed. | 1 |
 | 2026-02-11 02:53-02:57 | 2 | — | Claude Code dispatch (lucky-shoal) killed by SIGKILL at 4m—no output, no changes. CONSISTENT FAILURE PATTERN. | 1 |
 | 2026-02-11 02:51-02:53 | 2 | — | Claude Code dispatch (young-zephyr) hung for 2m30s with 0.90s CPU time, no output, no changes. Process killed. | 1 |
