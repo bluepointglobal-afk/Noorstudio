@@ -12,6 +12,22 @@ import {
 
 const pricingTiers = [
   {
+    name: "Free Trial",
+    price: "$0",
+    period: " / 7 days",
+    description: "Try NoorStudio with a lightweight trial before you upgrade.",
+    features: [
+      { text: "1 book project", info: "Create up to 1 book project during the trial" },
+      { text: "4 chapters", info: "Generate up to 4 chapters" },
+      { text: "Basic illustrations (3 variants)", info: "Generate basic illustrations with up to 3 variants" },
+      { text: "PDF export only", info: "Export as PDF during the trial" },
+      { text: "No credit card required", info: "Start instantly — no payment method needed" },
+    ],
+    showCredits: false,
+    ctaLabel: "Start Free Trial",
+    ctaVariant: "hero",
+  },
+  {
     name: "Creator",
     price: "$29",
     period: "/month",
@@ -28,6 +44,9 @@ const pricingTiers = [
       character: 10,
       book: 20,
     },
+    showCredits: true,
+    ctaLabel: "Upgrade after trial",
+    ctaVariant: "outline",
   },
   {
     name: "Author",
@@ -47,6 +66,9 @@ const pricingTiers = [
       character: 50,
       book: 100,
     },
+    showCredits: true,
+    ctaLabel: "Upgrade after trial",
+    ctaVariant: "hero",
     popular: true,
   },
   {
@@ -68,6 +90,9 @@ const pricingTiers = [
       character: "Unlimited",
       book: "Unlimited",
     },
+    showCredits: true,
+    ctaLabel: "Upgrade after trial",
+    ctaVariant: "outline",
   },
 ];
 
@@ -111,7 +136,7 @@ export default function PricingPage() {
       {/* Pricing Cards */}
       <section className="py-16 lg:py-24">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-4 gap-8 max-w-6xl mx-auto">
             {pricingTiers.map((tier, i) => (
               <div
                 key={tier.name}
@@ -136,20 +161,32 @@ export default function PricingPage() {
                   <span className="text-muted-foreground">{tier.period}</span>
                 </div>
 
-                {/* Credits */}
-                <div className="mb-6 p-4 rounded-xl bg-muted/50">
-                  <p className="text-sm font-medium text-foreground mb-2">Monthly Credits</p>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Character: </span>
-                      <span className="font-semibold text-foreground">{tier.credits.character}</span>
+                {/* Credits / Trial limits */}
+                {tier.showCredits ? (
+                  <div className="mb-6 p-4 rounded-xl bg-muted/50">
+                    <p className="text-sm font-medium text-foreground mb-2">Monthly Credits</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Character: </span>
+                        <span className="font-semibold text-foreground">{tier.credits.character}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Book: </span>
+                        <span className="font-semibold text-foreground">{tier.credits.book}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Book: </span>
-                      <span className="font-semibold text-foreground">{tier.credits.book}</span>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      All plans start with a 7-day free trial. Upgrade when youre ready.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div className="mb-6 p-4 rounded-xl bg-muted/50">
+                    <p className="text-sm font-medium text-foreground mb-2">Trial limits</p>
+                    <p className="text-xs text-muted-foreground">
+                      Start free for 7 days  no credit card required.
+                    </p>
+                  </div>
+                )}
 
                 {/* Features */}
                 <ul className="space-y-3 mb-8 flex-1">
