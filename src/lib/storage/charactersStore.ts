@@ -1072,10 +1072,23 @@ export function createNewVersion(characterId: string): StoredCharacter | null {
 // ============================================
 
 export function seedDemoCharactersIfEmpty(): void {
-  const existing = getCharacters();
-  if (existing.length > 0) return;
-
+  // Seed demo characters for first-time users, and also backfill new templates
+  // for existing users who already have an older (smaller) demo library.
   const now = new Date().toISOString();
+
+  // Prefer current namespaced storage, but also tolerate legacy un-namespaced key.
+  const namespacedKey = getNamespacedKey(STORAGE_KEY);
+  const legacyRaw = localStorage.getItem(STORAGE_KEY);
+
+  let existing = getCharacters();
+  if (existing.length === 0 && legacyRaw) {
+    try {
+      const parsed = JSON.parse(legacyRaw);
+      existing = validateArrayAndRepair(namespacedKey, parsed, CharacterSchema);
+    } catch {
+      // ignore legacy parse issues
+    }
+  }
 
   const demoCharacters: StoredCharacter[] = [
     // ========== ORIGINAL 3 TEMPLATES ==========
@@ -1478,7 +1491,28 @@ export function seedDemoCharactersIfEmpty(): void {
     },
   ];
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(demoCharacters));
+  // If empty, seed everything. If partially populated (older demo set), backfill missing templates.
+  if (existing.length === 0) {
+    localStorage.setItem(namespacedKey, JSON.stringify(demoCharacters));
+    // Clean up legacy key if present
+    if (legacyRaw) localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  // Merge by id: keep user's existing characters, but add any missing demo templates.
+  const byId = new Map(existing.map((c) => [c.id, c] as const));
+  const merged: StoredCharacter[] = [...existing];
+  for (const demo of demoCharacters) {
+    if (!byId.has(demo.id)) {
+      merged.push(demo);
+    }
+  }
+
+  // Only write when we actually expanded the library.
+  if (merged.length !== existing.length) {
+    localStorage.setItem(namespacedKey, JSON.stringify(merged));
+    if (legacyRaw) localStorage.removeItem(STORAGE_KEY);
+  }
 }
 
 // ============================================
