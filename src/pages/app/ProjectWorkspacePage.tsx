@@ -318,34 +318,32 @@ function getDisabledReason(
   // If completed or can run, no reason
   if (stageStatus === "completed" || canRun) return null;
 
-  // Get the stage info
-  const stageInfo = PIPELINE_STAGES.find((s) => s.id === stageId);
-
   // Determine dependency based on stage
+  // Keep these short and action-oriented for tooltip UX.
   switch (stageId) {
     case "outline":
-      return "Complete project setup to generate outline";
+      return "Complete setup first";
 
     case "chapters":
-      return "Complete Outline stage first";
+      return "Complete Outline first";
 
     case "humanize":
-      return "Complete Chapters stage first before humanizing";
+      return "Generate Chapters first";
 
     case "illustrations":
-      return "Generate chapters before creating illustrations";
+      return "Generate Chapters first";
 
     case "cover":
-      return "Generate chapters or outline first before creating cover";
+      return "Complete Outline first";
 
     case "layout":
-      return "Generate chapters and illustrations before creating layout";
+      return "Generate Illustrations first";
 
     case "export":
-      return "Complete all required stages before exporting";
+      return "Complete Layout first";
 
     default:
-      return "This stage cannot run yet. Complete previous stages first";
+      return "Complete previous stages first";
   }
 }
 
@@ -1791,10 +1789,14 @@ export default function ProjectWorkspacePage() {
 
                         // Wrap with tooltip if disabled and has a reason
                         if (isDisabled && disabledReason) {
+                          // Disabled buttons don't reliably emit hover/focus events,
+                          // so wrap them in a non-disabled element for the tooltip trigger.
                           return (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                {button}
+                                <span className="inline-flex" tabIndex={0}>
+                                  {button}
+                                </span>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs text-center">
                                 {disabledReason}
