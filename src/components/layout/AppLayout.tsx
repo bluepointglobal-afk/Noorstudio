@@ -65,11 +65,61 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
 
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar />
+      {/* Desktop sidebar (unchanged behavior) */}
+      <div className="hidden md:block">
+        <AppSidebar />
+      </div>
+
+      {/* Mobile drawer + backdrop */}
+      <div className="md:hidden">
+        {mobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+
+        <div
+          className={cn(
+            "[&>aside]:transition-transform [&>aside]:duration-300 [&>aside]:ease-out [&>aside]:z-50 [&>aside]:w-64 [&>aside]:shadow-xl",
+            "[&>aside]:-translate-x-full",
+            mobileSidebarOpen && "[&>aside]:translate-x-0"
+          )}
+        >
+          <AppSidebar />
+
+          {mobileSidebarOpen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="fixed top-3 left-[15.25rem] z-[60] bg-background/80 backdrop-blur border"
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-label="Close sidebar"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Top Bar */}
-      <header className="fixed top-0 left-64 right-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-6">
-        <div className="flex items-center gap-4 flex-1">
+      <header className="fixed top-0 left-0 md:left-64 right-0 h-16 bg-background/80 backdrop-blur-lg border-b border-border z-30 flex items-center justify-between px-4 md:px-6">
+        <div className="flex items-center gap-3 md:gap-4 flex-1">
+          {/* Mobile menu button */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Open sidebar"
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -85,16 +135,8 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
             className="hidden md:flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             title="View billing & credits"
           >
-            <CreditIndicator
-              type="character"
-              current={credits.characterCredits}
-              icon={Users}
-            />
-            <CreditIndicator
-              type="book"
-              current={credits.bookCredits}
-              icon={BookOpen}
-            />
+            <CreditIndicator type="character" current={credits.characterCredits} icon={Users} />
+            <CreditIndicator type="book" current={credits.bookCredits} icon={BookOpen} />
           </button>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="w-5 h-5" />
@@ -104,7 +146,7 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       </header>
 
       {/* Main Content */}
-      <main className="ml-64 pt-16 min-h-screen">
+      <main className="ml-0 md:ml-64 pt-16 min-h-screen">
         {(title || actions) && (
           <div className="border-b border-border bg-background">
             <div className="px-6 py-6 flex items-center justify-between">
