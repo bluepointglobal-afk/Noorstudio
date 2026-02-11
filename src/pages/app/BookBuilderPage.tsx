@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Globe, BookOpen, Type, Users, Layout, Check, Lock, Database, FileText, Download, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, BookOpen, Type, Users, Layout, Check, Lock, Database, FileText, Download, Save, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getNamespacedKey } from "@/lib/storage/keys";
@@ -40,11 +40,11 @@ import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { ChapterArtifactItem, OutlineArtifactContent } from "@/lib/types/artifacts";
 
 const steps = [
-  { id: 1, title: "Universe", icon: Globe, description: "Universe & KB" },
-  { id: 2, title: "Basics", icon: BookOpen, description: "Template & Age" },
-  { id: 3, title: "Characters", icon: Users, description: "Select locked" },
-  { id: 4, title: "Formatting", icon: Layout, description: "Layout & Export" },
-  { id: 5, title: "Review", icon: FileText, description: "Create project" },
+  { id: 1, title: "Story World", icon: Globe, description: "World & guidelines" },
+  { id: 2, title: "Basics", icon: BookOpen, description: "Template & age" },
+  { id: 3, title: "Characters", icon: Users, description: "Pick your cast" },
+  { id: 4, title: "Formatting", icon: Layout, description: "Layout & export" },
+  { id: 5, title: "Review", icon: FileText, description: "Create your project" },
 ];
 
 const BOOK_TEMPLATES: { id: TemplateType; name: string; description: string; ageRange: string }[] = [
@@ -484,14 +484,19 @@ export default function BookBuilderPage() {
                 <Globe className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Universe & Knowledge Base</h2>
-                <p className="text-muted-foreground">Select the story universe and knowledge base</p>
+                <h2 className="text-xl font-semibold">Story World & Islamic Guidelines</h2>
+                <p className="text-muted-foreground">Choose where your story takes place and the Islamic content rules to follow.</p>
               </div>
             </div>
 
             {/* Universe Selection */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Story Universe *</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Story World *</Label>
+                <span title="Choose the setting/world for your stories" aria-label="Choose the setting/world for your stories">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </span>
+              </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 {MOCK_UNIVERSES.map((universe) => (
                   <div
@@ -517,14 +522,19 @@ export default function BookBuilderPage() {
             {/* Knowledge Base Selection */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Knowledge Base *</Label>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Islamic Guidelines *</Label>
+                  <span title="Select age-appropriate Islamic content rules" aria-label="Select age-appropriate Islamic content rules">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </span>
+                </div>
                 <Button
                   variant="link"
                   size="sm"
                   className="text-xs h-auto p-0"
                   onClick={() => navigate("/app/knowledge-base")}
                 >
-                  Manage KBs
+                  Manage Guidelines
                 </Button>
               </div>
               {knowledgeBases.length > 0 ? (
@@ -551,13 +561,13 @@ export default function BookBuilderPage() {
               ) : (
                 <div className="p-6 rounded-xl border-2 border-dashed border-border text-center">
                   <Database className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                  <p className="text-sm text-muted-foreground mb-2">No knowledge bases found</p>
+                  <p className="text-sm text-muted-foreground mb-2">No Islamic guidelines found</p>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate("/app/knowledge-base")}
                   >
-                    Create Knowledge Base
+                    Create Guidelines
                   </Button>
                 </div>
               )}
@@ -947,11 +957,11 @@ export default function BookBuilderPage() {
               {/* Details Grid */}
               <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-border">
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Universe</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Story World</p>
                   <p className="font-medium">{selectedUniverse?.name || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Knowledge Base</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Islamic Guidelines</p>
                   <p className="font-medium">{selectedKB?.name || "—"}</p>
                 </div>
                 <div>
