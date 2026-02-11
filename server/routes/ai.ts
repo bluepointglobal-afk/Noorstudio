@@ -195,19 +195,71 @@ async function mockTextGeneration(req: TextRequest): Promise<TextResponse> {
     });
   } else if (isMockChapter) {
     const chapterNum = req.prompt.match(/Chapter (\d+)/i)?.[1] || "1";
+    const num = parseInt(chapterNum);
+
+    const chapterTexts: Record<number, { title: string; text: string; vocab: string[]; adab: string[] }> = {
+      1: {
+        title: "The Journey Begins",
+        text: `Amira woke up early that morning, the sun just beginning to peek through her window. "Bismillah," she whispered, as Mama had taught her, before placing her feet on the cool floor.\n\n"Today is the day!" she exclaimed, jumping up with excitement. Today she would visit Grandmother, who lived in the village beyond the hills.\n\nMama had prepared a basket of treats - fresh dates, honey cakes, and sweet oranges. "Remember, my dear," Mama said, kneeling down to look into Amira's eyes, "the Prophet, peace be upon him, taught us that the best of people are those who are most beneficial to others."\n\nAmira nodded solemnly, clutching the basket. She didn't quite understand what Mama meant, but she would remember those words.\n\nAs she walked down the dusty road, the morning breeze carried the scent of jasmine. Birds sang their morning songs, and Amira felt her heart fill with joy. What adventures awaited her today?`,
+        vocab: [
+          "Bismillah - In the name of Allah, said before starting any action",
+          "Peace be upon him - Phrase of respect said after mentioning Prophet Muhammad",
+        ],
+        adab: [
+          "Starting the day with Bismillah",
+          "Respecting and listening to parents",
+          "Remembering the teachings of the Prophet (PBUH)",
+        ],
+      },
+      2: {
+        title: "Meeting the Hungry Traveler",
+        text: `The road stretched ahead, winding through fields of golden wheat. Amira hummed a nasheed Mama had taught her, swinging the basket gently as she walked.\n\nThen she heard it — a soft sound, almost like a kitten. She stopped and listened. Under a fig tree sat a small boy, younger than her, hugging his knees. His clothes were dusty and his eyes were red.\n\n"Assalamu alaikum," Amira said softly, kneeling beside him. "Are you okay?"\n\nThe boy looked up. "Wa alaikum assalam. I'm Yusuf. I've been walking since morning and I have nothing to eat."\n\nAmira looked at her basket — Grandmother's treats. Her stomach twisted. These were for Grandmother. But Mama's words echoed in her mind: the best of people are those who help others.\n\nWithout another thought, she opened the basket and held out the honey cakes. "Here, take these. Bismillah — eat!"\n\nYusuf's eyes widened. "Really? For me?" He took a small bite and smiled for the first time. "Jazakallah khair! This is the best thing I've ever tasted!"`,
+        vocab: [
+          "Assalamu alaikum - Peace be upon you, the Islamic greeting",
+          "Jazakallah khair - May Allah reward you with goodness",
+          "Nasheed - An Islamic song or chant",
+        ],
+        adab: [
+          "Greeting others with Salam",
+          "Sharing food with those in need",
+          "Saying Bismillah before eating",
+        ],
+      },
+      3: {
+        title: "The Unexpected Gift",
+        text: `After sharing her food with Yusuf, Amira continued on her journey. The basket felt lighter now, but her heart felt strangely full.\n\nThe path split into two at a large oak tree. Amira looked left, then right. Which way led to Grandmother's village? She couldn't remember.\n\n"Oh no," she whispered, turning in a circle. The sun was getting higher and the shadows shorter. "Ya Allah, please guide me," she prayed, clasping her hands together.\n\n"Amira! Amira!" a voice called. She spun around to see Yusuf running toward her, and behind him, a tall woman in a green headscarf.\n\n"This is my mother," Yusuf said breathlessly. "I told her how you shared your food with me. She knows the way to your grandmother's village!"\n\nYusuf's mother smiled warmly. "Your kindness reached us, little one. Come, the village is just beyond those olive trees. We'll walk with you."\n\nAmira beamed. She had given away her treats, yet here was Allah sending her exactly the help she needed.`,
+        vocab: [
+          "Ya Allah - O Allah, used when making a supplication",
+          "Dua - A personal prayer or supplication to Allah",
+        ],
+        adab: [
+          "Turning to Allah in times of difficulty",
+          "Trusting that kindness is always rewarded",
+          "Helping strangers as a community",
+        ],
+      },
+      4: {
+        title: "Grandmother's Wisdom",
+        text: `The olive trees parted to reveal a small stone house with a garden full of roses. Grandmother stood at the door, her arms already open wide.\n\n"My little Amira!" she cried, wrapping her in the warmest hug. "I've been waiting for you. Come in, come in!"\n\nInside, Grandmother had prepared a feast — steaming rice, roasted chicken, and fresh bread. Amira's eyes went wide. "But Grandmother, I'm sorry — I gave away your honey cakes and dates. I met a hungry boy on the road and I—"\n\nGrandmother held up her hand and smiled. "You gave away my treats?" She pulled Amira close. "Habibti, you gave me something far better than treats. You gave me a granddaughter I can be proud of."\n\nShe poured Amira a cup of mint tea. "Let me tell you a story. When I was your age, I gave my last piece of bread to a traveler. That traveler turned out to be a teacher who taught me to read the Quran. One small act of kindness changed my whole life."\n\nAmira sipped her tea, finally understanding Mama's words. The best of people truly are those who help others. And kindness, she now knew, always finds its way back to you.\n\n"Alhamdulillah," Amira whispered, grateful for the journey, the friends she'd made, and the lesson she'd never forget.`,
+        vocab: [
+          "Habibti - My dear, a term of endearment",
+          "Alhamdulillah - All praise is due to Allah, expressing gratitude",
+        ],
+        adab: [
+          "Respecting elders and listening to their wisdom",
+          "Being grateful for blessings (Alhamdulillah)",
+          "Understanding that generosity is rewarded by Allah",
+        ],
+      },
+    };
+
+    const chapter = chapterTexts[num] || chapterTexts[1];
     mockText = JSON.stringify({
-      chapter_title: `Chapter ${chapterNum}: The Journey`,
-      chapter_number: parseInt(chapterNum),
-      text: `Amira woke up early that morning, the sun just beginning to peek through her window. "Bismillah," she whispered, as Mama had taught her, before placing her feet on the cool floor.\n\n"Today is the day!" she exclaimed, jumping up with excitement. Today she would visit Grandmother, who lived in the village beyond the hills.\n\nMama had prepared a basket of treats - fresh dates, honey cakes, and sweet oranges. "Remember, my dear," Mama said, kneeling down to look into Amira's eyes, "the Prophet, peace be upon him, taught us that the best of people are those who are most beneficial to others."\n\nAmira nodded solemnly, clutching the basket. She didn't quite understand what Mama meant, but she would remember those words.\n\nAs she walked down the dusty road, the morning breeze carried the scent of jasmine. Birds sang their morning songs, and Amira felt her heart fill with joy. What adventures awaited her today?`,
-      vocabulary_notes: [
-        "Bismillah - In the name of Allah, said before starting any action",
-        "Peace be upon him - Phrase of respect said after mentioning Prophet Muhammad",
-      ],
-      islamic_adab_checks: [
-        "Starting the day with Bismillah",
-        "Respecting and listening to parents",
-        "Remembering the teachings of the Prophet (PBUH)",
-      ],
+      chapter_title: `Chapter ${chapterNum}: ${chapter.title}`,
+      chapter_number: num,
+      text: chapter.text,
+      vocabulary_notes: chapter.vocab,
+      islamic_adab_checks: chapter.adab,
     });
   } else if (isMockHumanize) {
     mockText = JSON.stringify({
