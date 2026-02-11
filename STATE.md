@@ -1,11 +1,12 @@
 # STATE: NoorStudio
 
 ## Current
-- Gate: 3 (VERIFY) — BLOCKER: Walker hung with zero output
-- Score: 5.6/10 (cannot re-walk — Claude Code CLI failure)
+- Gate: 3 (VERIFY)
+- Score: 5.6/10 (re-walk in progress)
 - Loop: 1
 - Target: 7.0
-- Status: ESCALATION REQUIRED (Architect decision needed)
+- Walker Dispatch: quick-glade (PID 2479, corrected syntax, 600s timeout, sonnet-4-5 model)
+- Status: Walker re-dispatched with fixed command syntax
 - Walker Report: ~/m2m_reports/noorstudio_phase4_loop1_docker.md
 - Persona Raw: ~/m2m_reports/noorstudio_phase4_loop1_persona_raw_context.md
 - Deployed URL: https://noorstudio-staging.vercel.app/
