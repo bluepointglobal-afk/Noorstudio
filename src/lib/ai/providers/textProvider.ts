@@ -238,16 +238,52 @@ async function proxyTextGeneration(
     signal: cancelToken?.signal,
   });
 
+  // Best-effort parse of error JSON (some deployments return HTML fallbacks)
+  const safeReadJson = async (): Promise<any> => {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return response.json().catch(() => undefined);
+    }
+
+    const text = await response.text().catch(() => "");
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { _rawText: text };
+    }
+  };
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    const errorData = await safeReadJson();
+    const message =
+      errorData?.message ||
+      errorData?.error?.message ||
+      (typeof errorData?._rawText === "string" && errorData._rawText
+        ? `HTTP ${response.status} (${response.statusText}): Non-JSON error response. Check VITE_AI_TEXT_PROXY_URL / server deployment.`
+        : `HTTP ${response.status} (${response.statusText})`);
+
     throw {
-      error: "API request failed",
-      message: errorData.message || `HTTP ${response.status}`,
+      error: errorData?.error?.code || errorData?.code || "API_REQUEST_FAILED",
+      message,
       retryable: response.status >= 500,
     } as TextGenerationError;
   }
 
-  return await response.json();
+  // OK response: must be JSON. If it isn't, surface a clear error.
+  try {
+    return (await response.json()) as TextGenerationResponse;
+  } catch {
+    const text = await response.text().catch(() => "");
+    throw {
+      error: "INVALID_PROXY_RESPONSE",
+      message:
+        `AI proxy returned a non-JSON response. ` +
+        `This usually means the /api route is not reachable (SPA fallback) or the proxy URL is misconfigured. ` +
+        `URL: ${config.textProxyUrl}. ` +
+        `Response starts with: ${text.slice(0, 120)}`,
+      retryable: false,
+    } as TextGenerationError;
+  }
 }
 
 // ============================================
