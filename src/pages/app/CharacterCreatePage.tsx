@@ -69,8 +69,8 @@ const characterTemplates = [
   },
   {
     id: "custom",
-    label: "Create Custom Character",
-    description: "Build from scratch with your description",
+    label: "Custom Character",
+    description: "Create a character from your text description",
     traits: [],
     role: "Custom",
     ageRange: "",
@@ -153,6 +153,19 @@ export default function CharacterCreatePage() {
     colorPalette: ["#E91E63", "#FF9800", "#FFF3E0"],
   });
 
+  // Custom character creation (text-only) state
+  const [customForm, setCustomForm] = useState({
+    name: "",
+    age: "",
+    role: "",
+    traitsText: "",
+    description: "",
+  });
+
+  const updateCustomForm = (field: keyof typeof customForm, value: string) => {
+    setCustomForm((prev) => ({ ...prev, [field]: value }));
+  };
+
   const updateForm = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -208,6 +221,128 @@ export default function CharacterCreatePage() {
     }
     
     setCurrentStep((s) => s + 1);
+  };
+
+  const parseTraitsText = (text: string): string[] => {
+    return text
+      .split(/[,\n]/g)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  };
+
+  const handleGenerateCustomCharacterFromText = async () => {
+    if (isGenerating) return;
+
+    // Credits check
+    if (!hasEnoughCredits("character", CHARACTER_GENERATION_COST)) {
+      toast({
+        title: "Insufficient credits",
+        description: `You need ${CHARACTER_GENERATION_COST} character credits to generate a character.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Create minimal character record in storage (draft)
+    const character = createCharacter({
+      name: customForm.name.trim(),
+      role: customForm.role.trim(),
+      ageRange: customForm.age.trim(),
+      traits: parseTraitsText(customForm.traitsText),
+      speakingStyle: "",
+      visualDNA: {
+        style: "pixar-3d",
+        skinTone: "",
+        hairOrHijab: "",
+        outfitRules: "",
+        accessories: "",
+        paletteNotes: "",
+      },
+      modestyRules: {
+        hijabAlways: false,
+        longSleeves: true,
+        looseClothing: true,
+        notes: "",
+      },
+      colorPalette: ["#E91E63", "#FF9800", "#FFF3E0"],
+    });
+
+    setCreatedCharacter(character);
+
+    // Consume credits
+    const result = consumeCredits({
+      type: "character",
+      amount: CHARACTER_GENERATION_COST,
+      reason: `Generate custom character image for ${character.name}`,
+      entityType: "character",
+      entityId: character.id,
+      meta: { step: "custom_character_generation" },
+    });
+
+    if (!result.success) {
+      setIsGenerating(false);
+      toast({
+        title: "Failed to generate character",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const prompt = `Create a single, full-body children's book character on a clean simple background.
+
+Name: ${customForm.name.trim()}
+Age: ${customForm.age.trim()}
+Role: ${customForm.role.trim()}
+Traits: ${parseTraitsText(customForm.traitsText).join(", ") || "(not specified)"}
+
+Description:
+${customForm.description.trim()}
+
+Style requirements:
+- Warm, friendly, approachable expression
+- Character centered in frame, well-lit from the front
+- High-quality Pixar-style 3D CGI character design
+- No text, no logos, no watermarks`;
+
+      const response = await generateImage({
+        prompt,
+        style: "pixar-3d",
+        width: 768,
+        height: 1024,
+        stage: "illustrations",
+      } as any);
+
+      const updated = updateCharacter(character.id, {
+        imageUrl: response.imageUrl,
+        status: "draft",
+      });
+
+      if (updated) setCreatedCharacter(updated);
+
+      setCredits(getBalances());
+      setIsGenerating(false);
+
+      toast({
+        title: "Custom character created!",
+        description: `${character.name} has been generated from your description.`,
+      });
+
+      // Jump to Character step for review/refinement
+      setCurrentStep(3);
+    } catch (error) {
+      setIsGenerating(false);
+      setCredits(getBalances());
+      toast({
+        title: "Failed to generate custom character",
+        description: "An error occurred during image generation",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCreateCharacter = (): StoredCharacter => {
@@ -735,8 +870,94 @@ export default function CharacterCreatePage() {
           </div>
         )}
 
-        {/* Step 1: Persona */}
-        {currentStep === 1 && (
+        {/* Step 1: Persona - Custom or Template */}
+        {currentStep === 1 && selectedTemplate === "custom" && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Create Custom Character</h2>
+                <p className="text-muted-foreground">Describe your character in detail</p>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="custom-name">Character Name *</Label>
+                <Input
+                  id="custom-name"
+                  placeholder="e.g., Maya"
+                  value={customForm.name}
+                  onChange={(e) => updateCustomForm("name", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="custom-age">Age *</Label>
+                <Input
+                  id="custom-age"
+                  placeholder="e.g., 10-14 years old"
+                  value={customForm.age}
+                  onChange={(e) => updateCustomForm("age", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-role">Role *</Label>
+              <Input
+                id="custom-role"
+                placeholder="e.g., Young inventor, brave explorer"
+                value={customForm.role}
+                onChange={(e) => updateCustomForm("role", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-traits">Character Traits (comma-separated)</Label>
+              <Textarea
+                id="custom-traits"
+                placeholder="e.g., curious, thoughtful, determined"
+                value={customForm.traitsText}
+                onChange={(e) => updateCustomForm("traitsText", e.target.value)}
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter traits separated by commas or new lines
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-desc">Character Description *</Label>
+              <Textarea
+                id="custom-desc"
+                placeholder="Describe your character in detail: appearance, clothing, personality, anything distinctive about them. The more detail, the better the AI-generated image will match your vision."
+                value={customForm.description}
+                onChange={(e) => updateCustomForm("description", e.target.value)}
+                rows={5}
+              />
+              <p className="text-xs text-muted-foreground">
+                Include physical features, clothing style, accessories, expression, and any special characteristics
+              </p>
+            </div>
+
+            <div className="p-4 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="flex gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-900 mb-1">AI Image Generation</p>
+                  <p className="text-sm text-amber-800">
+                    Your description will be used to generate a unique character image using AI. The more detailed your description, the better the result. (Costs {CHARACTER_GENERATION_COST} character credits)
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Persona - Template Selection */}
+        {currentStep === 1 && selectedTemplate !== "custom" && (
           <div className="space-y-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -1346,8 +1567,17 @@ export default function CharacterCreatePage() {
               onClick={handleNextStep}
               disabled={!canProceed()}
             >
-              Next
-              <ArrowRight className="w-4 h-4 ml-2" />
+              {selectedTemplate === "custom" && currentStep === 1 ? (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Custom Character
+                </>
+              ) : (
+                <>
+                  Next
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
             </Button>
           )}
         </div>
