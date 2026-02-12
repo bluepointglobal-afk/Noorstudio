@@ -14,9 +14,10 @@ const envSchema = z.object({
     PORT: z.string().transform((v) => parseInt(v, 10)).default("3001"),
     CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
     AI_TEXT_PROVIDER: z.enum(["mock", "claude"]).default("mock"),
-    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google", "openai", "replicate"]).default("mock"),
+    AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google", "openai", "replicate", "flux"]).default("mock"),
     CLAUDE_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
+    BFL_API_KEY: z.string().optional(),
     NANOBANANA_API_KEY: z.string().optional(),
     GOOGLE_API_KEY: z.string().optional(),
     REPLICATE_API_TOKEN: z.string().optional(),
@@ -67,6 +68,14 @@ const envSchema = z.object({
 }, {
     message: "REPLICATE_API_TOKEN is required when AI_IMAGE_PROVIDER is 'replicate'",
     path: ["REPLICATE_API_TOKEN"],
+}).refine((data) => {
+    if (data.AI_IMAGE_PROVIDER === "flux" && !data.BFL_API_KEY) {
+        return false;
+    }
+    return true;
+}, {
+    message: "BFL_API_KEY is required when AI_IMAGE_PROVIDER is 'flux'",
+    path: ["BFL_API_KEY"],
 }).refine((data) => {
     // If either Supabase var is present, both must be present
     const hasUrl = !!data.SUPABASE_URL;

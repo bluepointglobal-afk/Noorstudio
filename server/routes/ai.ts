@@ -18,6 +18,7 @@ const TEXT_PROVIDER = env.AI_TEXT_PROVIDER;
 const IMAGE_PROVIDER = env.AI_IMAGE_PROVIDER;
 const CLAUDE_API_KEY = env.CLAUDE_API_KEY || "";
 const OPENAI_API_KEY = env.OPENAI_API_KEY || "";
+const BFL_API_KEY = env.BFL_API_KEY || "";
 const NANOBANANA_API_KEY = env.NANOBANANA_API_KEY || "";
 const GOOGLE_API_KEY = env.GOOGLE_API_KEY || "";
 const REPLICATE_API_TOKEN = env.REPLICATE_API_TOKEN || "";
@@ -39,15 +40,23 @@ if (OPENAI_API_KEY) {
 import { ReplicateProvider } from "../lib/replicateProvider";
 let replicateProvider: ReplicateProvider | null = null;
 
+// Initialize FLUX provider if key is available
+import { FluxProvider } from "../lib/fluxProvider";
+let fluxProvider: FluxProvider | null = null;
+
 console.log("[INIT] IMAGE_PROVIDER:", IMAGE_PROVIDER);
 console.log("[INIT] REPLICATE_API_TOKEN:", REPLICATE_API_TOKEN ? "SET" : "NOT SET");
+console.log("[INIT] BFL_API_KEY:", BFL_API_KEY ? "SET" : "NOT SET");
+console.log("[INIT] OPENAI_API_KEY:", OPENAI_API_KEY ? "SET" : "NOT SET");
 
-if (REPLICATE_API_TOKEN && IMAGE_PROVIDER === "replicate") {
+if (REPLICATE_API_TOKEN) {
   replicateProvider = new ReplicateProvider(REPLICATE_API_TOKEN);
   console.log("[INIT] ✅ Replicate provider initialized");
-} else {
-  console.log("[INIT] ❌ Replicate provider NOT initialized - using mock mode");
-  console.log("[INIT]    Reason:", !REPLICATE_API_TOKEN ? "Token missing" : "IMAGE_PROVIDER not 'replicate'");
+}
+
+if (BFL_API_KEY) {
+  fluxProvider = new FluxProvider(BFL_API_KEY);
+  console.log("[INIT] ✅ FLUX provider initialized");
 }
 
 // ============================================
@@ -683,6 +692,66 @@ Important: No text, no words, no letters, no numbers, no signatures, no watermar
 }
 
 // ============================================
+// FLUX (Black Forest Labs) Provider
+// ============================================
+
+async function fluxImageGeneration(
+  req: ImageRequest,
+  retryCount = 0
+): Promise<ImageResponse> {
+  if (!fluxProvider) {
+    throw new Error("FLUX provider not initialized. Check BFL_API_KEY.");
+  }
+
+  try {
+    console.log("[FLUX] Image generation request:", {
+      task: req.task,
+      promptLength: req.prompt.length,
+      style: req.style,
+    });
+
+    // Enhance prompt for Islamic children's book style
+    const enhancedPrompt = `${req.prompt}
+
+Style: Warm, inviting children's book illustration with Islamic aesthetic.
+Characters wear modest clothing (long sleeves, loose clothing, hijabs for girls/women).
+Diverse Muslim characters with Middle Eastern, South Asian, or African features.
+Family-friendly, wholesome scenes. Soft, gentle colors. High-quality illustrated style.
+
+Important: No text, no words, no letters, no numbers, no signatures, no watermarks.`;
+
+    const result = await fluxProvider.generateImage({
+      prompt: enhancedPrompt,
+      width: req.width,
+      height: req.height,
+      seed: req.seed,
+    });
+
+    return {
+      imageUrl: result.imageUrl,
+      provider: "flux",
+      providerMeta: {
+        seed: result.seed,
+        model: "flux-pro-1.1",
+        processingTime: result.processingTimeMs,
+      },
+    };
+  } catch (error) {
+    const err = error as Error;
+    console.error(`FLUX API error (attempt ${retryCount + 1}):`, err.message);
+
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`Retrying FLUX image generation in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return fluxImageGeneration(req, retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
+// ============================================
 // Google Generative AI Provider
 // ============================================
 
@@ -1176,21 +1245,29 @@ router.post("/image", async (req: Request, res: Response) => {
     let response: ImageResponse;
 
     // SMART ROUTING LOGIC:
-    // - Initial character generation (no references) → Use DALL-E
+    // - Initial character generation (no references) → Use FLUX or DALL-E
     // - Poses/illustrations (has references) → Use Replicate for character consistency
 
     if (hasReferences && IMAGE_PROVIDER === "replicate" && replicateProvider) {
       // Use Replicate for character consistency when we have reference images
       console.log("[BACKEND] Using Replicate provider (character consistency mode)");
       response = await replicateImageGeneration(body);
+    } else if (!hasReferences && fluxProvider) {
+      // Prefer FLUX for initial character generation (highest quality)
+      console.log("[BACKEND] Using FLUX (initial character generation)");
+      response = await fluxImageGeneration(body);
     } else if (!hasReferences && openaiClient) {
-      // Use DALL-E for initial character generation (no reference image)
+      // Use DALL-E for initial character generation (fallback)
       console.log("[BACKEND] Using OpenAI DALL-E (initial character generation)");
       response = await openaiImageGeneration(body);
     } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
       // Fallback to OpenAI if explicitly configured
       console.log("[BACKEND] Using OpenAI provider");
       response = await openaiImageGeneration(body);
+    } else if (IMAGE_PROVIDER === "flux" && fluxProvider) {
+      // Fallback to FLUX if explicitly configured
+      console.log("[BACKEND] Using FLUX provider");
+      response = await fluxImageGeneration(body);
     } else if (IMAGE_PROVIDER === "nanobanana") {
       console.log("[BACKEND] Using NanoBanana provider");
       response = await nanobananaImageGeneration(body);
