@@ -1252,14 +1252,14 @@ router.post("/image", async (req: Request, res: Response) => {
       // Use Replicate for character consistency when we have reference images
       console.log("[BACKEND] Using Replicate provider (character consistency mode)");
       response = await replicateImageGeneration(body);
-    } else if (!hasReferences && fluxProvider) {
-      // Prefer FLUX for initial character generation (highest quality)
-      console.log("[BACKEND] Using FLUX (initial character generation)");
-      response = await fluxImageGeneration(body);
     } else if (!hasReferences && openaiClient) {
-      // Use DALL-E for initial character generation (fallback)
+      // Use DALL-E for initial character generation (FLUX has connectivity issues)
       console.log("[BACKEND] Using OpenAI DALL-E (initial character generation)");
       response = await openaiImageGeneration(body);
+    } else if (!hasReferences && fluxProvider) {
+      // Fallback to FLUX if DALL-E unavailable
+      console.log("[BACKEND] Using FLUX (initial character generation)");
+      response = await fluxImageGeneration(body);
     } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
       // Fallback to OpenAI if explicitly configured
       console.log("[BACKEND] Using OpenAI provider");
