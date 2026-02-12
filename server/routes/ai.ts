@@ -38,8 +38,16 @@ if (OPENAI_API_KEY) {
 // Initialize Replicate provider if token is available
 import { ReplicateProvider } from "../lib/replicateProvider";
 let replicateProvider: ReplicateProvider | null = null;
+
+console.log("[INIT] IMAGE_PROVIDER:", IMAGE_PROVIDER);
+console.log("[INIT] REPLICATE_API_TOKEN:", REPLICATE_API_TOKEN ? "SET" : "NOT SET");
+
 if (REPLICATE_API_TOKEN && IMAGE_PROVIDER === "replicate") {
   replicateProvider = new ReplicateProvider(REPLICATE_API_TOKEN);
+  console.log("[INIT] ✅ Replicate provider initialized");
+} else {
+  console.log("[INIT] ❌ Replicate provider NOT initialized - using mock mode");
+  console.log("[INIT]    Reason:", !REPLICATE_API_TOKEN ? "Token missing" : "IMAGE_PROVIDER not 'replicate'");
 }
 
 // ============================================
