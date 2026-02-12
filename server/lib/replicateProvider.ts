@@ -35,8 +35,8 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Default to the consistent-character model recommended in research
-    this.model = model || "fofr/consistent-character:latest";
+    // Default to the consistent-character model (specific version for stability)
+    this.model = model || "fofr/consistent-character:9c77a3c2f884193fcee4d89645f02a0b9def9434f9e03cb98460456b831c8772";
   }
 
   /**
