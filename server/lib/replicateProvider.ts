@@ -51,22 +51,21 @@ export class ReplicateProvider {
       const startTime = Date.now();
 
       // Build input for the consistent-character model
+      // IMPORTANT: Use exact parameter names from Replicate API schema
       const input: Record<string, unknown> = {
         prompt: request.prompt,
         negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
-        width: request.width || 1024,
-        height: request.height || 768,
-        num_outputs: request.numOutputs || 1,
-        guidance_scale: request.guidanceScale || 7.5,
-        num_inference_steps: request.numInferenceSteps || 30,
+        number_of_outputs: request.numOutputs || 1,
         output_format: "webp",
         output_quality: 95,
+        randomise_poses: false, // Keep poses consistent
       };
 
       // Add character reference if provided (IP-Adapter for consistency)
       if (request.subjectImageUrl) {
         input.subject = request.subjectImageUrl;
-        input.prompt_strength = request.referenceStrength || 0.8;
+        // Note: prompt_strength is NOT a valid parameter for this model
+        // Character consistency is controlled by the subject image itself
       }
 
       // Add seed for reproducibility
