@@ -267,7 +267,7 @@ async function nanobananaImageGeneration(
     const result = await response.json();
     console.log("[FRONTEND] Image generation successful:", {
       provider: result.provider,
-      imageUrl: result.imageUrl?.substring(0, 50) + "..."
+      imageUrl: typeof result.imageUrl === 'string' ? result.imageUrl.substring(0, 50) + "..." : result.imageUrl
     });
     return result;
   } catch (error) {
