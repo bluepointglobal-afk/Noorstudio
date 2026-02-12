@@ -2,7 +2,7 @@
 // Reads from environment variables with safe defaults
 
 export type TextProvider = "claude" | "mock";
-export type ImageProvider = "nanobanana" | "mock";
+export type ImageProvider = "nanobanana" | "mock" | "replicate";
 
 export interface AIConfig {
   textProvider: TextProvider;
