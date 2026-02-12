@@ -41,6 +41,7 @@ export class FluxProvider {
       console.log(`[FLUX] Prompt length: ${request.prompt.length}`);
 
       // Step 1: Create the generation request
+      console.log(`[FLUX] Calling API: ${this.apiUrl}/flux-pro-1.1`);
       const response = await fetch(`${this.apiUrl}/flux-pro-1.1`, {
         method: "POST",
         headers: {
@@ -57,8 +58,11 @@ export class FluxProvider {
         }),
       });
 
+      console.log(`[FLUX] Response status: ${response.status}`);
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`[FLUX] API error response:`, errorText);
         throw new Error(`FLUX API error (${response.status}): ${errorText}`);
       }
 
@@ -79,8 +83,13 @@ export class FluxProvider {
         processingTimeMs,
       };
     } catch (error: unknown) {
-      const err = error as Error;
-      console.error(`[FLUX] Error (attempt ${retryCount + 1}/${maxRetries + 1}):`, err.message);
+      const err = error as Error & { cause?: Error };
+      console.error(`[FLUX] Error (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
+        message: err.message,
+        name: err.name,
+        cause: err.cause?.message,
+        stack: err.stack?.split('\n').slice(0, 3)
+      });
 
       // Retry on transient errors
       if (retryCount < maxRetries && this.isRetryableError(err)) {
