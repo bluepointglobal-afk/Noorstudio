@@ -208,7 +208,9 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
  * This is the core "Foundation Hardening" for credit enforcement
  */
 const creditMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-  if (env.NODE_ENV === "development" && (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY)) {
+  // ALWAYS bypass credit checks in development mode
+  if (env.NODE_ENV === "development") {
+    console.warn("[CREDITS] Development mode - bypassing credit check");
     return next();
   }
 
