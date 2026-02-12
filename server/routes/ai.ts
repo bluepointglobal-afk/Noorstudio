@@ -637,30 +637,101 @@ async function openaiImageGeneration(
       style: req.style,
     });
 
-    // Simplify and enhance prompt for SINGLE character portrait
-    // Extract key attributes from the detailed prompt
-    const simplifiedPrompt = `A single full-body character portrait for a children's book.
+    // Extract key attributes from detailed prompt for simplified narrative
+    // DALL-E works better with concise, narrative descriptions (~500 chars)
+    const extractAttribute = (text: string, patterns: string[]): string => {
+      for (const pattern of patterns) {
+        const regex = new RegExp(pattern, 'i');
+        const match = text.match(regex);
+        if (match && match[1]) {
+          // Clean up the match - remove emoji, brackets, extra whitespace
+          return match[1]
+            .replace(/\[.*?\]/g, '') // Remove [MANDATORY] etc
+            .replace(/🔴/g, '')       // Remove emoji
+            .trim();
+        }
+      }
+      return '';
+    };
 
-CRITICAL: Show ONLY ONE character in ONE pose - front-facing, standing, centered in frame.
+    // Extract using multiple patterns to catch different formats
+    const age = extractAttribute(req.prompt, [
+      /(?:Age Appearance|Target Age|Age Range):\s*([^\n\r]+)/,
+      /(\d+(?:-\d+)?)\s*years?\s*old/,
+    ]);
 
-${req.prompt}
+    const skinTone = extractAttribute(req.prompt, [
+      /🔴\s*SKIN TONE:\s*([^\n\r\[]+)/,
+      /Skin Tone:\s*([^\n\r]+)/,
+    ]);
 
-Style: Warm, inviting children's book illustration with Islamic aesthetic.
-Character wears modest clothing (long sleeves, loose clothing).
-Soft, gentle colors. 2D illustrated style like high-quality picture books.
-Clean solid background. Professional character design.
+    const outfit = extractAttribute(req.prompt, [
+      /🔴\s*OUTFIT:\s*([^\n\r\[]+)/,
+      /Outfit:\s*([^\n\r]+)/,
+    ]);
 
-IMPORTANT REQUIREMENTS:
-- SINGLE character only (not multiple views or poses)
-- ONE portrait (not a character sheet or grid)
-- Front-facing full body view
-- Centered in frame with clean background
-- No text, no words, no letters, no numbers, no signatures, no watermarks.`;
+    const accessories = extractAttribute(req.prompt, [
+      /🔴\s*ACCESSORIES:\s*([^\n\r\[]+)/,
+      /Accessories:\s*([^\n\r]+)/,
+    ]);
+
+    const hairHijab = extractAttribute(req.prompt, [
+      /🔴\s*HAIR\/HIJAB:\s*([^\n\r\[]+)/,
+      /Hair\/Hijab:\s*([^\n\r]+)/,
+    ]);
+
+    const style = extractAttribute(req.prompt, [
+      /Art Style:\s*([^\n\r]+)/,
+    ]);
+
+    const name = extractAttribute(req.prompt, [
+      /Name:\s*([^\n\r]+)/,
+    ]);
+
+    // Build concise narrative prompt (targeting ~500 characters)
+    let simplifiedPrompt = `Full-body portrait of a ${age || '9-12 year old'} child`;
+
+    if (name) {
+      simplifiedPrompt += ` named ${name}`;
+    }
+
+    if (skinTone) {
+      simplifiedPrompt += ` with ${skinTone} skin`;
+    }
+
+    if (outfit) {
+      simplifiedPrompt += `. Wears ${outfit}`;
+    }
+
+    if (accessories && accessories !== 'none' && accessories !== 'no accessories') {
+      simplifiedPrompt += ` with ${accessories}`;
+    }
+
+    if (hairHijab && hairHijab !== 'no' && hairHijab !== 'none') {
+      simplifiedPrompt += `. Hair/head covering: ${hairHijab}`;
+    }
+
+    // Add style and technical requirements
+    simplifiedPrompt += `. ${style || 'Watercolor'} children's book illustration style. Front-facing standing pose with friendly expression. Clean white background. Professional character design. Single character portrait only. No text or watermarks.`;
+
+    console.log("[DALL-E] Original prompt length:", req.prompt.length, "characters");
+    console.log("[DALL-E] Simplified prompt:", simplifiedPrompt);
+    console.log("[DALL-E] Simplified length:", simplifiedPrompt.length, "characters");
+
+    // DALL-E 3 supports: 1024x1024, 1024x1792 (portrait), 1792x1024 (landscape)
+    // For character portraits, use portrait orientation
+    const size = req.task === "cover"
+      ? "1024x1792"  // Cover - tall portrait
+      : req.height && req.width && req.height > req.width
+        ? "1024x1792"  // Character portrait - tall
+        : "1024x1024"; // Default - square
+
+    console.log("[DALL-E] Image size:", size);
 
     const response = await openaiClient.images.generate({
       model: "dall-e-3",
       prompt: simplifiedPrompt,
-      size: req.task === "cover" ? "1024x1792" : "1792x1024", // Portrait for cover, landscape for illustrations
+      size: size,
       quality: "standard",
       n: 1,
       response_format: "url",
