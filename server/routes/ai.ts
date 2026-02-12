@@ -631,27 +631,35 @@ async function openaiImageGeneration(
   }
 
   try {
-    if (env.NODE_ENV === "development") {
-      console.log("OpenAI DALL-E 3 image generation:", {
-        task: req.task,
-        promptLength: req.prompt.length,
-        style: req.style,
-      });
-    }
+    console.log("[DALL-E] Image generation request:", {
+      task: req.task,
+      originalPromptLength: req.prompt.length,
+      style: req.style,
+    });
 
-    // Enhance prompt for Islamic children's book style
-    const enhancedPrompt = `${req.prompt}
+    // Simplify and enhance prompt for SINGLE character portrait
+    // Extract key attributes from the detailed prompt
+    const simplifiedPrompt = `A single full-body character portrait for a children's book.
 
-Style: Warm, inviting children's book illustration with Islamic aesthetic. 
-Characters wear modest clothing (long sleeves, loose clothing, hijabs for girls/women). 
-Diverse Muslim characters with Middle Eastern, South Asian, or African features. 
-Family-friendly, wholesome scenes. Soft, gentle colors. 2D illustrated style like high-quality picture books.
+CRITICAL: Show ONLY ONE character in ONE pose - front-facing, standing, centered in frame.
 
-Important: No text, no words, no letters, no numbers, no signatures, no watermarks.`;
+${req.prompt}
+
+Style: Warm, inviting children's book illustration with Islamic aesthetic.
+Character wears modest clothing (long sleeves, loose clothing).
+Soft, gentle colors. 2D illustrated style like high-quality picture books.
+Clean solid background. Professional character design.
+
+IMPORTANT REQUIREMENTS:
+- SINGLE character only (not multiple views or poses)
+- ONE portrait (not a character sheet or grid)
+- Front-facing full body view
+- Centered in frame with clean background
+- No text, no words, no letters, no numbers, no signatures, no watermarks.`;
 
     const response = await openaiClient.images.generate({
       model: "dall-e-3",
-      prompt: enhancedPrompt,
+      prompt: simplifiedPrompt,
       size: req.task === "cover" ? "1024x1792" : "1792x1024", // Portrait for cover, landscape for illustrations
       quality: "standard",
       n: 1,
