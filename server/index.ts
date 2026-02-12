@@ -171,9 +171,9 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  // If supabase not configured in dev mode, bypass auth
-  if (!supabase && env.NODE_ENV === "development") {
-    console.warn("[AUTH] Supabase not configured, bypassing auth in DEV");
+  // ALWAYS bypass auth in development mode for testing
+  if (env.NODE_ENV === "development") {
+    console.warn("[AUTH] Development mode - bypassing authentication");
     next();
     return;
   }
