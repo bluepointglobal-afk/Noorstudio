@@ -1161,20 +1161,34 @@ router.post("/image", async (req: Request, res: Response) => {
       return;
     }
 
+    const hasReferences = body.references && body.references.length > 0;
+
     console.log("[BACKEND] Image generation request received:", {
       provider: IMAGE_PROVIDER,
       replicateAvailable: !!replicateProvider,
+      openaiAvailable: !!openaiClient,
       prompt: body.prompt.substring(0, 100) + "...",
       stage: body.stage,
-      references: body.references?.length || 0
+      references: body.references?.length || 0,
+      hasReferences
     });
 
     let response: ImageResponse;
 
-    if (IMAGE_PROVIDER === "replicate" && replicateProvider) {
-      console.log("[BACKEND] Using Replicate provider");
+    // SMART ROUTING LOGIC:
+    // - Initial character generation (no references) → Use DALL-E
+    // - Poses/illustrations (has references) → Use Replicate for character consistency
+
+    if (hasReferences && IMAGE_PROVIDER === "replicate" && replicateProvider) {
+      // Use Replicate for character consistency when we have reference images
+      console.log("[BACKEND] Using Replicate provider (character consistency mode)");
       response = await replicateImageGeneration(body);
+    } else if (!hasReferences && openaiClient) {
+      // Use DALL-E for initial character generation (no reference image)
+      console.log("[BACKEND] Using OpenAI DALL-E (initial character generation)");
+      response = await openaiImageGeneration(body);
     } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
+      // Fallback to OpenAI if explicitly configured
       console.log("[BACKEND] Using OpenAI provider");
       response = await openaiImageGeneration(body);
     } else if (IMAGE_PROVIDER === "nanobanana") {
@@ -1184,7 +1198,7 @@ router.post("/image", async (req: Request, res: Response) => {
       console.log("[BACKEND] Using Google provider");
       response = await googleImageGeneration(body);
     } else {
-      console.log("[BACKEND] Using Mock provider");
+      console.log("[BACKEND] Using Mock provider (fallback)");
       response = await mockImageGeneration(body);
     }
 
