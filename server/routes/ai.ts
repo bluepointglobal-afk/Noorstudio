@@ -327,7 +327,7 @@ async function claudeTextGeneration(
 
   try {
     const response = await claudeClient.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: req.maxOutputTokens,
       system: req.system,
       messages: [{ role: "user", content: req.prompt }],
@@ -817,7 +817,7 @@ async function claudeLocalImageGeneration(
         .join('\n');
       
       const response = await claudeClient.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 500,
         system: `You are an illustration description specialist. Given a scene description, output a detailed visual description for a children's book illustration. Maintain these character appearances for consistency:\n${charPrompt}\n\nKeep descriptions warm, child-friendly, and culturally appropriate (Islamic aesthetic). Output ONLY the description, no commentary.`,
         messages: [{ role: "user", content: `Describe this scene for illustration: ${req.prompt}` }],
