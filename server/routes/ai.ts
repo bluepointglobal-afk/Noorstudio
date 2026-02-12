@@ -1161,19 +1161,37 @@ router.post("/image", async (req: Request, res: Response) => {
       return;
     }
 
+    console.log("[BACKEND] Image generation request received:", {
+      provider: IMAGE_PROVIDER,
+      replicateAvailable: !!replicateProvider,
+      prompt: body.prompt.substring(0, 100) + "...",
+      stage: body.stage,
+      references: body.references?.length || 0
+    });
+
     let response: ImageResponse;
 
     if (IMAGE_PROVIDER === "replicate" && replicateProvider) {
+      console.log("[BACKEND] Using Replicate provider");
       response = await replicateImageGeneration(body);
     } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
+      console.log("[BACKEND] Using OpenAI provider");
       response = await openaiImageGeneration(body);
     } else if (IMAGE_PROVIDER === "nanobanana") {
+      console.log("[BACKEND] Using NanoBanana provider");
       response = await nanobananaImageGeneration(body);
     } else if (IMAGE_PROVIDER === "google") {
+      console.log("[BACKEND] Using Google provider");
       response = await googleImageGeneration(body);
     } else {
+      console.log("[BACKEND] Using Mock provider");
       response = await mockImageGeneration(body);
     }
+
+    console.log("[BACKEND] Image generation completed:", {
+      provider: response.provider,
+      success: true
+    });
 
     // Deduct credits AFTER success
     if (req.user && req.creditCost && req.creditType) {

@@ -199,6 +199,14 @@ async function nanobananaImageGeneration(
 ): Promise<ImageGenerationResponse> {
   const config = getAIConfig();
 
+  console.log("[FRONTEND] Image generation request:", {
+    provider: config.imageProvider,
+    proxyUrl: config.imageProxyUrl,
+    prompt: request.prompt.substring(0, 100) + "...",
+    stage: request.stage,
+    retryCount
+  });
+
   // Create new abort controller for this request
   _imageAbortController = new AbortController();
 
@@ -235,6 +243,11 @@ async function nanobananaImageGeneration(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error("[FRONTEND] Backend returned error:", {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
       const error: ImageGenerationError = {
         error: "Image generation failed",
         message: errorData.message || `HTTP ${response.status}`,
@@ -251,7 +264,12 @@ async function nanobananaImageGeneration(
       throw error;
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log("[FRONTEND] Image generation successful:", {
+      provider: result.provider,
+      imageUrl: result.imageUrl?.substring(0, 50) + "..."
+    });
+    return result;
   } catch (error) {
     // Handle abort
     if (error instanceof Error && error.name === "AbortError") {

@@ -75,9 +75,12 @@ export class ReplicateProvider {
 
       console.log(`[Replicate] Generating image with model: ${this.model}`);
       console.log(`[Replicate] Character reference: ${request.subjectImageUrl ? 'Yes' : 'No'}`);
+      console.log(`[Replicate] Full input:`, JSON.stringify(input, null, 2));
 
       // Run the model
+      console.log(`[Replicate] Calling Replicate API...`);
       const output = await this.client.run(this.model, { input });
+      console.log(`[Replicate] API call succeeded, output type: ${typeof output}`);
 
       const processingTimeMs = Date.now() - startTime;
 
@@ -101,7 +104,11 @@ export class ReplicateProvider {
       };
     } catch (error: unknown) {
       const err = error as Error & { response?: { status?: number } };
-      console.error(`[Replicate] Error (attempt ${retryCount + 1}/${maxRetries + 1}):`, err.message);
+      console.error(`[Replicate] Error (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
+        message: err.message,
+        name: err.name,
+        stack: err.stack?.split('\n').slice(0, 3).join('\n')
+      });
 
       // Retry on transient errors
       if (retryCount < maxRetries && this.isRetryableError(err)) {
