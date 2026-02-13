@@ -465,6 +465,77 @@ Requirements:
 }
 
 /**
+ * Build prompt for a SINGLE pose (used when generating poses individually)
+ *
+ * @param character - Character to generate pose for
+ * @param poseName - Name of the pose (e.g., "Front", "Walking", "Sitting")
+ */
+function buildSinglePosePrompt(character: StoredCharacter, poseName: string): string {
+  const { visualDNA, modestyRules, ageRange } = character;
+
+  // Build LOCKED CHARACTER block (same as pose pack)
+  const lockedCharacter: string[] = [
+    `LOCKED CHARACTER (must not change):`,
+  ];
+
+  if (visualDNA.gender) {
+    const genderDesc = visualDNA.gender === "boy"
+      ? `BOY (male child, age ${ageRange || '8-10'})`
+      : `GIRL (female child, age ${ageRange || '8-10'})`;
+    lockedCharacter.push(`Gender: ${genderDesc}`);
+  }
+
+  if (visualDNA.hairOrHijab) {
+    lockedCharacter.push(`Hair: ${visualDNA.hairOrHijab}`);
+  }
+
+  if (visualDNA.outfitRules) {
+    lockedCharacter.push(`Outfit: ${visualDNA.outfitRules}`);
+  }
+
+  if (visualDNA.accessories) {
+    lockedCharacter.push(`Accessories: ${visualDNA.accessories}`);
+  }
+
+  if (visualDNA.skinTone) {
+    lockedCharacter.push(`Skin tone: ${visualDNA.skinTone}`);
+  }
+
+  lockedCharacter.push(`Style: ${visualDNA.style || 'pixar-3d'}`);
+
+  // Build NEGATIVE (forbidden) attributes
+  const negatives: string[] = [];
+
+  if (visualDNA.gender === "boy") {
+    negatives.push("female", "girl", "dress", "skirt", "long hair");
+    if (!modestyRules?.hijabAlways) {
+      negatives.push("hijab", "headscarf");
+    }
+  } else if (visualDNA.gender === "girl") {
+    negatives.push("male", "boy", "masculine");
+  }
+
+  if (modestyRules?.hijabAlways) {
+    negatives.push("no hijab", "hair visible", "uncovered hair");
+  }
+
+  if (negatives.length > 0) {
+    lockedCharacter.push(`NEGATIVE (forbidden): ${negatives.join(", ")}`);
+  }
+
+  // Simple pose instruction
+  return `${lockedCharacter.join("\n")}
+
+Pose: ${poseName}
+
+Requirements:
+- Same character from reference
+- Clean white background
+- Full body visible
+- Centered composition`.trim();
+}
+
+/**
  * LEGACY: Build detailed prompt for 12-pose sheet (kept for backwards compatibility)
  * NOTE: This is overly verbose for IP-Adapter. Use buildPosePackPrompt instead.
  */
@@ -778,13 +849,15 @@ export function approveCharacterDesign(characterId: string): StoredCharacter | n
 /**
  * Generate POSE PACK for an APPROVED character using AI image generation.
  *
- * IMPORTANT DESIGN DECISION:
- * - Default: 2x2 grid (4 poses) at high resolution for better identity fidelity
- * - Optional: 8 or 12 poses, but MORE POSES = HIGHER DRIFT unless resolution is very large
- * - Single API call to Replicate (uses character reference image for consistency)
+ * IMPORTANT DESIGN CHANGE:
+ * - Replicate's fofr/consistent-character model does NOT support multi-pose grids
+ * - Solution: Generate SEPARATE images for each pose, then stitch client-side
+ * - This gives BETTER character consistency (each pose gets full IP-Adapter attention)
  *
- * This is a SINGLE API call that generates all poses in a grid image.
- * The character's approved anchor image is used as reference for identity lock.
+ * FLOW:
+ * 1. Generate 4 separate pose images (4 API calls to Replicate)
+ * 2. Stitch them into a 2x2 grid using client-side canvas
+ * 3. Save the stitched grid as the pose sheet
  *
  * @param characterId - Character to generate pose pack for
  * @param poseCount - Number of poses (4, 8, or 12). Default: 4 (recommended)
@@ -803,64 +876,63 @@ export async function generatePoseSheet(
     throw new Error("Character must have an approved anchor image before generating pose pack.");
   }
 
-  onProgress?.(`Generating ${poseCount}-pose pack...`);
-
   try {
-    // Determine grid dimensions and resolution based on pose count
-    let gridCols: number, gridRows: number, width: number, height: number;
+    const now = new Date().toISOString();
+    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+    const poseImageUrls: string[] = [];
 
-    if (poseCount === 4) {
-      // 2x2 grid - HIGH RESOLUTION for best identity fidelity
-      gridCols = 2;
-      gridRows = 2;
-      width = 2048;   // 1024px per pose
-      height = 2048;  // Square grid
-    } else if (poseCount === 8) {
-      // 4x2 grid - WARNING: More poses = higher drift risk
-      gridCols = 4;
-      gridRows = 2;
-      width = 3072;   // 768px per pose
-      height = 1536;
-      console.warn(`[POSE_PACK] 8 poses selected. Higher drift risk vs 4 poses. Consider 4 poses for better consistency.`);
-    } else {
-      // 4x3 grid (12 poses) - WARNING: Highest drift risk
-      gridCols = 4;
-      gridRows = 3;
-      width = 3072;   // 768px per pose
-      height = 2304;
-      console.warn(`[POSE_PACK] 12 poses selected. HIGHEST drift risk. Strongly recommend 4 poses for character consistency.`);
+    // Generate EACH pose individually (better character consistency)
+    for (let i = 0; i < poseCount; i++) {
+      const poseName = poseNames[i];
+      onProgress?.(`Generating pose ${i + 1}/${poseCount}: ${poseName}...`);
+
+      // Build simple single-pose prompt
+      const posePrompt = buildSinglePosePrompt(character, poseName);
+
+      const request: ImageGenerationRequest = {
+        prompt: posePrompt,
+        references: character.imageUrl ? [character.imageUrl] : undefined,
+        characterReference: character.imageUrl,
+        style: character.visualDNA.style || "pixar-3d",
+        width: 768,    // Single pose at good quality
+        height: 1024,  // Portrait orientation
+        stage: "illustrations",
+        referenceStrength: 0.85, // Strong reference for consistency
+      };
+
+      const response = await generateImage(request);
+      poseImageUrls.push(response.imageUrl);
     }
 
-    // SINGLE API CALL for the entire pose pack grid
-    // This will route to Replicate (because references array is provided)
-    const request: ImageGenerationRequest = {
-      prompt: buildPosePackPrompt(character, poseCount, gridCols, gridRows),
-      references: character.imageUrl ? [character.imageUrl] : undefined,
-      characterReference: character.imageUrl, // Primary reference for IP-Adapter
-      style: character.visualDNA.style || "pixar-3d",
-      width,
-      height,
-      stage: "illustrations",
-      poseCount, // Pass to backend for metadata
-    };
+    onProgress?.("Stitching poses into grid...");
 
-    const response = await generateImage(request);
+    // Determine grid layout based on pose count
+    let gridCols: number, gridRows: number;
+    if (poseCount === 4) {
+      gridCols = 2;
+      gridRows = 2;
+    } else if (poseCount === 8) {
+      gridCols = 4;
+      gridRows = 2;
+    } else {
+      gridCols = 4;
+      gridRows = 3;
+    }
 
-    onProgress?.(`Pose pack complete!`);
+    // Stitch images into grid using client-side canvas utility
+    const gridResult = await createLabeledPoseSheetGrid(poseImageUrls, poseNames);
 
-    const now = new Date().toISOString();
+    onProgress?.("Pose pack complete!");
 
-    // Create pose entries (all from the same grid image)
-    // NOTE: Only create entries for the number of poses we actually generated
-    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+    // Create pose entries with individual images
     const updatedPoses: CharacterPose[] = poseNames.map((name, idx) => ({
       id: idx + 1,
       name,
       status: "draft" as AssetStatus,
-      imageUrl: response.imageUrl, // All point to same grid image initially
+      imageUrl: poseImageUrls[idx], // Individual pose image
       alternatives: [{
         id: 1,
-        imageUrl: response.imageUrl,
+        imageUrl: poseImageUrls[idx],
         selected: true,
         createdAt: now,
       }],
@@ -871,8 +943,8 @@ export async function generatePoseSheet(
     return updateCharacter(characterId, {
       poses: updatedPoses,
       poseSheetGenerated: true,
-      poseSheetUrl: response.imageUrl,
-      poseCount, // Store pose count for later reference
+      poseSheetUrl: gridResult.dataUrl, // Stitched grid as data URL
+      poseCount,
     });
   } catch (error) {
     if (import.meta.env.DEV) {
