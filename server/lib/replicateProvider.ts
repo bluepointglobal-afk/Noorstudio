@@ -4,9 +4,6 @@
 import Replicate from "replicate";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { createWriteStream } from "fs";
-import { Readable } from "stream";
-import { finished } from "stream/promises";
 
 export interface ReplicateImageRequest {
   prompt: string;
@@ -86,7 +83,7 @@ export class ReplicateProvider {
 
       // Run the model
       console.log(`[Replicate] Calling Replicate API...`);
-      const output = await this.client.run(this.model, { input });
+      const output = await this.client.run(this.model as `${string}/${string}:${string}`, { input });
       console.log(`[Replicate] API call succeeded, output type: ${typeof output}`);
       console.log(`[Replicate] Raw output:`, JSON.stringify(output));
 
@@ -225,25 +222,27 @@ export class ReplicateProvider {
       // Ensure storage directory exists
       await fs.mkdir(this.storageDir, { recursive: true });
 
-      // Create write stream
-      const fileStream = createWriteStream(storagePath);
-
-      // Convert ReadableStream to Node.js Readable
+      // Read entire stream into buffer first (simpler and more reliable)
       const reader = stream.getReader();
-      const nodeStream = new Readable({
-        async read() {
-          const { done, value } = await reader.read();
-          if (done) {
-            this.push(null);
-          } else {
-            this.push(Buffer.from(value));
-          }
-        },
-      });
+      const chunks: Uint8Array[] = [];
 
-      // Pipe to file
-      nodeStream.pipe(fileStream);
-      await finished(fileStream);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Concatenate all chunks
+      const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const buffer = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        buffer.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Write to file
+      await fs.writeFile(storagePath, buffer);
 
       const fileStats = await fs.stat(storagePath);
       console.log(`[Replicate] Download complete: ${fileStats.size} bytes in ${processingTimeMs}ms`);
@@ -254,6 +253,7 @@ export class ReplicateProvider {
     } catch (error) {
       const err = error as Error;
       console.error(`[Replicate] Stream download failed:`, err.message);
+      console.error(`[Replicate] Error stack:`, err.stack);
       throw new Error(`Failed to download Replicate stream: ${err.message}`);
     }
   }
