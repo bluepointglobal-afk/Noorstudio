@@ -140,6 +140,8 @@ export default function CharacterCreatePage() {
     style: "pixar-3d" as CharacterStyle,
     gender: "girl" as "boy" | "girl", // Default to girl, user can change
     skinTone: "",
+    eyeColor: "",
+    faceShape: "",
     hairOrHijab: "",
     outfitRules: "",
     accessories: "",
@@ -188,7 +190,7 @@ export default function CharacterCreatePage() {
       case 1:
         return formData.name.trim() && formData.role.trim() && formData.ageRange;
       case 2:
-        return formData.gender && formData.skinTone.trim() && formData.hairOrHijab.trim() && formData.outfitRules.trim();
+        return formData.gender && formData.eyeColor.trim() && formData.faceShape.trim() && formData.skinTone.trim() && formData.hairOrHijab.trim() && formData.outfitRules.trim();
       case 3:
         // Can proceed to pose sheet only if character is approved (has image)
         return createdCharacter?.imageUrl && createdCharacter.status === "approved";
@@ -259,6 +261,8 @@ export default function CharacterCreatePage() {
         style: "pixar-3d",
         gender: "girl", // Default - will be inferred from AI-generated description
         skinTone: "",
+        eyeColor: "",
+        faceShape: "",
         hairOrHijab: "",
         outfitRules: "",
         accessories: "",
@@ -353,6 +357,8 @@ Style requirements:
       style: formData.style,
       gender: formData.gender,
       skinTone: formData.skinTone,
+      eyeColor: formData.eyeColor,
+      faceShape: formData.faceShape,
       hairOrHijab: formData.hairOrHijab,
       outfitRules: formData.outfitRules,
       accessories: formData.accessories,
@@ -1108,6 +1114,33 @@ Style requirements:
                 <p className="text-xs text-muted-foreground">
                   This ensures the AI generates the correct gender (prevents name-based inference)
                 </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="eyeColor">Eye Color *</Label>
+                  <Input
+                    id="eyeColor"
+                    placeholder="e.g., Brown, Hazel, Green"
+                    value={formData.eyeColor}
+                    onChange={(e) => updateForm("eyeColor", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Specific eye color prevents AI from changing it
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="faceShape">Face Features *</Label>
+                  <Input
+                    id="faceShape"
+                    placeholder="e.g., Round face, small nose, full cheeks"
+                    value={formData.faceShape}
+                    onChange={(e) => updateForm("faceShape", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Key facial features to maintain consistency
+                  </p>
+                </div>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">

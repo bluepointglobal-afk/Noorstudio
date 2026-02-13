@@ -48,6 +48,8 @@ export interface VisualDNA {
   style: CharacterStyle;
   gender: "boy" | "girl"; // Explicit gender to prevent name-based inference
   skinTone: string;
+  eyeColor: string; // Explicit eye color (e.g., "brown", "hazel", "green")
+  faceShape: string; // Face features (e.g., "round face, small nose, full cheeks")
   hairOrHijab: string;
   outfitRules: string;
   accessories: string;
@@ -424,6 +426,16 @@ export function buildPosePackPrompt(
     lockedCharacter.push(`Skin tone: ${visualDNA.skinTone}`);
   }
 
+  // Eye color
+  if (visualDNA.eyeColor) {
+    lockedCharacter.push(`Eye color: ${visualDNA.eyeColor}`);
+  }
+
+  // Face shape/features
+  if (visualDNA.faceShape) {
+    lockedCharacter.push(`Face: ${visualDNA.faceShape}`);
+  }
+
   // Style
   lockedCharacter.push(`Style: ${visualDNA.style || 'pixar-3d'}, same face proportions`);
 
@@ -499,6 +511,14 @@ function buildSinglePosePrompt(character: StoredCharacter, poseName: string): st
 
   if (visualDNA.skinTone) {
     lockedCharacter.push(`Skin tone: ${visualDNA.skinTone}`);
+  }
+
+  if (visualDNA.eyeColor) {
+    lockedCharacter.push(`Eye color: ${visualDNA.eyeColor}`);
+  }
+
+  if (visualDNA.faceShape) {
+    lockedCharacter.push(`Face: ${visualDNA.faceShape}`);
   }
 
   lockedCharacter.push(`Style: ${visualDNA.style || 'pixar-3d'}`);
@@ -897,7 +917,7 @@ export async function generatePoseSheet(
         width: 768,    // Single pose at good quality
         height: 1024,  // Portrait orientation
         stage: "illustrations",
-        referenceStrength: 0.85, // Strong reference for consistency
+        referenceStrength: 0.95, // MAXIMUM reference strength for strict consistency
       };
 
       const response = await generateImage(request);
@@ -1314,6 +1334,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "girl" as const,
         skinTone: "Warm olive",
+        eyeColor: "Dark brown",
+        faceShape: "Round face, bright eyes, friendly smile",
         hairOrHijab: "Pink hijab with floral pattern",
         outfitRules: "Bright orange dress with modest neckline",
         accessories: "Small backpack, sparkly shoes",
@@ -1356,6 +1378,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "boy" as const,
         skinTone: "Light brown",
+        eyeColor: "Brown",
+        faceShape: "Oval face, thoughtful expression",
         hairOrHijab: "Short dark hair with striped kufi cap",
         outfitRules: "Blue thobe, comfortable fit",
         accessories: "Small prayer cap",
@@ -1398,6 +1422,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "girl" as const,
         skinTone: "Medium brown",
+        eyeColor: "Hazel",
+        faceShape: "Heart-shaped face, creative expression",
         hairOrHijab: "Purple hijab with artistic patterns",
         outfitRules: "Colorful dress with modest neckline, paint-splattered sleeves",
         accessories: "Paintbrush, colorful art supplies",
@@ -1441,6 +1467,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "girl" as const,
         skinTone: "Golden brown",
+        eyeColor: "Dark brown",
+        faceShape: "Intelligent expression, inquisitive eyes",
         hairOrHijab: "Teal hijab with science motifs",
         outfitRules: "White lab coat over modest dress, safety goggles",
         accessories: "Safety goggles, laboratory tools, notebook",
@@ -1481,6 +1509,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "boy" as const,
         skinTone: "Medium brown",
+        eyeColor: "Brown",
+        faceShape: "Kind face, gentle smile",
         hairOrHijab: "Dark hair with green kufi cap",
         outfitRules: "Green tunic with long sleeves, modest fit",
         accessories: "Helping hands (care items for elderly)",
@@ -1521,6 +1551,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "girl" as const,
         skinTone: "Olive",
+        eyeColor: "Green",
+        faceShape: "Adventurous expression, determined look",
         hairOrHijab: "Orange hijab with nature patterns",
         outfitRules: "Hiking outfit with modest long sleeves and pants",
         accessories: "Compass, backpack, binoculars for nature exploration",
@@ -1561,6 +1593,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "boy" as const,
         skinTone: "Dark brown",
+        eyeColor: "Dark brown",
+        faceShape: "Patient expression, warm smile",
         hairOrHijab: "Dark curly hair with brown cap",
         outfitRules: "Brown apron over long-sleeved shirt, gardening gloves",
         accessories: "Gardening tools, watering can, seed packets",
@@ -1601,6 +1635,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "watercolor",
         gender: "girl" as const,
         skinTone: "Rich brown",
+        eyeColor: "Dark brown",
+        faceShape: "Wise expression, mature features",
         hairOrHijab: "Elegant burgundy hijab, mature style",
         outfitRules: "Modest traditional dress, professional appearance",
         accessories: "Book of stories, prayer beads, wise expression",
@@ -1641,6 +1677,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "girl" as const,
         skinTone: "Light olive",
+        eyeColor: "Hazel",
+        faceShape: "Gentle face, compassionate eyes",
         hairOrHijab: "Soft pink hijab with gentle patterns",
         outfitRules: "Pastel pink dress with long sleeves",
         accessories: "Friendship bracelets, flower hairclip",
@@ -1681,6 +1719,8 @@ export function seedDemoCharactersIfEmpty(): void {
         style: "pixar-3d",
         gender: "boy" as const,
         skinTone: "Medium olive",
+        eyeColor: "Dark brown",
+        faceShape: "Thoughtful face, intelligent eyes",
         hairOrHijab: "Dark hair with navy blue cap",
         outfitRules: "Dark blue thobe with modest cut, scholarly appearance",
         accessories: "Glasses, always carrying a book, writing tablet",

@@ -66,6 +66,8 @@ export const CharacterPoseSchema = z.object({
 export const VisualDNASchema = z.object({
     gender: z.enum(["boy", "girl"]),
     skinTone: z.string(),
+    eyeColor: z.string(),
+    faceShape: z.string(),
     hairOrHijab: z.string(),
     outfitRules: z.string(),
     accessories: z.string(),

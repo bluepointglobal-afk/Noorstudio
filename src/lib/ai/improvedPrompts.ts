@@ -64,6 +64,22 @@ export function buildCriticalAttributesBlock(char: StoredCharacter): string {
     );
   }
 
+  // Eye color
+  if (char.visualDNA?.eyeColor) {
+    critical.push(
+      `Eye color: ${char.visualDNA.eyeColor}`,
+      ''
+    );
+  }
+
+  // Face shape/features
+  if (char.visualDNA?.faceShape) {
+    critical.push(
+      `Face: ${char.visualDNA.faceShape}`,
+      ''
+    );
+  }
+
   // Style
   critical.push(
     `Style: ${char.visualDNA?.style || 'pixar-3d'}`,
