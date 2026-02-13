@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AGE_RANGES, CHARACTER_STYLES, CharacterStyle } from "@/lib/models";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -187,7 +188,7 @@ export default function CharacterCreatePage() {
       case 1:
         return formData.name.trim() && formData.role.trim() && formData.ageRange;
       case 2:
-        return formData.skinTone.trim() && formData.hairOrHijab.trim() && formData.outfitRules.trim();
+        return formData.gender && formData.skinTone.trim() && formData.hairOrHijab.trim() && formData.outfitRules.trim();
       case 3:
         // Can proceed to pose sheet only if character is approved (has image)
         return createdCharacter?.imageUrl && createdCharacter.status === "approved";
@@ -1082,6 +1083,31 @@ Style requirements:
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gender">Gender *</Label>
+                <RadioGroup
+                  value={formData.gender}
+                  onValueChange={(v) => updateForm("gender", v as "boy" | "girl")}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="boy" id="gender-boy" />
+                    <Label htmlFor="gender-boy" className="font-normal cursor-pointer">
+                      Boy
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="girl" id="gender-girl" />
+                    <Label htmlFor="gender-girl" className="font-normal cursor-pointer">
+                      Girl
+                    </Label>
+                  </div>
+                </RadioGroup>
+                <p className="text-xs text-muted-foreground">
+                  This ensures the AI generates the correct gender (prevents name-based inference)
+                </p>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
