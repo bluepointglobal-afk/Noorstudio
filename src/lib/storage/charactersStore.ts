@@ -394,21 +394,19 @@ export function buildPosePackPrompt(
   const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
   const poseList = poseNames.map((pose, i) => `${i + 1}. ${pose}`).join("\n");
 
-  // OPTIMIZED FOR IP-ADAPTER: Keep prompt concise, let reference image handle identity
-  return `Character pose pack for ${name} (${ageRange} years old).
-
-${gridCols}x${gridRows} grid layout with ${poseCount} distinct poses:
+  // OPTIMIZED FOR IP-ADAPTER: ONLY describe poses/composition, NOT character appearance
+  // The model uses the subject image for ALL character details
+  return `${gridCols}x${gridRows} pose grid with ${poseCount} different poses:
 ${poseList}
 
-CRITICAL REQUIREMENTS:
-- EXACT same character in all ${poseCount} poses
-- Match reference image PRECISELY (face, skin tone ${visualDNA.skinTone}, outfit, proportions)
+Requirements:
+- Same character from reference in all poses
 - ${visualDNA.style} children's book illustration style
-- Clean white background for each pose
-- Character centered and same scale in every grid cell
-- NO text, labels, or numbers
+- Clean white background
+- Character centered and same scale in each cell
+- NO text or labels
 
-Grid format: ${gridCols} columns × ${gridRows} rows, single output image.`.trim();
+Single grid image: ${gridCols} columns × ${gridRows} rows`.trim();
 }
 
 /**
