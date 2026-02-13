@@ -1124,9 +1124,18 @@ async function replicateImageGeneration(
         ].join(", ");
 
     // Extract character reference from references array (first one is character ref)
-    const characterRefUrl = req.references && req.references.length > 0
+    let characterRefUrl = req.references && req.references.length > 0
       ? req.references[0]
       : undefined;
+
+    // Convert relative paths to absolute URLs for Replicate
+    if (characterRefUrl && characterRefUrl.startsWith('/')) {
+      const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+        : process.env.PUBLIC_URL || 'https://web-production-5836c.up.railway.app';
+      characterRefUrl = `${baseUrl}${characterRefUrl}`;
+      console.log(`[Replicate] Converted relative URL to absolute: ${characterRefUrl}`);
+    }
 
     // 🔧 FIX: Enhance prompt with style information
     const styleEnhancedPrompt = buildStyleEnhancedPrompt(
