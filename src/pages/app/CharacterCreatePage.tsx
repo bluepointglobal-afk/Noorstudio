@@ -35,22 +35,239 @@ import { canCreateCharacter } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { CharacterRefinementPanel, QuickAdjustments } from "@/components/characters/CharacterRefinementPanel";
 
+// Visual DNA dropdown options - FULL SPECTRUM
+const SKIN_TONES = [
+  { value: "porcelain", label: "Porcelain" },
+  { value: "fair", label: "Fair" },
+  { value: "light", label: "Light" },
+  { value: "light-beige", label: "Light Beige" },
+  { value: "beige", label: "Beige" },
+  { value: "light-olive", label: "Light Olive" },
+  { value: "olive", label: "Olive" },
+  { value: "warm-olive", label: "Warm Olive" },
+  { value: "golden", label: "Golden" },
+  { value: "light-tan", label: "Light Tan" },
+  { value: "tan", label: "Tan" },
+  { value: "caramel", label: "Caramel" },
+  { value: "light-brown", label: "Light Brown" },
+  { value: "medium-brown", label: "Medium Brown" },
+  { value: "warm-brown", label: "Warm Brown" },
+  { value: "brown", label: "Brown" },
+  { value: "rich-brown", label: "Rich Brown" },
+  { value: "dark-brown", label: "Dark Brown" },
+  { value: "deep-brown", label: "Deep Brown" },
+  { value: "ebony", label: "Ebony" },
+];
+
+const EYE_COLORS = [
+  { value: "dark-brown", label: "Dark Brown" },
+  { value: "brown", label: "Brown" },
+  { value: "light-brown", label: "Light Brown" },
+  { value: "amber", label: "Amber" },
+  { value: "hazel", label: "Hazel" },
+  { value: "hazel-green", label: "Hazel Green" },
+  { value: "green", label: "Green" },
+  { value: "blue-green", label: "Blue Green" },
+  { value: "blue", label: "Blue" },
+  { value: "light-blue", label: "Light Blue" },
+  { value: "gray", label: "Gray" },
+  { value: "gray-blue", label: "Gray Blue" },
+  { value: "black", label: "Black" },
+];
+
+const FACE_SHAPES = [
+  { value: "round-friendly", label: "Round & Friendly" },
+  { value: "round-cheerful", label: "Round & Cheerful" },
+  { value: "round-youthful", label: "Round & Youthful" },
+  { value: "oval-gentle", label: "Oval & Gentle" },
+  { value: "oval-thoughtful", label: "Oval & Thoughtful" },
+  { value: "oval-balanced", label: "Oval & Balanced" },
+  { value: "heart-creative", label: "Heart-shaped & Creative" },
+  { value: "heart-expressive", label: "Heart-shaped & Expressive" },
+  { value: "square-determined", label: "Square & Determined" },
+  { value: "square-strong", label: "Square & Strong" },
+  { value: "diamond-elegant", label: "Diamond & Elegant" },
+  { value: "long-wise", label: "Long & Wise" },
+];
+
+const HAIR_STYLES_BOY = [
+  { value: "short-black", label: "Short Black Hair" },
+  { value: "short-dark-brown", label: "Short Dark Brown Hair" },
+  { value: "short-brown", label: "Short Brown Hair" },
+  { value: "short-light-brown", label: "Short Light Brown Hair" },
+  { value: "short-blonde", label: "Short Blonde Hair" },
+  { value: "short-red", label: "Short Red Hair" },
+  { value: "curly-black", label: "Curly Black Hair" },
+  { value: "curly-dark", label: "Curly Dark Hair" },
+  { value: "curly-brown", label: "Curly Brown Hair" },
+  { value: "wavy-dark", label: "Wavy Dark Hair" },
+  { value: "wavy-brown", label: "Wavy Brown Hair" },
+  { value: "wavy-blonde", label: "Wavy Blonde Hair" },
+  { value: "spiky-black", label: "Spiky Black Hair" },
+  { value: "spiky-brown", label: "Spiky Brown Hair" },
+  { value: "buzz-cut", label: "Buzz Cut" },
+  { value: "afro", label: "Afro" },
+  { value: "dreadlocks", label: "Dreadlocks" },
+  { value: "braids-short", label: "Short Braids" },
+];
+
+const HAIR_STYLES_GIRL_NO_HIJAB = [
+  { value: "long-black", label: "Long Black Hair" },
+  { value: "long-dark-brown", label: "Long Dark Brown Hair" },
+  { value: "long-brown", label: "Long Brown Hair" },
+  { value: "long-light-brown", label: "Long Light Brown Hair" },
+  { value: "long-blonde", label: "Long Blonde Hair" },
+  { value: "long-red", label: "Long Red Hair" },
+  { value: "shoulder-black", label: "Shoulder-length Black Hair" },
+  { value: "shoulder-brown", label: "Shoulder-length Brown Hair" },
+  { value: "shoulder-blonde", label: "Shoulder-length Blonde Hair" },
+  { value: "curly-long", label: "Long Curly Hair" },
+  { value: "curly-shoulder", label: "Shoulder-length Curly Hair" },
+  { value: "wavy-long", label: "Long Wavy Hair" },
+  { value: "wavy-shoulder", label: "Shoulder-length Wavy Hair" },
+  { value: "braided-long", label: "Long Braided Hair" },
+  { value: "braided-double", label: "Double Braids" },
+  { value: "ponytail-high", label: "High Ponytail" },
+  { value: "ponytail-side", label: "Side Ponytail" },
+  { value: "bun-top", label: "Top Bun" },
+  { value: "bun-side", label: "Side Bun" },
+  { value: "pigtails", label: "Pigtails" },
+  { value: "afro-puffs", label: "Afro Puffs" },
+  { value: "dreadlocks-long", label: "Long Dreadlocks" },
+  { value: "box-braids", label: "Box Braids" },
+  { value: "cornrows", label: "Cornrows" },
+];
+
+const HIJAB_STYLES = [
+  { value: "simple-white", label: "Simple White Hijab" },
+  { value: "simple-black", label: "Simple Black Hijab" },
+  { value: "simple-beige", label: "Simple Beige Hijab" },
+  { value: "simple-gray", label: "Simple Gray Hijab" },
+  { value: "pink-solid", label: "Solid Pink Hijab" },
+  { value: "pink-floral", label: "Pink Hijab with Floral Pattern" },
+  { value: "pink-pastel", label: "Pastel Pink Hijab" },
+  { value: "blue-solid", label: "Solid Blue Hijab" },
+  { value: "blue-navy", label: "Navy Blue Hijab" },
+  { value: "blue-patterned", label: "Blue Patterned Hijab" },
+  { value: "teal-solid", label: "Solid Teal Hijab" },
+  { value: "teal-modern", label: "Teal Modern Hijab" },
+  { value: "teal-science", label: "Teal Hijab with Science Motifs" },
+  { value: "purple-solid", label: "Solid Purple Hijab" },
+  { value: "purple-artistic", label: "Purple Hijab with Artistic Patterns" },
+  { value: "purple-elegant", label: "Elegant Purple Hijab" },
+  { value: "burgundy-solid", label: "Solid Burgundy Hijab" },
+  { value: "burgundy-elegant", label: "Burgundy Elegant Hijab" },
+  { value: "green-solid", label: "Solid Green Hijab" },
+  { value: "green-olive", label: "Olive Green Hijab" },
+  { value: "orange-solid", label: "Solid Orange Hijab" },
+  { value: "orange-nature", label: "Orange Hijab with Nature Patterns" },
+  { value: "yellow-solid", label: "Solid Yellow Hijab" },
+  { value: "brown-solid", label: "Solid Brown Hijab" },
+  { value: "red-solid", label: "Solid Red Hijab" },
+  { value: "turquoise", label: "Turquoise Hijab" },
+  { value: "gold-elegant", label: "Gold Elegant Hijab" },
+  { value: "silver-modern", label: "Silver Modern Hijab" },
+  { value: "multicolor-vibrant", label: "Vibrant Multicolor Hijab" },
+  { value: "geometric-pattern", label: "Hijab with Geometric Patterns" },
+  { value: "paisley-pattern", label: "Hijab with Paisley Pattern" },
+];
+
 const characterTemplates = [
+  {
+    id: "curious-girl",
+    label: "Curious Explorer (Girl)",
+    description: "Adventurous girl who loves learning",
+    gender: "girl" as const,
+    traits: ["curious", "brave", "kind", "loves learning"],
+    role: "Curious Explorer",
+    ageRange: "6-9",
+    skinTone: "olive",
+    eyeColor: "dark-brown",
+    faceShape: "round-friendly",
+    wearHijab: true,
+    hairOrHijab: "pink-floral",
+    outfitRules: "Bright orange dress with modest neckline, comfortable shoes",
+    accessories: "Small backpack, notebook",
+  },
+  {
+    id: "honest-boy",
+    label: "Honest Student (Boy)",
+    description: "Truthful and trustworthy",
+    gender: "boy" as const,
+    traits: ["honest", "trustworthy", "loyal", "always tells truth"],
+    role: "Honest Student",
+    ageRange: "10-12",
+    skinTone: "light-brown",
+    eyeColor: "brown",
+    faceShape: "oval-thoughtful",
+    wearHijab: false,
+    hairOrHijab: "short-dark",
+    outfitRules: "Blue thobe, comfortable fit",
+    accessories: "Small prayer cap, backpack",
+  },
+  {
+    id: "creative-girl",
+    label: "Creative Artist (Girl)",
+    description: "Artistic and imaginative",
+    gender: "girl" as const,
+    traits: ["creative", "artistic", "imaginative", "loves painting"],
+    role: "Creative Artist",
+    ageRange: "6-8",
+    skinTone: "medium-brown",
+    eyeColor: "hazel",
+    faceShape: "heart-creative",
+    wearHijab: true,
+    hairOrHijab: "purple-artistic",
+    outfitRules: "Colorful dress with modest neckline, paint-splattered apron",
+    accessories: "Paintbrush, colorful art supplies",
+  },
+  {
+    id: "brave-boy",
+    label: "Brave Adventurer (Boy)",
+    description: "Courageous outdoor explorer",
+    gender: "boy" as const,
+    traits: ["brave", "adventurous", "determined", "loves nature"],
+    role: "Brave Adventurer",
+    ageRange: "9-11",
+    skinTone: "brown",
+    eyeColor: "dark-brown",
+    faceShape: "square-determined",
+    wearHijab: false,
+    hairOrHijab: "curly-dark",
+    outfitRules: "Green hiking outfit with long sleeves, sturdy boots",
+    accessories: "Compass, binoculars, adventure backpack",
+  },
   {
     id: "scholar",
     label: "Scholar",
     description: "Wise and thoughtful",
+    gender: "boy" as const,
     traits: ["wise", "curious", "patient"],
     role: "Scholar",
     ageRange: "10-14",
+    skinTone: "medium-brown",
+    eyeColor: "brown",
+    faceShape: "oval-thoughtful",
+    wearHijab: false,
+    hairOrHijab: "short-black",
+    outfitRules: "Traditional thobe, scholarly appearance",
+    accessories: "Glasses, book, writing tablet",
   },
   {
     id: "adventurer",
-    label: "Adventurer",
-    description: "Brave and daring",
+    label: "Adventurer (Girl)",
+    description: "Brave and daring explorer",
+    gender: "girl" as const,
     traits: ["brave", "adventurous", "determined"],
     role: "Adventurer",
     ageRange: "10-14",
+    skinTone: "olive",
+    eyeColor: "green",
+    faceShape: "square-determined",
+    wearHijab: true,
+    hairOrHijab: "orange-nature",
+    outfitRules: "Hiking outfit with modest long sleeves and pants, comfortable boots",
+    accessories: "Compass, backpack, binoculars for exploration",
   },
   {
     id: "artist",
@@ -139,6 +356,7 @@ export default function CharacterCreatePage() {
     // Visual DNA
     style: "pixar-3d" as CharacterStyle,
     gender: "girl" as "boy" | "girl", // Default to girl, user can change
+    wearHijab: false, // Whether girl wears hijab
     skinTone: "",
     eyeColor: "",
     faceShape: "",
@@ -216,9 +434,19 @@ export default function CharacterCreatePage() {
         if (template) {
           setFormData((prev) => ({
             ...prev,
+            // Persona
             role: template.role,
             ageRange: template.ageRange,
             traits: template.traits,
+            // Visual DNA from template
+            gender: template.gender || prev.gender,
+            wearHijab: template.wearHijab !== undefined ? template.wearHijab : prev.wearHijab,
+            skinTone: template.skinTone || prev.skinTone,
+            eyeColor: template.eyeColor || prev.eyeColor,
+            faceShape: template.faceShape || prev.faceShape,
+            hairOrHijab: template.hairOrHijab || prev.hairOrHijab,
+            outfitRules: template.outfitRules || prev.outfitRules,
+            accessories: template.accessories || prev.accessories,
           }));
         }
       }
@@ -1118,50 +1346,100 @@ Style requirements:
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="eyeColor">Eye Color *</Label>
-                  <Input
-                    id="eyeColor"
-                    placeholder="e.g., Brown, Hazel, Green"
-                    value={formData.eyeColor}
-                    onChange={(e) => updateForm("eyeColor", e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Specific eye color prevents AI from changing it
-                  </p>
+                  <Label htmlFor="skinTone">Skin Tone *</Label>
+                  <Select value={formData.skinTone} onValueChange={(v) => updateForm("skinTone", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select skin tone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SKIN_TONES.map((tone) => (
+                        <SelectItem key={tone.value} value={tone.value}>
+                          {tone.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="faceShape">Face Features *</Label>
-                  <Input
-                    id="faceShape"
-                    placeholder="e.g., Round face, small nose, full cheeks"
-                    value={formData.faceShape}
-                    onChange={(e) => updateForm("faceShape", e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Key facial features to maintain consistency
-                  </p>
+                  <Label htmlFor="eyeColor">Eye Color *</Label>
+                  <Select value={formData.eyeColor} onValueChange={(v) => updateForm("eyeColor", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select eye color" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EYE_COLORS.map((color) => (
+                        <SelectItem key={color.value} value={color.value}>
+                          {color.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="skinTone">Skin Tone *</Label>
-                  <Input
-                    id="skinTone"
-                    placeholder="e.g., Warm olive, Light brown"
-                    value={formData.skinTone}
-                    onChange={(e) => updateForm("skinTone", e.target.value)}
+              <div className="space-y-2">
+                <Label htmlFor="faceShape">Face Shape *</Label>
+                <Select value={formData.faceShape} onValueChange={(v) => updateForm("faceShape", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select face shape" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FACE_SHAPES.map((shape) => (
+                      <SelectItem key={shape.value} value={shape.label}>
+                        {shape.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.gender === "girl" && (
+                <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
+                  <Switch
+                    id="wearHijab"
+                    checked={formData.wearHijab}
+                    onCheckedChange={(checked) => {
+                      updateForm("wearHijab", checked);
+                      // Clear hair/hijab when toggling
+                      updateForm("hairOrHijab", "");
+                    }}
                   />
+                  <Label htmlFor="wearHijab" className="cursor-pointer">
+                    Wears Hijab
+                  </Label>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hairOrHijab">Hair / Hijab *</Label>
-                  <Input
-                    id="hairOrHijab"
-                    placeholder="e.g., Pink hijab with floral pattern"
-                    value={formData.hairOrHijab}
-                    onChange={(e) => updateForm("hairOrHijab", e.target.value)}
-                  />
-                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="hairOrHijab">
+                  {formData.gender === "girl" && formData.wearHijab ? "Hijab Style *" : "Hair Style *"}
+                </Label>
+                <Select value={formData.hairOrHijab} onValueChange={(v) => updateForm("hairOrHijab", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      formData.gender === "girl" && formData.wearHijab
+                        ? "Select hijab style"
+                        : "Select hair style"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formData.gender === "boy" && HAIR_STYLES_BOY.map((style) => (
+                      <SelectItem key={style.value} value={style.label}>
+                        {style.label}
+                      </SelectItem>
+                    ))}
+                    {formData.gender === "girl" && formData.wearHijab && HIJAB_STYLES.map((style) => (
+                      <SelectItem key={style.value} value={style.label}>
+                        {style.label}
+                      </SelectItem>
+                    ))}
+                    {formData.gender === "girl" && !formData.wearHijab && HAIR_STYLES_GIRL_NO_HIJAB.map((style) => (
+                      <SelectItem key={style.value} value={style.label}>
+                        {style.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

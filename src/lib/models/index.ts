@@ -305,7 +305,21 @@ export const BOOK_TEMPLATES: BookTemplate[] = [
 // Age Ranges
 // ============================================
 
-export const AGE_RANGES = ["3-5", "4-6", "5-7", "6-8", "7-9", "8-10", "9-12"] as const;
+export const AGE_RANGES = [
+  "3-5",
+  "4-6",
+  "5-7",
+  "6-8",
+  "7-9",
+  "8-10",
+  "9-12",
+  "13-17",  // Teens
+  "18-25",  // Young adults
+  "26-35",  // Adults
+  "36-50",  // Middle-aged
+  "51-65",  // Mature
+  "65+",    // Elderly
+] as const;
 export type AgeRange = typeof AGE_RANGES[number];
 
 // ============================================
