@@ -477,7 +477,65 @@ Requirements:
 }
 
 /**
- * Build prompt for a SINGLE pose (used when generating poses individually)
+ * Build EXTREMELY explicit grid prompt for FLUX 2 Pro
+ * This prompt is designed to make FLUX 2 Pro generate a proper grid layout
+ */
+function buildExplicitGridPrompt(
+  character: StoredCharacter,
+  poseCount: number,
+  gridCols: number,
+  gridRows: number
+): string {
+  const { visualDNA, modestyRules, ageRange } = character;
+  const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+
+  // Build character identity block
+  const identity: string[] = [];
+
+  if (visualDNA.gender) {
+    const genderDesc = visualDNA.gender === "boy"
+      ? `BOY (male child, age ${ageRange || '8-10'})`
+      : `GIRL (female child, age ${ageRange || '8-10'})`;
+    identity.push(`Gender: ${genderDesc}`);
+  }
+
+  if (visualDNA.hairOrHijab) identity.push(`Hair: ${visualDNA.hairOrHijab}`);
+  if (visualDNA.outfitRules) identity.push(`Outfit: ${visualDNA.outfitRules}`);
+  if (visualDNA.accessories) identity.push(`Accessories: ${visualDNA.accessories}`);
+  if (visualDNA.skinTone) identity.push(`Skin: ${visualDNA.skinTone}`);
+  if (visualDNA.eyeColor) identity.push(`Eyes: ${visualDNA.eyeColor}`);
+  if (visualDNA.faceShape) identity.push(`Face: ${visualDNA.faceShape}`);
+
+  // Build explicit grid instruction
+  return `CHARACTER REFERENCE SHEET - ${gridCols}×${gridRows} GRID LAYOUT
+
+CRITICAL: This must be a SINGLE IMAGE containing a ${gridCols} by ${gridRows} grid of ${poseCount} different poses.
+
+LOCKED CHARACTER (same in ALL ${poseCount} cells):
+${identity.join("\n")}
+Style: ${visualDNA.style || 'pixar-3d'} children's book illustration
+
+GRID LAYOUT REQUIREMENTS:
+- EXACTLY ${gridCols} columns and ${gridRows} rows
+- ${poseCount} cells total, each showing ONE pose
+- Clear visual borders between grid cells (white lines or spacing)
+- Same character in EVERY cell
+- Each cell shows different pose: ${poseNames.join(", ")}
+- White or light gray background in each cell
+- Character centered in each cell, same size/scale
+
+POSES (one per grid cell):
+${poseNames.map((pose, i) => `Cell ${i + 1}: ${pose}`).join("\n")}
+
+OUTPUT FORMAT:
+Single composite image with grid structure clearly visible
+${gridCols} columns × ${gridRows} rows = ${poseCount} character poses
+NO text labels, NO numbers
+Clean professional character reference sheet`.trim();
+}
+
+/**
+ * Build prompt for a SINGLE pose (LEGACY - kept for individual regeneration)
  *
  * @param character - Character to generate pose for
  * @param poseName - Name of the pose (e.g., "Front", "Walking", "Sitting")
@@ -869,15 +927,10 @@ export function approveCharacterDesign(characterId: string): StoredCharacter | n
 /**
  * Generate POSE PACK for an APPROVED character using AI image generation.
  *
- * IMPORTANT DESIGN CHANGE:
- * - Replicate's fofr/consistent-character model does NOT support multi-pose grids
- * - Solution: Generate SEPARATE images for each pose, then stitch client-side
- * - This gives BETTER character consistency (each pose gets full IP-Adapter attention)
- *
- * FLOW:
- * 1. Generate 4 separate pose images (4 API calls to Replicate)
- * 2. Stitch them into a 2x2 grid using client-side canvas
- * 3. Save the stitched grid as the pose sheet
+ * UPDATED: Using FLUX 2 Pro which DOES support multi-pose grids
+ * - Single API call generates entire 2x2 grid with 4 poses
+ * - Much more cost-effective than 4 separate calls
+ * - FLUX 2 Pro has excellent instruction following for grid layouts
  *
  * @param characterId - Character to generate pose pack for
  * @param poseCount - Number of poses (4, 8, or 12). Default: 4 (recommended)
@@ -896,63 +949,60 @@ export async function generatePoseSheet(
     throw new Error("Character must have an approved anchor image before generating pose pack.");
   }
 
+  onProgress?.(`Generating ${poseCount}-pose grid...`);
+
   try {
-    const now = new Date().toISOString();
-    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
-    const poseImageUrls: string[] = [];
+    // Determine grid dimensions based on pose count
+    let gridCols: number, gridRows: number, width: number, height: number;
 
-    // Generate EACH pose individually (better character consistency)
-    for (let i = 0; i < poseCount; i++) {
-      const poseName = poseNames[i];
-      onProgress?.(`Generating pose ${i + 1}/${poseCount}: ${poseName}...`);
-
-      // Build simple single-pose prompt
-      const posePrompt = buildSinglePosePrompt(character, poseName);
-
-      const request: ImageGenerationRequest = {
-        prompt: posePrompt,
-        references: character.imageUrl ? [character.imageUrl] : undefined,
-        characterReference: character.imageUrl,
-        style: character.visualDNA.style || "pixar-3d",
-        width: 768,    // Single pose at good quality
-        height: 1024,  // Portrait orientation
-        stage: "illustrations",
-        referenceStrength: 0.95, // MAXIMUM reference strength for strict consistency
-      };
-
-      const response = await generateImage(request);
-      poseImageUrls.push(response.imageUrl);
-    }
-
-    onProgress?.("Stitching poses into grid...");
-
-    // Determine grid layout based on pose count
-    let gridCols: number, gridRows: number;
     if (poseCount === 4) {
       gridCols = 2;
       gridRows = 2;
+      width = 2048;   // 1024px per cell
+      height = 2048;  // Square grid
     } else if (poseCount === 8) {
       gridCols = 4;
       gridRows = 2;
+      width = 3072;   // 768px per cell
+      height = 1536;
     } else {
       gridCols = 4;
       gridRows = 3;
+      width = 3072;   // 768px per cell
+      height = 2304;
     }
 
-    // Stitch images into grid using client-side canvas utility
-    const gridResult = await createLabeledPoseSheetGrid(poseImageUrls, poseNames);
+    // Build EXTREMELY explicit grid prompt for FLUX 2 Pro
+    const gridPrompt = buildExplicitGridPrompt(character, poseCount, gridCols, gridRows);
 
-    onProgress?.("Pose pack complete!");
+    // SINGLE API CALL to generate entire grid
+    const request: ImageGenerationRequest = {
+      prompt: gridPrompt,
+      references: character.imageUrl ? [character.imageUrl] : undefined,
+      characterReference: character.imageUrl,
+      style: character.visualDNA.style || "pixar-3d",
+      width,
+      height,
+      stage: "illustrations",
+      referenceStrength: 0.95, // Maximum consistency
+    };
 
-    // Create pose entries with individual images
+    const response = await generateImage(request);
+
+    onProgress?.("Pose grid complete!");
+
+    const now = new Date().toISOString();
+    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+
+    // Create pose entries pointing to the grid image
     const updatedPoses: CharacterPose[] = poseNames.map((name, idx) => ({
       id: idx + 1,
       name,
       status: "draft" as AssetStatus,
-      imageUrl: poseImageUrls[idx], // Individual pose image
+      imageUrl: response.imageUrl, // All point to the grid image
       alternatives: [{
         id: 1,
-        imageUrl: poseImageUrls[idx],
+        imageUrl: response.imageUrl,
         selected: true,
         createdAt: now,
       }],
@@ -963,7 +1013,7 @@ export async function generatePoseSheet(
     return updateCharacter(characterId, {
       poses: updatedPoses,
       poseSheetGenerated: true,
-      poseSheetUrl: gridResult.dataUrl, // Stitched grid as data URL
+      poseSheetUrl: response.imageUrl,
       poseCount,
     });
   } catch (error) {

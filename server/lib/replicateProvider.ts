@@ -39,8 +39,8 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Default to the consistent-character model (specific version for stability)
-    this.model = model || "fofr/consistent-character:9c77a3c2f884193fcee4d89645f02a0b9def9434f9e03cb98460456b831c8772";
+    // UPDATED: Use FLUX 2 Pro for better grid generation and character consistency
+    this.model = model || "black-forest-labs/flux-2-pro";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -55,28 +55,33 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for the consistent-character model
-      // IMPORTANT: Use exact parameter names from Replicate API schema
+      // Build input for FLUX 2 Pro
+      // FLUX 2 Pro uses different parameter names than consistent-character
       const input: Record<string, unknown> = {
         prompt: request.prompt,
-        negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
-        number_of_outputs: request.numOutputs || 1,
         output_format: "webp",
         output_quality: 95,
-        randomise_poses: false, // Keep poses consistent
+        aspect_ratio: `${request.width || 1024}:${request.height || 1024}`, // FLUX uses aspect ratio
+        num_outputs: request.numOutputs || 1,
       };
 
-      // Add character reference if provided (IP-Adapter for consistency)
+      // Add character reference if provided (FLUX 2 Pro supports up to 8 references)
       if (request.subjectImageUrl) {
-        input.subject = request.subjectImageUrl;
+        input.image = request.subjectImageUrl; // FLUX 2 Pro uses 'image' parameter
 
-        // Add reference strength if provided (controls how strongly to match the reference)
-        // Higher values (0.8-1.0) = stronger character consistency, lower prompt influence
-        // Lower values (0.4-0.6) = more prompt influence, weaker character lock
+        // FLUX 2 Pro uses guidance for reference strength
         if (request.referenceStrength !== undefined) {
-          input.prompt_strength = request.referenceStrength;
-          console.log(`[Replicate] Using reference strength: ${request.referenceStrength}`);
+          input.guidance = request.referenceStrength * 10; // Convert 0-1 to 0-10 scale
+          console.log(`[Replicate] Using guidance: ${input.guidance}`);
+        } else {
+          input.guidance = 9.5; // Very high guidance for strict consistency
         }
+      }
+
+      // Add negative prompt if provided
+      if (request.negativePrompt) {
+        // FLUX 2 Pro handles negative prompts in the main prompt with [negative] tags
+        input.prompt = `${request.prompt}\n\nNEGATIVE: ${request.negativePrompt}`;
       }
 
       // Add seed for reproducibility
