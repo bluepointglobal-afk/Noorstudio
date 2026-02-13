@@ -5,6 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { uploadToCloudinary } from "./cloudinaryUpload";
 
 export interface BFLImageRequest {
   prompt: string;
@@ -263,34 +264,41 @@ export class BFLProvider {
       }
 
       const buffer = await response.arrayBuffer();
-      const filename = `bfl-${jobId}-${crypto.randomBytes(4).toString('hex')}.png`;
-      const filepath = path.join(this.storageDir, filename);
-
-      fs.writeFileSync(filepath, Buffer.from(buffer));
-
-      // Return path that can be served via static middleware
-      // TODO: Return cloud storage URL when implemented
-      const publicUrl = `/stored-images/${filename}`;
+      const filename = `bfl-${jobId}-${crypto.randomBytes(4).toString('hex')}`;
 
       console.log(JSON.stringify({
         trace_id: traceId,
-        stage: "download_complete",
-        stored_path: filepath,
-        public_url: publicUrl,
+        stage: "cloudinary_upload_started",
+        filename,
         size_bytes: buffer.byteLength,
         timestamp: new Date().toISOString()
       }));
 
-      return publicUrl;
+      // Upload to Cloudinary for permanent storage
+      const cloudinaryUrl = await uploadToCloudinary(Buffer.from(buffer), {
+        folder: 'noorstudio/characters',
+        filename,
+        format: 'png',
+      });
+
+      console.log(JSON.stringify({
+        trace_id: traceId,
+        stage: "cloudinary_upload_complete",
+        cloudinary_url: cloudinaryUrl,
+        size_bytes: buffer.byteLength,
+        timestamp: new Date().toISOString()
+      }));
+
+      return cloudinaryUrl;
     } catch (error: unknown) {
       const err = error as Error;
       console.error(JSON.stringify({
         trace_id: traceId,
-        error: "download_failed",
+        error: "download_or_upload_failed",
         message: err.message,
         timestamp: new Date().toISOString()
       }));
-      throw new Error(`Failed to download and store BFL image: ${err.message}`);
+      throw new Error(`Failed to download and upload BFL image: ${err.message}`);
     }
   }
 

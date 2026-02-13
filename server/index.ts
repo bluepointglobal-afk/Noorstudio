@@ -13,6 +13,7 @@ import { AppError, RateLimitError, AuthError } from "./errors";
 import { createClient } from "@supabase/supabase-js";
 import helmet from "helmet"; // Added import for helmet
 import { AI_TOKEN_BUDGETS, GLOBAL_LIMITS, estimateTokens } from "../src/lib/ai/tokenBudget";
+import { configureCloudinary } from "./lib/cloudinaryUpload";
 
 const STAGE_COSTS: Record<string, number> = Object.entries(AI_TOKEN_BUDGETS).reduce((acc, [key, val]) => {
   acc[key] = val.creditCost;
@@ -20,6 +21,17 @@ const STAGE_COSTS: Record<string, number> = Object.entries(AI_TOKEN_BUDGETS).red
 }, {} as Record<string, number>);
 const app = express();
 const PORT = env.PORT;
+
+// ============================================
+// Cloudinary Configuration
+// ============================================
+
+if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
+  configureCloudinary(env.CLOUDINARY_CLOUD_NAME, env.CLOUDINARY_API_KEY, env.CLOUDINARY_API_SECRET);
+  console.log("[INIT] ✅ Cloudinary configured for image storage");
+} else {
+  console.warn("[INIT] ⚠️  Cloudinary not configured - images will be stored locally (not recommended for production)");
+}
 
 // ============================================
 // Rate Limiting (In-Memory, MVP)

@@ -4,6 +4,7 @@
 import Replicate from "replicate";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { uploadToCloudinary } from "./cloudinaryUpload";
 
 export interface ReplicateImageRequest {
   prompt: string;
@@ -214,13 +215,9 @@ export class ReplicateProvider {
       // Generate unique filename
       const timestamp = Date.now();
       const randomSuffix = Math.random().toString(36).substring(2, 10);
-      const filename = `replicate-${timestamp}-${randomSuffix}.webp`;
-      const storagePath = path.join(this.storageDir, filename);
+      const filename = `replicate-${timestamp}-${randomSuffix}`;
 
-      console.log(`[Replicate] Downloading stream to: ${storagePath}`);
-
-      // Ensure storage directory exists
-      await fs.mkdir(this.storageDir, { recursive: true });
+      console.log(`[Replicate] Downloading stream for: ${filename}`);
 
       // Read entire stream into buffer first (simpler and more reliable)
       const reader = stream.getReader();
@@ -241,20 +238,24 @@ export class ReplicateProvider {
         offset += chunk.length;
       }
 
-      // Write to file
-      await fs.writeFile(storagePath, buffer);
+      console.log(`[Replicate] Stream downloaded: ${totalLength} bytes in ${processingTimeMs}ms`);
+      console.log(`[Replicate] Uploading to Cloudinary...`);
 
-      const fileStats = await fs.stat(storagePath);
-      console.log(`[Replicate] Download complete: ${fileStats.size} bytes in ${processingTimeMs}ms`);
+      // Upload to Cloudinary for permanent storage
+      const cloudinaryUrl = await uploadToCloudinary(buffer, {
+        folder: 'noorstudio/pose-packs',
+        filename,
+        format: 'webp',
+      });
 
-      // Return public URL
-      const publicUrl = `/stored-images/${filename}`;
-      return publicUrl;
+      console.log(`[Replicate] Upload complete: ${cloudinaryUrl}`);
+
+      return cloudinaryUrl;
     } catch (error) {
       const err = error as Error;
-      console.error(`[Replicate] Stream download failed:`, err.message);
+      console.error(`[Replicate] Stream download/upload failed:`, err.message);
       console.error(`[Replicate] Error stack:`, err.stack);
-      throw new Error(`Failed to download Replicate stream: ${err.message}`);
+      throw new Error(`Failed to download/upload Replicate stream: ${err.message}`);
     }
   }
 

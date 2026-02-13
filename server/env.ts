@@ -28,6 +28,10 @@ const envSchema = z.object({
     // Stripe
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    // Cloudinary (for image storage)
+    CLOUDINARY_CLOUD_NAME: z.string().optional(),
+    CLOUDINARY_API_KEY: z.string().optional(),
+    CLOUDINARY_API_SECRET: z.string().optional(),
 }).refine((data) => {
     if (data.AI_TEXT_PROVIDER === "claude" && !data.CLAUDE_API_KEY) {
         return false;
