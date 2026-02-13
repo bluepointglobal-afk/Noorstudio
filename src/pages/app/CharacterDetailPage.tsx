@@ -304,10 +304,10 @@ export default function CharacterDetailPage() {
     const result = consumeCredits({
       type: "character",
       amount: POSE_SHEET_COST,
-      reason: `Generate 12-pose sheet for ${character.name}`,
+      reason: `Generate 4-pose sheet for ${character.name}`,
       entityType: "character",
       entityId: character.id,
-      meta: { poseCount: 12 },
+      meta: { poseCount: 4 },
     });
 
     if (!result.success) {
@@ -318,13 +318,13 @@ export default function CharacterDetailPage() {
     }
 
     try {
-      const updated = await generatePoseSheet(character.id);
+      const updated = await generatePoseSheet(character.id, 4);
       if (updated) {
         setCharacter(updated);
         setCredits(getBalances());
         toast({
           title: "Pose sheet generated",
-          description: `12 poses created. ${POSE_SHEET_COST} credits used.`,
+          description: `4 poses created. ${POSE_SHEET_COST} credits used.`,
         });
       }
     } catch (error) {
@@ -661,7 +661,7 @@ export default function CharacterDetailPage() {
                 <div>
                   <h3 className="font-semibold">12-Pose Grid</h3>
                   <p className="text-sm text-muted-foreground">
-                    {approvedCount}/12 poses approved {approvedCount >= 10 ? "• Ready to lock" : "• Need 10+ to lock"}
+                    {approvedCount}/4 poses approved {approvedCount >= 4 ? "• Ready to lock" : "• Need all 4 to lock"}
                   </p>
                 </div>
                 {character.poseSheetGenerated ? (
@@ -692,7 +692,7 @@ export default function CharacterDetailPage() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No Pose Sheet Yet</h3>
                   <p className="text-muted-foreground mb-4 max-w-md mx-auto">
-                    Generate a 12-pose sheet to create consistent character illustrations.
+                    Generate a 4-pose sheet to create consistent character illustrations.
                   </p>
                   <Button variant="hero" onClick={() => setShowGeneratePoses(true)} disabled={isGenerating}>
                     <Sparkles className="w-4 h-4 mr-2" />
@@ -730,7 +730,7 @@ export default function CharacterDetailPage() {
                         <Badge variant="outline">Single Image</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">
-                        This pose sheet contains all 12 character poses in a single grid image.
+                        This pose sheet contains all 4 character poses in a single grid image.
                         It is used as a reference for generating consistent illustrations.
                       </p>
 
@@ -788,7 +788,7 @@ export default function CharacterDetailPage() {
                     <div className="flex-1">
                       <p className="font-medium">Current Version</p>
                       <p className="text-sm text-muted-foreground">
-                        {approvedCount}/12 poses • {character.status}
+                        {approvedCount}/4 poses • {character.status}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Updated: {new Date(character.updatedAt).toLocaleDateString()}
@@ -835,7 +835,7 @@ export default function CharacterDetailPage() {
         open={showRegenerateAll}
         onOpenChange={setShowRegenerateAll}
         title="Regenerate All Poses"
-        description={`This will regenerate all 12 poses and create a new version (v${character.version + 1}). Any approved poses will need to be re-approved.`}
+        description={`This will regenerate all 4 poses and create a new version (v${character.version + 1}). Any approved poses will need to be re-approved.`}
         creditCost={REGENERATE_ALL_COST}
         creditType="character"
         onConfirm={handleRegenerateAll}
@@ -857,7 +857,7 @@ export default function CharacterDetailPage() {
         open={showGeneratePoses}
         onOpenChange={setShowGeneratePoses}
         title="Generate Pose Sheet"
-        description={`Generate a 12-pose character sheet for ${character.name}.`}
+        description={`Generate a 4-pose character sheet for ${character.name}.`}
         creditCost={POSE_SHEET_COST}
         creditType="character"
         onConfirm={handleGeneratePoseSheet}
