@@ -69,8 +69,14 @@ export class ReplicateProvider {
       // Add character reference if provided (IP-Adapter for consistency)
       if (request.subjectImageUrl) {
         input.subject = request.subjectImageUrl;
-        // Note: prompt_strength is NOT a valid parameter for this model
-        // Character consistency is controlled by the subject image itself
+
+        // Add reference strength if provided (controls how strongly to match the reference)
+        // Higher values (0.8-1.0) = stronger character consistency, lower prompt influence
+        // Lower values (0.4-0.6) = more prompt influence, weaker character lock
+        if (request.referenceStrength !== undefined) {
+          input.prompt_strength = request.referenceStrength;
+          console.log(`[Replicate] Using reference strength: ${request.referenceStrength}`);
+        }
       }
 
       // Add seed for reproducibility

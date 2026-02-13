@@ -137,6 +137,7 @@ export default function CharacterCreatePage() {
 
     // Visual DNA
     style: "pixar-3d" as CharacterStyle,
+    gender: "girl" as "boy" | "girl", // Default to girl, user can change
     skinTone: "",
     hairOrHijab: "",
     outfitRules: "",
@@ -255,6 +256,7 @@ export default function CharacterCreatePage() {
       speakingStyle: "",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl", // Default - will be inferred from AI-generated description
         skinTone: "",
         hairOrHijab: "",
         outfitRules: "",
@@ -348,6 +350,7 @@ Style requirements:
   const handleCreateCharacter = (): StoredCharacter => {
     const visualDNA: VisualDNA = {
       style: formData.style,
+      gender: formData.gender,
       skinTone: formData.skinTone,
       hairOrHijab: formData.hairOrHijab,
       outfitRules: formData.outfitRules,

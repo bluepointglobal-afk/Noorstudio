@@ -10,82 +10,96 @@ import { PoseType } from "./imagePrompts";
 // ============================================
 
 /**
- * Build a critical attributes block that appears FIRST in the prompt.
- * This ensures AI models prioritize these specifications.
- * 
+ * Build a LOCKED CHARACTER block that appears FIRST in the prompt.
+ * This ensures AI models prioritize these specifications and prevents character drift.
+ *
  * @impact +40% attribute adherence (AI models weight early content higher)
  */
 export function buildCriticalAttributesBlock(char: StoredCharacter): string {
   const critical: string[] = [
-    `## CRITICAL CHARACTER ATTRIBUTES FOR "${char.name.toUpperCase()}" (MANDATORY COMPLIANCE)`,
+    `LOCKED CHARACTER (must not change):`,
     '',
   ];
-  
-  // Hair/Hijab (highest priority)
+
+  // Gender (HIGHEST priority - prevents name-based inference)
+  if (char.visualDNA?.gender) {
+    const genderDesc = char.visualDNA.gender === "boy"
+      ? `BOY (male child, age ${char.ageRange || '8-10'})`
+      : `GIRL (female child, age ${char.ageRange || '8-10'})`;
+    critical.push(
+      `Gender: ${genderDesc}`,
+      ''
+    );
+  }
+
+  // Hair/Hijab (second priority)
   if (char.visualDNA?.hairOrHijab) {
     critical.push(
-      `🔴 HAIR/HIJAB: ${char.visualDNA.hairOrHijab}`,
-      `   [MANDATORY - TOP PRIORITY - DO NOT DEVIATE]`,
-      `   VERIFICATION: Character MUST have exactly this hair/hijab description`,
+      `Hair: ${char.visualDNA.hairOrHijab}`,
       ''
     );
   }
-  
-  // Accessories (second priority - frequently omitted by AI)
-  if (char.visualDNA?.accessories) {
-    critical.push(
-      `🔴 ACCESSORIES: ${char.visualDNA.accessories}`,
-      `   [MUST BE CLEARLY VISIBLE AND MATCH EXACTLY]`,
-      `   VERIFICATION: All accessories must be present and identifiable`,
-      ''
-    );
-  }
-  
-  // Skin tone (third priority)
-  if (char.visualDNA?.skinTone) {
-    critical.push(
-      `🔴 SKIN TONE: ${char.visualDNA.skinTone}`,
-      `   [EXACT MATCH REQUIRED - NO VARIATION]`,
-      ''
-    );
-  }
-  
-  // Outfit (fourth priority)
+
+  // Outfit (third priority)
   if (char.visualDNA?.outfitRules) {
     critical.push(
-      `🔴 OUTFIT: ${char.visualDNA.outfitRules}`,
-      `   [EXACT MATCH REQUIRED - ALL GARMENTS MUST BE PRESENT]`,
+      `Outfit: ${char.visualDNA.outfitRules}`,
       ''
     );
   }
-  
-  // Modesty rules (non-negotiable)
-  if (char.modestyRules?.hijabAlways || char.modestyRules?.longSleeves || char.modestyRules?.looseClothing) {
-    critical.push(`### MODESTY REQUIREMENTS (NON-NEGOTIABLE):`);
-    
-    if (char.modestyRules.hijabAlways) {
-      critical.push(`- HIJAB MANDATORY: Must cover ALL hair completely, no strands visible`);
-    }
-    if (char.modestyRules.longSleeves) {
-      critical.push(`- LONG SLEEVES: Arms covered to wrists, no short sleeves`);
-    }
-    if (char.modestyRules.looseClothing) {
-      critical.push(`- LOOSE FIT: All garments loose-fitting, not form-revealing`);
-    }
-    critical.push('');
+
+  // Accessories (fourth priority - frequently omitted by AI)
+  if (char.visualDNA?.accessories) {
+    critical.push(
+      `Accessories: ${char.visualDNA.accessories}`,
+      ''
+    );
   }
-  
+
+  // Skin tone
+  if (char.visualDNA?.skinTone) {
+    critical.push(
+      `Skin tone: ${char.visualDNA.skinTone}`,
+      ''
+    );
+  }
+
+  // Style
   critical.push(
-    `---`,
-    `**AI VERIFICATION CHECKLIST** - Confirm before generating:`,
-    `- [ ] Hair/Hijab matches exactly: "${char.visualDNA?.hairOrHijab || 'N/A'}"`,
-    `- [ ] Accessories all present: "${char.visualDNA?.accessories || 'none'}"`,
-    `- [ ] Skin tone is: "${char.visualDNA?.skinTone || 'N/A'}"`,
-    `- [ ] Outfit components correct: "${char.visualDNA?.outfitRules || 'N/A'}"`,
+    `Style: ${char.visualDNA?.style || 'pixar-3d'}`,
+    ''
+  );
+
+  // Build NEGATIVE (forbidden) attributes based on gender and modesty
+  const negatives: string[] = [];
+
+  if (char.visualDNA?.gender === "boy") {
+    negatives.push("female", "girl", "dress", "skirt", "long hair");
+    if (char.modestyRules?.hijabAlways) {
+      // Boy with hijab requirement probably means kufi/cap
+      negatives.push("hijab", "headscarf");
+    }
+  } else if (char.visualDNA?.gender === "girl") {
+    negatives.push("male", "boy", "masculine");
+  }
+
+  // Hijab-specific negatives
+  if (char.modestyRules?.hijabAlways) {
+    negatives.push("no hijab", "hair visible", "uncovered hair", "removed headscarf");
+  }
+
+  if (negatives.length > 0) {
+    critical.push(
+      `NEGATIVE (forbidden): ${negatives.join(", ")}`,
+      ''
+    );
+  }
+
+  critical.push(
     `---`,
     ''
   );
-  
+
   return critical.join('\n');
 }
 

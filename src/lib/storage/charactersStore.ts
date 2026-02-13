@@ -46,6 +46,7 @@ export interface CharacterVersion {
 
 export interface VisualDNA {
   style: CharacterStyle;
+  gender: "boy" | "girl"; // Explicit gender to prevent name-based inference
   skinTone: string;
   hairOrHijab: string;
   outfitRules: string;
@@ -380,7 +381,7 @@ OUTPUT SPECIFICATIONS:
  * CRITICAL: This prompt is designed for Replicate's IP-Adapter model which uses
  * the character reference image (passed via references array) to lock identity.
  *
- * Shorter prompts work better with IP-Adapter (FLUX docs recommend 30-80 words).
+ * STRUCTURE: Identity-first, then poses (prevents pose prompt from overpowering reference)
  */
 export function buildPosePackPrompt(
   character: StoredCharacter,
@@ -388,25 +389,79 @@ export function buildPosePackPrompt(
   gridCols: number,
   gridRows: number
 ): string {
-  const { visualDNA, name, ageRange } = character;
+  const { visualDNA, modestyRules, ageRange } = character;
+
+  // Build LOCKED CHARACTER block (identity-first to prevent drift)
+  const lockedCharacter: string[] = [
+    `LOCKED CHARACTER (must not change):`,
+  ];
+
+  // Gender (HIGHEST priority - prevents name-based inference)
+  if (visualDNA.gender) {
+    const genderDesc = visualDNA.gender === "boy"
+      ? `BOY (male child, age ${ageRange || '8-10'})`
+      : `GIRL (female child, age ${ageRange || '8-10'})`;
+    lockedCharacter.push(`Gender: ${genderDesc}`);
+  }
+
+  // Hair/Hijab
+  if (visualDNA.hairOrHijab) {
+    lockedCharacter.push(`Hair: ${visualDNA.hairOrHijab}`);
+  }
+
+  // Outfit
+  if (visualDNA.outfitRules) {
+    lockedCharacter.push(`Outfit: ${visualDNA.outfitRules}`);
+  }
+
+  // Accessories
+  if (visualDNA.accessories) {
+    lockedCharacter.push(`Accessories: ${visualDNA.accessories}`);
+  }
+
+  // Skin tone
+  if (visualDNA.skinTone) {
+    lockedCharacter.push(`Skin tone: ${visualDNA.skinTone}`);
+  }
+
+  // Style
+  lockedCharacter.push(`Style: ${visualDNA.style || 'pixar-3d'}, same face proportions`);
+
+  // Build NEGATIVE (forbidden) attributes
+  const negatives: string[] = [];
+
+  if (visualDNA.gender === "boy") {
+    negatives.push("female", "girl", "dress", "skirt", "long hair");
+    if (!modestyRules?.hijabAlways) {
+      negatives.push("hijab", "headscarf");
+    }
+  } else if (visualDNA.gender === "girl") {
+    negatives.push("male", "boy", "masculine");
+  }
+
+  // Hijab-specific negatives
+  if (modestyRules?.hijabAlways) {
+    negatives.push("no hijab", "hair visible", "uncovered hair");
+  }
+
+  if (negatives.length > 0) {
+    lockedCharacter.push(`NEGATIVE (forbidden): ${negatives.join(", ")}`);
+  }
 
   // Build list of poses based on count
   const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
-  const poseList = poseNames.map((pose, i) => `${i + 1}. ${pose}`).join("\n");
+  const poseList = poseNames.map((pose, i) => `${i + 1}. ${pose}`).join(", ");
 
-  // OPTIMIZED FOR IP-ADAPTER: ONLY describe poses/composition, NOT character appearance
-  // The model uses the subject image for ALL character details
-  return `${gridCols}x${gridRows} pose grid with ${poseCount} different poses:
-${poseList}
+  // IDENTITY-FIRST STRUCTURE: Character identity BEFORE pose instructions
+  return `${lockedCharacter.join("\n")}
+
+${gridCols}x${gridRows} grid with ${poseCount} poses: ${poseList}
 
 Requirements:
-- Same character from reference in all poses
-- ${visualDNA.style} children's book illustration style
+- Same character from reference in ALL poses
 - Clean white background
 - Character centered and same scale in each cell
-- NO text or labels
-
-Single grid image: ${gridCols} columns × ${gridRows} rows`.trim();
+- NO text or labels`.trim();
 }
 
 /**
@@ -1185,6 +1240,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Enthusiastic and questioning",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl" as const,
         skinTone: "Warm olive",
         hairOrHijab: "Pink hijab with floral pattern",
         outfitRules: "Bright orange dress with modest neckline",
@@ -1226,6 +1282,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Direct and sincere",
       visualDNA: {
         style: "pixar-3d",
+        gender: "boy" as const,
         skinTone: "Light brown",
         hairOrHijab: "Short dark hair with striped kufi cap",
         outfitRules: "Blue thobe, comfortable fit",
@@ -1267,6 +1324,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Expressive and colorful",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl" as const,
         skinTone: "Medium brown",
         hairOrHijab: "Purple hijab with artistic patterns",
         outfitRules: "Colorful dress with modest neckline, paint-splattered sleeves",
@@ -1309,6 +1367,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Inquisitive and logical",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl" as const,
         skinTone: "Golden brown",
         hairOrHijab: "Teal hijab with science motifs",
         outfitRules: "White lab coat over modest dress, safety goggles",
@@ -1348,6 +1407,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Gentle and respectful",
       visualDNA: {
         style: "pixar-3d",
+        gender: "boy" as const,
         skinTone: "Medium brown",
         hairOrHijab: "Dark hair with green kufi cap",
         outfitRules: "Green tunic with long sleeves, modest fit",
@@ -1387,6 +1447,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Excited and confident",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl" as const,
         skinTone: "Olive",
         hairOrHijab: "Orange hijab with nature patterns",
         outfitRules: "Hiking outfit with modest long sleeves and pants",
@@ -1426,6 +1487,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Calm and encouraging",
       visualDNA: {
         style: "pixar-3d",
+        gender: "boy" as const,
         skinTone: "Dark brown",
         hairOrHijab: "Dark curly hair with brown cap",
         outfitRules: "Brown apron over long-sleeved shirt, gardening gloves",
@@ -1465,6 +1527,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Warm and narrative, teaches through stories",
       visualDNA: {
         style: "watercolor",
+        gender: "girl" as const,
         skinTone: "Rich brown",
         hairOrHijab: "Elegant burgundy hijab, mature style",
         outfitRules: "Modest traditional dress, professional appearance",
@@ -1504,6 +1567,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Warm and understanding",
       visualDNA: {
         style: "pixar-3d",
+        gender: "girl" as const,
         skinTone: "Light olive",
         hairOrHijab: "Soft pink hijab with gentle patterns",
         outfitRules: "Pastel pink dress with long sleeves",
@@ -1543,6 +1607,7 @@ export function seedDemoCharactersIfEmpty(): void {
       speakingStyle: "Thoughtful and inquisitive",
       visualDNA: {
         style: "pixar-3d",
+        gender: "boy" as const,
         skinTone: "Medium olive",
         hairOrHijab: "Dark hair with navy blue cap",
         outfitRules: "Dark blue thobe with modest cut, scholarly appearance",
