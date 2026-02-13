@@ -40,23 +40,23 @@ if (OPENAI_API_KEY) {
 import { ReplicateProvider } from "../lib/replicateProvider";
 let replicateProvider: ReplicateProvider | null = null;
 
-// Initialize FLUX provider if key is available
-import { FluxProvider } from "../lib/fluxProvider";
-let fluxProvider: FluxProvider | null = null;
+// Initialize BFL FLUX.2 Klein provider if key is available
+import { BFLProvider } from "../lib/bflProvider";
+let bflProvider: BFLProvider | null = null;
 
 console.log("[INIT] IMAGE_PROVIDER:", IMAGE_PROVIDER);
 console.log("[INIT] REPLICATE_API_TOKEN:", REPLICATE_API_TOKEN ? "SET" : "NOT SET");
 console.log("[INIT] BFL_API_KEY:", BFL_API_KEY ? "SET" : "NOT SET");
-console.log("[INIT] OPENAI_API_KEY:", OPENAI_API_KEY ? "SET" : "NOT SET");
+console.log("[INIT] OPENAI_API_KEY (DISABLED):", OPENAI_API_KEY ? "SET BUT NOT USED" : "NOT SET");
 
 if (REPLICATE_API_TOKEN) {
   replicateProvider = new ReplicateProvider(REPLICATE_API_TOKEN);
-  console.log("[INIT] ✅ Replicate provider initialized");
+  console.log("[INIT] ✅ Replicate provider initialized (image+text, character consistency)");
 }
 
 if (BFL_API_KEY) {
-  fluxProvider = new FluxProvider(BFL_API_KEY);
-  console.log("[INIT] ✅ FLUX provider initialized");
+  bflProvider = new BFLProvider(BFL_API_KEY);
+  console.log("[INIT] ✅ BFL FLUX.2 Klein provider initialized (text-to-image)");
 }
 
 // ============================================
@@ -87,15 +87,21 @@ interface ImageRequest {
   references?: string[];
   style?: string;
   size?: { width: number; height: number };
+  width?: number;
+  height?: number;
   count?: number;
   attemptId?: string;
   projectId?: string;
+  traceId?: string; // Frontend-generated or backend-generated trace ID
 
   /** Optional deterministic seed for identity consistency. */
   seed?: number;
 
   /** Optional reference/identity strength (provider-specific). */
   referenceStrength?: number;
+
+  /** Pose pack count (4, 8, or 12). Used for multi-pose generation. */
+  poseCount?: 4 | 8 | 12;
 }
 
 interface ImageResponse {
@@ -619,23 +625,23 @@ router.post("/text", async (req: Request, res: Response) => {
 });
 
 // ============================================
-// OpenAI DALL-E 3 Provider
+// OpenAI DALL-E 3 Provider - DISABLED
 // ============================================
-
+//
+// DALL-E is DISABLED per project requirements.
+// Use BFL FLUX.2 Klein for text-to-image.
+// Use Replicate for image+text (character consistency).
+//
 async function openaiImageGeneration(
   req: ImageRequest,
   retryCount = 0
 ): Promise<ImageResponse> {
-  if (!openaiClient) {
-    throw new Error("OpenAI client not initialized. Check OPENAI_API_KEY.");
-  }
-
-  try {
-    console.log("[DALL-E] Image generation request:", {
-      task: req.task,
-      originalPromptLength: req.prompt.length,
-      style: req.style,
-    });
+  // HARD DISABLE: OpenAI/DALL-E is not allowed in this pipeline
+  throw {
+    status: 400,
+    code: "OPENAI_DISABLED",
+    message: "OpenAI/DALL-E image provider is disabled. Use BFL FLUX.2 Klein (text-to-image) or Replicate (image+text consistency).",
+  };
 
     // Extract key attributes from detailed prompt for simplified narrative
     // DALL-E works better with concise, narrative descriptions (~500 chars)
@@ -771,59 +777,76 @@ async function openaiImageGeneration(
 }
 
 // ============================================
-// FLUX (Black Forest Labs) Provider
+// BFL FLUX.2 Klein 9B Provider (TEXT-TO-IMAGE ONLY)
 // ============================================
-
-async function fluxImageGeneration(
-  req: ImageRequest,
+//
+// IMPORTANT: This provider is for text-to-image ONLY.
+// For image+text (character consistency), use Replicate.
+//
+async function bflImageGeneration(
+  req: ImageRequest & { traceId: string },
   retryCount = 0
 ): Promise<ImageResponse> {
-  if (!fluxProvider) {
-    throw new Error("FLUX provider not initialized. Check BFL_API_KEY.");
+  if (!bflProvider) {
+    throw {
+      status: 400,
+      code: "BFL_NOT_CONFIGURED",
+      message: "BFL FLUX.2 Klein provider not initialized. Check BFL_API_KEY environment variable.",
+    };
   }
 
   try {
-    console.log("[FLUX] Image generation request:", {
-      task: req.task,
-      promptLength: req.prompt.length,
-      style: req.style,
-    });
+    // FLUX.2 optimal prompt length: 30-80 words
+    // Strip out excessive formatting but keep core description
+    const wordCount = req.prompt.split(/\s+/).length;
 
-    // Enhance prompt for Islamic children's book style
-    const enhancedPrompt = `${req.prompt}
+    console.log(JSON.stringify({
+      trace_id: req.traceId,
+      stage: "bfl_request",
+      prompt_word_count: wordCount,
+      width: req.width || 1024,
+      height: req.height || 1024,
+      timestamp: new Date().toISOString()
+    }));
 
-Style: Warm, inviting children's book illustration with Islamic aesthetic.
-Characters wear modest clothing (long sleeves, loose clothing, hijabs for girls/women).
-Diverse Muslim characters with Middle Eastern, South Asian, or African features.
-Family-friendly, wholesome scenes. Soft, gentle colors. High-quality illustrated style.
-
-Important: No text, no words, no letters, no numbers, no signatures, no watermarks.`;
-
-    const result = await fluxProvider.generateImage({
-      prompt: enhancedPrompt,
-      width: req.width,
-      height: req.height,
+    const result = await bflProvider.generateImage({
+      prompt: req.prompt,
+      width: req.width || 1024,
+      height: req.height || 1024,
       seed: req.seed,
-    });
+      safety_tolerance: 2,
+    }, req.traceId);
 
     return {
       imageUrl: result.imageUrl,
-      provider: "flux",
+      provider: "bfl",
       providerMeta: {
         seed: result.seed,
-        model: "flux-pro-1.1",
+        model: "flux-2-klein-9b",
         processingTime: result.processingTimeMs,
+        jobId: result.jobId,
       },
     };
   } catch (error) {
     const err = error as Error;
-    console.error(`FLUX API error (attempt ${retryCount + 1}):`, err.message);
+    console.error(JSON.stringify({
+      trace_id: req.traceId,
+      error: "bfl_generation_failed",
+      message: err.message,
+      attempt: retryCount + 1,
+      timestamp: new Date().toISOString()
+    }));
 
     if (retryCount < MAX_RETRIES) {
       const delay = Math.pow(2, retryCount) * 1000;
-      console.log(`Retrying FLUX image generation in ${delay}ms...`);
+      console.log(JSON.stringify({
+        trace_id: req.traceId,
+        action: "retry",
+        delay_ms: delay,
+        timestamp: new Date().toISOString()
+      }));
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return fluxImageGeneration(req, retryCount + 1);
+      return bflImageGeneration(req, retryCount + 1);
     }
 
     throw err;
@@ -1179,23 +1202,27 @@ function buildStyleEnhancedPrompt(basePrompt: string, style: string): string {
 // ============================================
 
 async function replicateImageGeneration(
-  req: ImageRequest,
+  req: ImageRequest & { traceId: string },
   retryCount = 0
 ): Promise<ImageResponse> {
   if (!replicateProvider) {
-    throw new Error("Replicate provider not initialized. Check REPLICATE_API_TOKEN.");
+    throw {
+      status: 400,
+      code: "REPLICATE_NOT_CONFIGURED",
+      message: "Replicate provider not initialized. Check REPLICATE_API_TOKEN environment variable.",
+    };
   }
 
   try {
-    if (env.NODE_ENV === "development") {
-      console.log("Replicate character-consistent generation:", {
-        task: req.task,
-        promptLength: req.prompt.length,
-        hasReferences: (req.references?.length || 0) > 0,
-        style: req.style || "pixar-3d",
-        seed: req.seed,
-      });
-    }
+    console.log(JSON.stringify({
+      trace_id: req.traceId,
+      stage: "replicate_request",
+      has_references: (req.references?.length || 0) > 0,
+      reference_count: req.references?.length || 0,
+      prompt_length: req.prompt.length,
+      style: req.style || "pixar-3d",
+      timestamp: new Date().toISOString()
+    }));
 
     // Default sizes based on task type
     const defaultSize = req.task === "cover"
@@ -1290,6 +1317,10 @@ router.post("/image", async (req: Request, res: Response) => {
     const limit = stage === "cover" ? IMAGE_LIMITS.cover : IMAGE_LIMITS.illustrations;
     const count = body.count || 1;
 
+    // Generate or use provided trace_id for observability
+    const traceId = body.traceId || `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const bodyWithTrace = { ...body, traceId };
+
     if (count > limit) {
       return res.status(400).json({
         error: {
@@ -1309,53 +1340,72 @@ router.post("/image", async (req: Request, res: Response) => {
       return;
     }
 
-    const hasReferences = body.references && body.references.length > 0;
+    // Determine routing based on references
+    const hasReferences = Array.isArray(body.references) && body.references.length > 0;
 
-    console.log("[BACKEND] Image generation request received:", {
-      provider: IMAGE_PROVIDER,
-      replicateAvailable: !!replicateProvider,
-      openaiAvailable: !!openaiClient,
-      prompt: body.prompt.substring(0, 100) + "...",
-      stage: body.stage,
-      references: body.references?.length || 0,
-      hasReferences
-    });
+    console.log(JSON.stringify({
+      trace_id: traceId,
+      stage: "routing",
+      has_references: hasReferences,
+      reference_count: body.references?.length || 0,
+      prompt_length: body.prompt.length,
+      bfl_available: !!bflProvider,
+      replicate_available: !!replicateProvider,
+      timestamp: new Date().toISOString()
+    }));
 
     let response: ImageResponse;
 
-    // SMART ROUTING LOGIC:
-    // - Initial character generation (no references) → Use FLUX or DALL-E
-    // - Poses/illustrations (has references) → Use Replicate for character consistency
+    // ============================================
+    // DETERMINISTIC ROUTING (NO SILENT FALLBACK)
+    // ============================================
+    //
+    // Rule 1: If hasReferences → ALWAYS Replicate (character consistency)
+    // Rule 2: Else (text-only) → ALWAYS BFL FLUX.2 Klein 9B
+    // Rule 3: If required provider not configured → FAIL with 400 (actionable message)
+    //
+    if (hasReferences) {
+      // IMAGE+TEXT → REPLICATE (character consistency)
+      if (!replicateProvider) {
+        return res.status(400).json({
+          error: {
+            code: "REPLICATE_NOT_CONFIGURED",
+            message: "Image generation with references requires Replicate provider. Please configure REPLICATE_API_TOKEN environment variable.",
+            actionable: "Contact admin to set REPLICATE_API_TOKEN in Railway deployment.",
+          },
+        });
+      }
 
-    if (hasReferences && IMAGE_PROVIDER === "replicate" && replicateProvider) {
-      // Use Replicate for character consistency when we have reference images
-      console.log("[BACKEND] Using Replicate provider (character consistency mode)");
-      response = await replicateImageGeneration(body);
-    } else if (!hasReferences && openaiClient) {
-      // Use DALL-E for initial character generation (FLUX has connectivity issues)
-      console.log("[BACKEND] Using OpenAI DALL-E (initial character generation)");
-      response = await openaiImageGeneration(body);
-    } else if (!hasReferences && fluxProvider) {
-      // Fallback to FLUX if DALL-E unavailable
-      console.log("[BACKEND] Using FLUX (initial character generation)");
-      response = await fluxImageGeneration(body);
-    } else if (IMAGE_PROVIDER === "openai" && openaiClient) {
-      // Fallback to OpenAI if explicitly configured
-      console.log("[BACKEND] Using OpenAI provider");
-      response = await openaiImageGeneration(body);
-    } else if (IMAGE_PROVIDER === "flux" && fluxProvider) {
-      // Fallback to FLUX if explicitly configured
-      console.log("[BACKEND] Using FLUX provider");
-      response = await fluxImageGeneration(body);
-    } else if (IMAGE_PROVIDER === "nanobanana") {
-      console.log("[BACKEND] Using NanoBanana provider");
-      response = await nanobananaImageGeneration(body);
-    } else if (IMAGE_PROVIDER === "google") {
-      console.log("[BACKEND] Using Google provider");
-      response = await googleImageGeneration(body);
+      console.log(JSON.stringify({
+        trace_id: traceId,
+        stage: "provider_selected",
+        provider: "replicate",
+        reason: "has_references",
+        timestamp: new Date().toISOString()
+      }));
+
+      response = await replicateImageGeneration(bodyWithTrace);
     } else {
-      console.log("[BACKEND] Using Mock provider (fallback)");
-      response = await mockImageGeneration(body);
+      // TEXT-ONLY → BFL FLUX.2 KLEIN 9B
+      if (!bflProvider) {
+        return res.status(400).json({
+          error: {
+            code: "BFL_NOT_CONFIGURED",
+            message: "Text-to-image generation requires BFL FLUX.2 Klein provider. Please configure BFL_API_KEY environment variable.",
+            actionable: "Contact admin to set BFL_API_KEY in Railway deployment.",
+          },
+        });
+      }
+
+      console.log(JSON.stringify({
+        trace_id: traceId,
+        stage: "provider_selected",
+        provider: "bfl",
+        reason: "text_only",
+        timestamp: new Date().toISOString()
+      }));
+
+      response = await bflImageGeneration(bodyWithTrace);
     }
 
     console.log("[BACKEND] Image generation completed:", {

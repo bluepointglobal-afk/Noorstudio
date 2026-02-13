@@ -347,6 +347,12 @@ app.use(express.json({ limit: "1mb" }));
 // Apply rate limiting to specific routes
 app.use(rateLimitMiddleware);
 
+// Serve stored images (BFL downloads, etc.)
+// TODO: Replace with cloud storage (S3/GCS/Cloudinary) for production
+const IMAGE_STORAGE_DIR = process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
+app.use("/stored-images", express.static(IMAGE_STORAGE_DIR));
+console.log(`[INIT] Serving stored images from: ${IMAGE_STORAGE_DIR}`);
+
 // ============================================
 // Routes
 // ============================================

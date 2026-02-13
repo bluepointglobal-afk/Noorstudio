@@ -374,6 +374,47 @@ OUTPUT SPECIFICATIONS:
  * This generates all 12 poses in a SINGLE grid image, referencing the approved character.
  * ENHANCED with strict identity lock to prevent character drift across poses.
  */
+/**
+ * Build prompt for POSE PACK generation (optimized for Replicate character consistency)
+ *
+ * CRITICAL: This prompt is designed for Replicate's IP-Adapter model which uses
+ * the character reference image (passed via references array) to lock identity.
+ *
+ * Shorter prompts work better with IP-Adapter (FLUX docs recommend 30-80 words).
+ */
+export function buildPosePackPrompt(
+  character: StoredCharacter,
+  poseCount: number,
+  gridCols: number,
+  gridRows: number
+): string {
+  const { visualDNA, name, ageRange } = character;
+
+  // Build list of poses based on count
+  const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+  const poseList = poseNames.map((pose, i) => `${i + 1}. ${pose}`).join("\n");
+
+  // OPTIMIZED FOR IP-ADAPTER: Keep prompt concise, let reference image handle identity
+  return `Character pose pack for ${name} (${ageRange} years old).
+
+${gridCols}x${gridRows} grid layout with ${poseCount} distinct poses:
+${poseList}
+
+CRITICAL REQUIREMENTS:
+- EXACT same character in all ${poseCount} poses
+- Match reference image PRECISELY (face, skin tone ${visualDNA.skinTone}, outfit, proportions)
+- ${visualDNA.style} children's book illustration style
+- Clean white background for each pose
+- Character centered and same scale in every grid cell
+- NO text, labels, or numbers
+
+Grid format: ${gridCols} columns × ${gridRows} rows, single output image.`.trim();
+}
+
+/**
+ * LEGACY: Build detailed prompt for 12-pose sheet (kept for backwards compatibility)
+ * NOTE: This is overly verbose for IP-Adapter. Use buildPosePackPrompt instead.
+ */
 export function buildPoseSheetPrompt(character: StoredCharacter): string {
   const { visualDNA, modestyRules, name, role, ageRange, traits, colorPalette } = character;
 
@@ -682,12 +723,23 @@ export function approveCharacterDesign(characterId: string): StoredCharacter | n
 }
 
 /**
- * Generate pose sheet for an APPROVED character using AI image generation.
- * This is a SINGLE API call that generates all 12 poses in a grid image.
- * The character's approved image is used as reference for consistency.
+ * Generate POSE PACK for an APPROVED character using AI image generation.
+ *
+ * IMPORTANT DESIGN DECISION:
+ * - Default: 2x2 grid (4 poses) at high resolution for better identity fidelity
+ * - Optional: 8 or 12 poses, but MORE POSES = HIGHER DRIFT unless resolution is very large
+ * - Single API call to Replicate (uses character reference image for consistency)
+ *
+ * This is a SINGLE API call that generates all poses in a grid image.
+ * The character's approved anchor image is used as reference for identity lock.
+ *
+ * @param characterId - Character to generate pose pack for
+ * @param poseCount - Number of poses (4, 8, or 12). Default: 4 (recommended)
+ * @param onProgress - Progress callback
  */
 export async function generatePoseSheet(
   characterId: string,
+  poseCount: 4 | 8 | 12 = 4,
   onProgress?: (status: string) => void
 ): Promise<StoredCharacter | null> {
   const character = getCharacter(characterId);
@@ -695,30 +747,60 @@ export async function generatePoseSheet(
 
   // Ensure character is approved before generating poses
   if (character.status !== "approved" && !character.imageUrl) {
-    throw new Error("Character must have an approved image before generating pose sheet.");
+    throw new Error("Character must have an approved anchor image before generating pose pack.");
   }
 
-  onProgress?.("Generating 12-pose sheet...");
+  onProgress?.(`Generating ${poseCount}-pose pack...`);
 
   try {
-    // SINGLE API CALL for the entire pose sheet (12 poses in a grid)
+    // Determine grid dimensions and resolution based on pose count
+    let gridCols: number, gridRows: number, width: number, height: number;
+
+    if (poseCount === 4) {
+      // 2x2 grid - HIGH RESOLUTION for best identity fidelity
+      gridCols = 2;
+      gridRows = 2;
+      width = 2048;   // 1024px per pose
+      height = 2048;  // Square grid
+    } else if (poseCount === 8) {
+      // 4x2 grid - WARNING: More poses = higher drift risk
+      gridCols = 4;
+      gridRows = 2;
+      width = 3072;   // 768px per pose
+      height = 1536;
+      console.warn(`[POSE_PACK] 8 poses selected. Higher drift risk vs 4 poses. Consider 4 poses for better consistency.`);
+    } else {
+      // 4x3 grid (12 poses) - WARNING: Highest drift risk
+      gridCols = 4;
+      gridRows = 3;
+      width = 3072;   // 768px per pose
+      height = 2304;
+      console.warn(`[POSE_PACK] 12 poses selected. HIGHEST drift risk. Strongly recommend 4 poses for character consistency.`);
+    }
+
+    // SINGLE API CALL for the entire pose pack grid
+    // This will route to Replicate (because references array is provided)
     const request: ImageGenerationRequest = {
-      prompt: buildPoseSheetPrompt(character),
+      prompt: buildPosePackPrompt(character, poseCount, gridCols, gridRows),
       references: character.imageUrl ? [character.imageUrl] : undefined,
+      characterReference: character.imageUrl, // Primary reference for IP-Adapter
       style: character.visualDNA.style || "pixar-3d",
-      width: 2048,  // 4 columns
-      height: 1536, // 3 rows (4:3 aspect for 4x3 grid)
+      width,
+      height,
       stage: "illustrations",
+      poseCount, // Pass to backend for metadata
     };
 
     const response = await generateImage(request);
 
-    onProgress?.("Pose sheet complete!");
+    onProgress?.(`Pose pack complete!`);
 
     const now = new Date().toISOString();
 
     // Create pose entries (all from the same grid image)
-    const updatedPoses: CharacterPose[] = DEFAULT_POSE_NAMES.map((name, idx) => ({
+    // NOTE: Only create entries for the number of poses we actually generated
+    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+    const updatedPoses: CharacterPose[] = poseNames.map((name, idx) => ({
       id: idx + 1,
       name,
       status: "draft" as AssetStatus,
@@ -737,10 +819,11 @@ export async function generatePoseSheet(
       poses: updatedPoses,
       poseSheetGenerated: true,
       poseSheetUrl: response.imageUrl,
+      poseCount, // Store pose count for later reference
     });
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.error("Failed to generate pose sheet:", error);
+      console.error("Failed to generate pose pack:", error);
     }
     throw error;
   }
