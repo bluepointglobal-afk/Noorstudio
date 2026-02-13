@@ -94,16 +94,34 @@ export class ReplicateProvider {
       } else if (typeof output === 'object' && output !== null) {
         // Handle object response (some models return {output: [...]} or {image: "..."})
         const outputObj = output as Record<string, any>;
+
+        console.log(`[Replicate] Attempting to extract URL from object:`, JSON.stringify(outputObj).substring(0, 500));
+
+        // Try various known output formats
         if (outputObj.output && Array.isArray(outputObj.output) && outputObj.output.length > 0) {
           imageUrl = outputObj.output[0];
         } else if (outputObj.image && typeof outputObj.image === 'string') {
           imageUrl = outputObj.image;
+        } else if (outputObj.images && Array.isArray(outputObj.images) && outputObj.images.length > 0) {
+          imageUrl = outputObj.images[0];
+        } else if (outputObj.url && typeof outputObj.url === 'string') {
+          imageUrl = outputObj.url;
         } else if (outputObj[0] && typeof outputObj[0] === 'string') {
           // Sometimes it's an object that looks like an array
           imageUrl = outputObj[0];
         } else {
-          console.error(`[Replicate] Unexpected object structure:`, JSON.stringify(output));
-          throw new Error(`Unexpected output format from Replicate: object without recognized image field`);
+          // Check if any field contains a URL-like string
+          const urlFields = Object.entries(outputObj).find(([key, value]) =>
+            typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))
+          );
+          if (urlFields) {
+            console.log(`[Replicate] Found URL in field: ${urlFields[0]}`);
+            imageUrl = urlFields[1] as string;
+          } else {
+            console.error(`[Replicate] Unexpected object structure - no URL found:`, JSON.stringify(output));
+            console.error(`[Replicate] Object keys:`, Object.keys(outputObj));
+            throw new Error(`Unexpected output format from Replicate: object without recognized image field. Keys: ${Object.keys(outputObj).join(', ')}`);
+          }
         }
       } else {
         throw new Error(`Unexpected output format from Replicate: ${typeof output}`);
