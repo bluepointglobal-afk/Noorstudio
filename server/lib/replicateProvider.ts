@@ -39,8 +39,8 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // UPDATED: Use FLUX 2 Pro for better grid generation and character consistency
-    this.model = model || "black-forest-labs/flux-2-pro";
+    // Using fofr/consistent-character - proven to work with IP-Adapter
+    this.model = model || "fofr/consistent-character";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -55,33 +55,26 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for FLUX 2 Pro
-      // FLUX 2 Pro uses different parameter names than consistent-character
+      // Build input for fofr/consistent-character
       const input: Record<string, unknown> = {
         prompt: request.prompt,
+        negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
+        number_of_outputs: request.numOutputs || 1,
         output_format: "webp",
         output_quality: 95,
-        aspect_ratio: `${request.width || 1024}:${request.height || 1024}`, // FLUX uses aspect ratio
-        num_outputs: request.numOutputs || 1,
+        randomise_poses: false,
       };
 
-      // Add character reference if provided (FLUX 2 Pro supports up to 8 references)
+      // Add character reference if provided (IP-Adapter)
       if (request.subjectImageUrl) {
-        input.image = request.subjectImageUrl; // FLUX 2 Pro uses 'image' parameter
+        input.subject = request.subjectImageUrl;
 
-        // FLUX 2 Pro uses guidance for reference strength
+        // Add prompt strength for reference adherence
         if (request.referenceStrength !== undefined) {
-          input.guidance = request.referenceStrength * 10; // Convert 0-1 to 0-10 scale
-          console.log(`[Replicate] Using guidance: ${input.guidance}`);
+          input.prompt_strength = request.referenceStrength;
         } else {
-          input.guidance = 9.5; // Very high guidance for strict consistency
+          input.prompt_strength = 0.95; // Very high for strict consistency
         }
-      }
-
-      // Add negative prompt if provided
-      if (request.negativePrompt) {
-        // FLUX 2 Pro handles negative prompts in the main prompt with [negative] tags
-        input.prompt = `${request.prompt}\n\nNEGATIVE: ${request.negativePrompt}`;
       }
 
       // Add seed for reproducibility
