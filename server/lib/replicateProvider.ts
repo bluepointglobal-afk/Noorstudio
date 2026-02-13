@@ -39,8 +39,9 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Using fofr/consistent-character - proven to work with IP-Adapter
-    this.model = model || "fofr/consistent-character";
+    // Using fofr/face-to-many - specifically designed for character reference sheets
+    // Generates multiple consistent poses in a grid from a single reference image
+    this.model = model || "fofr/face-to-many";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -55,26 +56,22 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for fofr/consistent-character
+      // Build input for fofr/face-to-many (character reference sheet generator)
       const input: Record<string, unknown> = {
         prompt: request.prompt,
         negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
-        number_of_outputs: request.numOutputs || 1,
+        num_outputs: request.numOutputs || 4, // Default to 4 poses for grid
         output_format: "webp",
         output_quality: 95,
-        randomise_poses: false,
       };
 
-      // Add character reference if provided (IP-Adapter)
+      // Add character reference if provided
       if (request.subjectImageUrl) {
-        input.subject = request.subjectImageUrl;
+        input.image = request.subjectImageUrl;
 
-        // Add prompt strength for reference adherence
-        if (request.referenceStrength !== undefined) {
-          input.prompt_strength = request.referenceStrength;
-        } else {
-          input.prompt_strength = 0.95; // Very high for strict consistency
-        }
+        // Face-to-many uses 'style' parameter instead of prompt_strength
+        // Default to maintaining character identity
+        input.style = "digital illustration, children's book character";
       }
 
       // Add seed for reproducibility
@@ -273,9 +270,15 @@ export class ReplicateProvider {
       // Character consistency issues
       "different face", "changed appearance", "wrong skin tone", "inconsistent character",
       "missing hijab", "different hair color", "wrong clothing", "character variation",
+      // Anatomy errors (CRITICAL - prevents 3 hands, etc.)
+      "extra hands", "three hands", "multiple hands", "extra arms", "third arm",
+      "extra fingers", "six fingers", "deformed hands", "malformed hands",
+      "extra limbs", "missing limbs", "extra legs", "third leg",
+      "bad anatomy", "incorrect anatomy", "anatomically incorrect",
+      "distorted proportions", "wrong proportions", "deformed body",
       // Quality issues
-      "blurry", "distorted", "low quality", "artifacts", "bad anatomy", "deformed",
-      "ugly", "mutated", "disfigured", "extra limbs", "missing limbs",
+      "blurry", "distorted", "low quality", "artifacts", "jpeg artifacts",
+      "ugly", "mutated", "disfigured", "deformed face",
       // Content issues
       "scary", "violent", "inappropriate", "revealing clothing", "tight clothing",
       "adult content", "weapons", "blood",
