@@ -2,6 +2,11 @@
 // Uses IP-Adapter models for maintaining character appearance across scenes
 
 import Replicate from "replicate";
+import * as fs from "fs/promises";
+import * as path from "path";
+import { createWriteStream } from "fs";
+import { Readable } from "stream";
+import { finished } from "stream/promises";
 
 export interface ReplicateImageRequest {
   prompt: string;
@@ -32,11 +37,13 @@ export interface ReplicateImageResponse {
 export class ReplicateProvider {
   private client: Replicate;
   private model: string;
+  private storageDir: string;
 
-  constructor(apiToken: string, model?: string) {
+  constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
     // Default to the consistent-character model (specific version for stability)
     this.model = model || "fofr/consistent-character:9c77a3c2f884193fcee4d89645f02a0b9def9434f9e03cb98460456b831c8772";
+    this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
   /**
@@ -85,10 +92,24 @@ export class ReplicateProvider {
 
       const processingTimeMs = Date.now() - startTime;
 
-      // Extract image URL from output (Replicate can return array, string, or object)
+      // Extract image from output (Replicate can return streams, URLs, or various object formats)
       let imageUrl: string;
+
+      // Check if output is an array with a ReadableStream (newer Replicate SDK behavior)
       if (Array.isArray(output) && output.length > 0) {
-        imageUrl = output[0] as string;
+        const firstElement = output[0];
+
+        // Check if it's a ReadableStream (has getReader method)
+        if (firstElement && typeof firstElement === 'object' && 'getReader' in firstElement) {
+          console.log(`[Replicate] Detected ReadableStream output, downloading...`);
+          imageUrl = await this.downloadStreamAndStore(firstElement as ReadableStream, processingTimeMs);
+        } else if (typeof firstElement === 'string') {
+          // It's already a URL string
+          imageUrl = firstElement;
+        } else {
+          console.error(`[Replicate] Unexpected array element type:`, typeof firstElement);
+          throw new Error(`Unexpected array element type: ${typeof firstElement}`);
+        }
       } else if (typeof output === 'string') {
         imageUrl = output;
       } else if (typeof output === 'object' && output !== null) {
@@ -128,6 +149,7 @@ export class ReplicateProvider {
       }
 
       console.log(`[Replicate] Generation successful in ${processingTimeMs}ms`);
+      console.log(`[Replicate] Final imageUrl:`, imageUrl);
 
       return {
         imageUrl,
@@ -181,6 +203,59 @@ export class ReplicateProvider {
     }
 
     return results;
+  }
+
+  /**
+   * Download a ReadableStream from Replicate and store it locally
+   * Returns the public /stored-images/ URL
+   */
+  private async downloadStreamAndStore(
+    stream: ReadableStream,
+    processingTimeMs: number
+  ): Promise<string> {
+    try {
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substring(2, 10);
+      const filename = `replicate-${timestamp}-${randomSuffix}.webp`;
+      const storagePath = path.join(this.storageDir, filename);
+
+      console.log(`[Replicate] Downloading stream to: ${storagePath}`);
+
+      // Ensure storage directory exists
+      await fs.mkdir(this.storageDir, { recursive: true });
+
+      // Create write stream
+      const fileStream = createWriteStream(storagePath);
+
+      // Convert ReadableStream to Node.js Readable
+      const reader = stream.getReader();
+      const nodeStream = new Readable({
+        async read() {
+          const { done, value } = await reader.read();
+          if (done) {
+            this.push(null);
+          } else {
+            this.push(Buffer.from(value));
+          }
+        },
+      });
+
+      // Pipe to file
+      nodeStream.pipe(fileStream);
+      await finished(fileStream);
+
+      const fileStats = await fs.stat(storagePath);
+      console.log(`[Replicate] Download complete: ${fileStats.size} bytes in ${processingTimeMs}ms`);
+
+      // Return public URL
+      const publicUrl = `/stored-images/${filename}`;
+      return publicUrl;
+    } catch (error) {
+      const err = error as Error;
+      console.error(`[Replicate] Stream download failed:`, err.message);
+      throw new Error(`Failed to download Replicate stream: ${err.message}`);
+    }
   }
 
   /**
