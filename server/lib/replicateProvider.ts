@@ -81,15 +81,30 @@ export class ReplicateProvider {
       console.log(`[Replicate] Calling Replicate API...`);
       const output = await this.client.run(this.model, { input });
       console.log(`[Replicate] API call succeeded, output type: ${typeof output}`);
+      console.log(`[Replicate] Raw output:`, JSON.stringify(output));
 
       const processingTimeMs = Date.now() - startTime;
 
-      // Extract image URL from output (Replicate returns an array)
+      // Extract image URL from output (Replicate can return array, string, or object)
       let imageUrl: string;
       if (Array.isArray(output) && output.length > 0) {
         imageUrl = output[0] as string;
       } else if (typeof output === 'string') {
         imageUrl = output;
+      } else if (typeof output === 'object' && output !== null) {
+        // Handle object response (some models return {output: [...]} or {image: "..."})
+        const outputObj = output as Record<string, any>;
+        if (outputObj.output && Array.isArray(outputObj.output) && outputObj.output.length > 0) {
+          imageUrl = outputObj.output[0];
+        } else if (outputObj.image && typeof outputObj.image === 'string') {
+          imageUrl = outputObj.image;
+        } else if (outputObj[0] && typeof outputObj[0] === 'string') {
+          // Sometimes it's an object that looks like an array
+          imageUrl = outputObj[0];
+        } else {
+          console.error(`[Replicate] Unexpected object structure:`, JSON.stringify(output));
+          throw new Error(`Unexpected output format from Replicate: object without recognized image field`);
+        }
       } else {
         throw new Error(`Unexpected output format from Replicate: ${typeof output}`);
       }
