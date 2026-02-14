@@ -306,10 +306,10 @@ export default function CharacterDetailPage() {
     const result = consumeCredits({
       type: "character",
       amount: POSE_SHEET_COST,
-      reason: `Generate 4-pose sheet for ${character.name}`,
+      reason: `Generate 12-pose sheet for ${character.name}`,
       entityType: "character",
       entityId: character.id,
-      meta: { poseCount: 4 },
+      meta: { poseCount: 12 },
     });
 
     if (!result.success) {
@@ -320,13 +320,13 @@ export default function CharacterDetailPage() {
     }
 
     try {
-      const updated = await generatePoseSheet(character.id, 4);
+      const updated = await generatePoseSheet(character.id, 12);
       if (updated) {
         setCharacter(updated);
         setCredits(getBalances());
         toast({
           title: "Pose sheet generated",
-          description: `4 poses created. ${POSE_SHEET_COST} credits used.`,
+          description: `12 poses created in single grid. ${POSE_SHEET_COST} credits used.`,
         });
       }
     } catch (error) {
@@ -694,7 +694,7 @@ export default function CharacterDetailPage() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No Pose Sheet Yet</h3>
                   <p className="text-muted-foreground mb-4 max-w-md mx-auto">
-                    Generate a 4-pose sheet to create consistent character illustrations.
+                    Generate a 12-pose grid (single image) to create consistent character illustrations.
                   </p>
                   <Button variant="hero" onClick={() => setShowGeneratePoses(true)} disabled={isGenerating}>
                     <Sparkles className="w-4 h-4 mr-2" />
@@ -732,7 +732,7 @@ export default function CharacterDetailPage() {
                         <Badge variant="outline">Single Image</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">
-                        This pose sheet contains all 4 character poses in a single grid image.
+                        This pose sheet contains all 12 character poses in a single grid image.
                         It is used as a reference for generating consistent illustrations.
                       </p>
 
@@ -837,7 +837,7 @@ export default function CharacterDetailPage() {
         open={showRegenerateAll}
         onOpenChange={setShowRegenerateAll}
         title="Regenerate All Poses"
-        description={`This will regenerate all 4 poses and create a new version (v${character.version + 1}). Any approved poses will need to be re-approved.`}
+        description={`This will regenerate all 12 poses in a single grid and create a new version (v${character.version + 1}). Any approved poses will need to be re-approved.`}
         creditCost={REGENERATE_ALL_COST}
         creditType="character"
         onConfirm={handleRegenerateAll}
@@ -859,7 +859,7 @@ export default function CharacterDetailPage() {
         open={showGeneratePoses}
         onOpenChange={setShowGeneratePoses}
         title="Generate Pose Sheet"
-        description={`Generate a 4-pose character sheet for ${character.name}.`}
+        description={`Generate a 12-pose grid (single image) for ${character.name}.`}
         creditCost={POSE_SHEET_COST}
         creditType="character"
         onConfirm={handleGeneratePoseSheet}

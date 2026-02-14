@@ -301,7 +301,7 @@ const steps = [
   { id: 1, title: "Persona", icon: User, description: "Name, role, traits" },
   { id: 2, title: "Visual DNA", icon: Palette, description: "Appearance & modesty" },
   { id: 3, title: "Character", icon: Sparkles, description: "Generate & refine" },
-  { id: 4, title: "Pose Sheet", icon: Sparkles, description: "Generate 4 poses" },
+  { id: 4, title: "Pose Sheet", icon: Sparkles, description: "Generate 12 poses" },
 ];
 
 const traitOptions = [
@@ -315,7 +315,7 @@ const CHARACTER_GENERATION_COST = 2;     // Initial character generation
 const TARGETED_FIX_COST = 0.5;           // Fix specific attribute (hair, accessories, etc.)
 const GUIDED_REGENERATION_COST = 1;      // Guided full regeneration
 const FULL_REGENERATION_COST = 2;        // Complete regeneration
-const POSE_SHEET_COST = 3;               // 4-pose sheet (single API call)
+const POSE_SHEET_COST = 3;               // 12-pose grid (single API call)
 
 export default function CharacterCreatePage() {
   const navigate = useNavigate();
@@ -927,10 +927,10 @@ Style requirements:
     const result = consumeCredits({
       type: "character",
       amount: POSE_SHEET_COST,
-      reason: `Generate 4-pose sheet for ${createdCharacter.name}`,
+      reason: `Generate 12-pose sheet for ${createdCharacter.name}`,
       entityType: "character",
       entityId: createdCharacter.id,
-      meta: { poseCount: 4 },
+      meta: { poseCount: 12 },
     });
 
     if (!result.success) {
@@ -945,8 +945,8 @@ Style requirements:
     }
 
     try {
-      // Generate the pose sheet using AI (SINGLE API CALL for all 4 poses)
-      const updatedCharacter = await generatePoseSheet(createdCharacter.id, 4, (status) => {
+      // Generate the pose sheet using AI (SINGLE API CALL for all 12 poses)
+      const updatedCharacter = await generatePoseSheet(createdCharacter.id, 12, (status) => {
         console.log("Pose sheet generation:", status);
       });
 
@@ -956,7 +956,7 @@ Style requirements:
 
       toast({
         title: "Pose sheet created!",
-        description: `${createdCharacter.name} now has a 4-pose sheet. ${POSE_SHEET_COST} credits used.`,
+        description: `${createdCharacter.name} now has a 12-pose grid (single image). ${POSE_SHEET_COST} credits used.`,
       });
 
       navigate(`/app/characters/${createdCharacter.id}`);
@@ -1791,7 +1791,7 @@ Style requirements:
               </div>
               <div>
                 <h2 className="text-xl font-semibold">Generate Pose Sheet</h2>
-                <p className="text-muted-foreground">Create 4 poses in one generation</p>
+                <p className="text-muted-foreground">Create 12 poses in single grid image</p>
               </div>
             </div>
 
@@ -1823,7 +1823,7 @@ Style requirements:
             <div className="space-y-3">
               <h3 className="font-medium">12 Poses to Generate (Single API Call)</h3>
               <p className="text-sm text-muted-foreground">
-                All 4 poses will be generated in a single image grid, ensuring perfect character consistency.
+                All 12 poses will be generated in a single image grid, ensuring perfect character consistency.
               </p>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {DEFAULT_POSE_NAMES.map((pose, idx) => (
@@ -1843,7 +1843,7 @@ Style requirements:
                 <div>
                   <p className="font-medium text-gold-800">Pose Sheet Cost</p>
                   <p className="text-sm text-gold-600">
-                    {POSE_SHEET_COST} character credits (4 poses)
+                    {POSE_SHEET_COST} character credits (12 poses in 1 grid)
                   </p>
                 </div>
                 <div className="text-right">
@@ -1928,7 +1928,7 @@ Style requirements:
         open={showGenerateModal}
         onOpenChange={setShowGenerateModal}
         title="Generate Pose Sheet"
-        description={`This will create ${formData.name}'s 4-pose character sheet.`}
+        description={`This will create ${formData.name}'s 12-pose grid in a single image.`}
         creditCost={POSE_SHEET_COST}
         creditType="character"
         onConfirm={confirmGeneratePoses}
