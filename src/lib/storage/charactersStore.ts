@@ -972,10 +972,11 @@ export async function generatePoseSheet(
       height = 2304;
     }
 
-    // Use EXACT prompt format that worked in user's AI Studio test
-    // Simple and direct - let Gemini figure out the grid layout
+    // EXPLICIT prompt listing all 12 poses to force Gemini to generate them all
     const artStyle = character.visualDNA.style || "pixar-3d";
-    const simplePrompt = `${poseCount}-pose character sheet, different expressions, dynamic actions, full body, white background, ${artStyle}, orthographic view, clean lines`;
+    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
+    const poseList = poseNames.map((name, i) => `${i + 1}. ${name}`).join(", ");
+    const simplePrompt = `Character reference sheet with exactly ${poseCount} different poses arranged in a ${gridCols}x${gridRows} grid. Poses: ${poseList}. Style: ${artStyle}, full body visible, clean white background, orthographic view, clean lines, consistent character design across all ${poseCount} poses`;
 
     // SINGLE API CALL using img2img (like Gemini)
     const request: ImageGenerationRequest = {
