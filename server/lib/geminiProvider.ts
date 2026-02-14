@@ -1,6 +1,6 @@
-// Google Gemini/Imagen Provider for Image Generation
-// Supports both text-to-image and image-to-image (img2img)
-// Best for multi-pose character sheets
+// Google Gemini 2.0 Provider for Image Generation
+// Uses Gemini's multimodal image generation (same as AI Studio chat)
+// Perfect for multi-pose character sheets with img2img
 
 import { uploadToCloudinary } from "./cloudinaryUpload";
 
@@ -10,7 +10,6 @@ export interface GeminiImageRequest {
   width?: number;
   height?: number;
   seed?: number;
-  negativePrompt?: string;
 }
 
 export interface GeminiImageResponse {
@@ -20,14 +19,15 @@ export interface GeminiImageResponse {
 }
 
 /**
- * Gemini/Imagen Provider for Image Generation
+ * Gemini 2.0 Provider for Image Generation
  *
- * Uses Google's Imagen 3 API for high-quality image generation
- * with excellent multi-pose character sheet capabilities.
+ * Uses Gemini's multimodal generateContent API with image output.
+ * Same method as Google AI Studio chat interface.
  */
 export class GeminiProvider {
   private apiKey: string;
   private apiUrl = "https://generativelanguage.googleapis.com/v1beta";
+  private model = "gemini-2.0-flash-exp"; // Supports image generation
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -35,6 +35,7 @@ export class GeminiProvider {
 
   /**
    * Generate an image with optional reference image for img2img
+   * Uses same approach as AI Studio: upload image + text prompt → generate grid
    */
   async generateImage(
     request: GeminiImageRequest,
@@ -44,18 +45,43 @@ export class GeminiProvider {
     try {
       const startTime = Date.now();
 
-      console.log(`[Gemini] Generating image...`);
+      console.log(`[Gemini] Generating image with ${this.model}...`);
       console.log(`[Gemini] Has reference: ${request.referenceImageUrl ? 'Yes' : 'No'}`);
 
-      // Build request based on whether we have a reference image
-      const payload = request.referenceImageUrl
-        ? await this.buildImg2ImgRequest(request)
-        : this.buildText2ImgRequest(request);
+      // Build multimodal request (image + text → image output)
+      const parts = [];
 
-      console.log(`[Gemini] Calling API...`);
+      // Add reference image if provided (for img2img like AI Studio)
+      if (request.referenceImageUrl) {
+        const imageData = await this.fetchImageAsBase64(request.referenceImageUrl);
+        parts.push({
+          inline_data: {
+            mime_type: "image/jpeg",
+            data: imageData,
+          },
+        });
+      }
 
-      // Call Gemini Image Generation API (using generateImages endpoint)
-      const endpoint = `${this.apiUrl}/models/imagen-3.0-generate-001:predict?key=${this.apiKey}`;
+      // Add text prompt
+      parts.push({
+        text: request.prompt,
+      });
+
+      const payload = {
+        contents: [{
+          parts,
+        }],
+        generationConfig: {
+          temperature: 1.0,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 8192,
+        },
+      };
+
+      console.log(`[Gemini] Calling generateContent API...`);
+
+      const endpoint = `${this.apiUrl}/models/${this.model}:generateContent?key=${this.apiKey}`;
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -75,19 +101,23 @@ export class GeminiProvider {
       console.log(`[Gemini] Response received`);
 
       // Extract image from response
-      const imageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
-      if (!imageBase64) {
-        console.error(`[Gemini] No image in response:`, JSON.stringify(data));
-        throw new Error("No image data in Gemini response");
+      // Gemini returns images as inline_data in parts
+      const imagePart = data.candidates?.[0]?.content?.parts?.find(
+        (part: any) => part.inline_data?.mime_type?.startsWith('image/')
+      );
+
+      if (!imagePart?.inline_data?.data) {
+        console.error(`[Gemini] No image in response:`, JSON.stringify(data, null, 2));
+        throw new Error("No image data in Gemini response - check if model supports image output");
       }
 
       // Convert base64 to buffer and upload to Cloudinary
-      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const imageBuffer = Buffer.from(imagePart.inline_data.data, 'base64');
       const timestamp = Date.now();
       const randomSuffix = Math.random().toString(36).substring(2, 10);
       const filename = `gemini-${timestamp}-${randomSuffix}`;
 
-      console.log(`[Gemini] Uploading to Cloudinary...`);
+      console.log(`[Gemini] Uploading to Cloudinary (${imageBuffer.length} bytes)...`);
       const cloudinaryUrl = await uploadToCloudinary(imageBuffer, {
         folder: 'noorstudio/pose-packs',
         filename,
@@ -120,85 +150,23 @@ export class GeminiProvider {
   }
 
   /**
-   * Build text-to-image request payload
+   * Fetch image from URL and convert to base64
    */
-  private buildText2ImgRequest(request: GeminiImageRequest): any {
-    return {
-      instances: [
-        {
-          prompt: request.prompt,
-        },
-      ],
-      parameters: {
-        sampleCount: 1,
-        aspectRatio: this.getAspectRatio(request.width, request.height),
-        negativePrompt: request.negativePrompt || this.getDefaultNegativePrompt(),
-        seed: request.seed,
-      },
-    };
-  }
-
-  /**
-   * Build image-to-image request payload
-   */
-  private async buildImg2ImgRequest(request: GeminiImageRequest): Promise<any> {
-    // Fetch and convert reference image to base64
-    let imageBase64 = "";
-    if (request.referenceImageUrl) {
-      try {
-        const imageResponse = await fetch(request.referenceImageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        imageBase64 = Buffer.from(imageBuffer).toString('base64');
-      } catch (error) {
-        console.error(`[Gemini] Failed to fetch reference image:`, error);
-        throw new Error(`Failed to fetch reference image: ${error}`);
+  private async fetchImageAsBase64(imageUrl: string): Promise<string> {
+    try {
+      console.log(`[Gemini] Fetching reference image: ${imageUrl.substring(0, 50)}...`);
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
       }
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      console.log(`[Gemini] Reference image loaded: ${base64.length} chars`);
+      return base64;
+    } catch (error) {
+      console.error(`[Gemini] Failed to fetch reference image:`, error);
+      throw new Error(`Failed to fetch reference image: ${error}`);
     }
-
-    return {
-      instances: [
-        {
-          prompt: request.prompt,
-          image: {
-            bytesBase64Encoded: imageBase64,
-          },
-        },
-      ],
-      parameters: {
-        sampleCount: 1,
-        mode: "image-to-image",
-        negativePrompt: request.negativePrompt || this.getDefaultNegativePrompt(),
-        seed: request.seed,
-      },
-    };
-  }
-
-  /**
-   * Get aspect ratio string from dimensions
-   */
-  private getAspectRatio(width?: number, height?: number): string {
-    if (!width || !height) return "1:1";
-
-    const ratio = width / height;
-    if (Math.abs(ratio - 1) < 0.1) return "1:1";
-    if (Math.abs(ratio - 16/9) < 0.1) return "16:9";
-    if (Math.abs(ratio - 9/16) < 0.1) return "9:16";
-    if (Math.abs(ratio - 4/3) < 0.1) return "4:3";
-    if (Math.abs(ratio - 3/4) < 0.1) return "3:4";
-
-    return "1:1"; // Default
-  }
-
-  /**
-   * Default negative prompt for Islamic children's book illustrations
-   */
-  private getDefaultNegativePrompt(): string {
-    return [
-      "text", "words", "letters", "watermark",
-      "low quality", "blurry", "distorted",
-      "scary", "violent", "inappropriate",
-      "revealing clothing", "tight clothing",
-    ].join(", ");
   }
 
   /**
@@ -207,7 +175,7 @@ export class GeminiProvider {
   getProviderInfo(): { provider: string; model: string } {
     return {
       provider: 'gemini',
-      model: 'imagen-3.0',
+      model: this.model,
     };
   }
 }
