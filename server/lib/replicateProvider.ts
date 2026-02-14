@@ -40,9 +40,9 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Using fofr/consistent-character - proven model for character consistency
-    // Generates multiple poses (separate images) which we stitch into a grid
-    this.model = model || "fofr/consistent-character";
+    // Using fofr/consistent-character with latest version hash
+    // Version: 6d07be93 - generates multiple poses (separate images) which we stitch into a grid
+    this.model = model || "fofr/consistent-character:6d07be932f1a1dcab88b599a25863a98e50768597ab4ed3b6c099ef0f707dc05";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
