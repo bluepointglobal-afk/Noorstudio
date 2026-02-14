@@ -273,9 +273,8 @@ export default function CharacterDetailPage() {
 
     try {
       // Use generatePoseSheet instead of regenerateAllPoses for single API call
-      // Default to 12 poses for "Regenerate All" action
-      const poseCount = (character as any).poseCount || 12;
-      const updated = await generatePoseSheet(character.id, poseCount as 4 | 8 | 12);
+      // Always use 12 poses for "Regenerate All" action (ignore old stored value)
+      const updated = await generatePoseSheet(character.id, 12);
       if (updated) {
         setCharacter(updated);
         setCredits(getBalances());

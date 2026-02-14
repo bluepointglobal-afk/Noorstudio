@@ -938,7 +938,7 @@ export function approveCharacterDesign(characterId: string): StoredCharacter | n
  */
 export async function generatePoseSheet(
   characterId: string,
-  poseCount: 4 | 8 | 12 = 4,
+  poseCount: 4 | 8 | 12 = 12,
   onProgress?: (status: string) => void
 ): Promise<StoredCharacter | null> {
   const character = getCharacter(characterId);
