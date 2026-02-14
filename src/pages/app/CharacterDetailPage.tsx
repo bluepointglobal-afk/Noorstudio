@@ -663,7 +663,7 @@ export default function CharacterDetailPage() {
                 <div>
                   <h3 className="font-semibold">12-Pose Grid</h3>
                   <p className="text-sm text-muted-foreground">
-                    {approvedCount}/4 poses approved {approvedCount >= 4 ? "• Ready to lock" : "• Need all 4 to lock"}
+                    {approvedCount}/12 poses approved {approvedCount >= 10 ? "• Ready to lock" : "• Need 10+ to lock"}
                   </p>
                 </div>
                 {character.poseSheetGenerated ? (
@@ -790,7 +790,7 @@ export default function CharacterDetailPage() {
                     <div className="flex-1">
                       <p className="font-medium">Current Version</p>
                       <p className="text-sm text-muted-foreground">
-                        {approvedCount}/4 poses • {character.status}
+                        {approvedCount}/12 poses • {character.status}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Updated: {new Date(character.updatedAt).toLocaleDateString()}
