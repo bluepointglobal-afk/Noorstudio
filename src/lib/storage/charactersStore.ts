@@ -972,11 +972,12 @@ export async function generatePoseSheet(
       height = 2304;
     }
 
-    // EXPLICIT prompt listing all 12 poses to force Gemini to generate them all
+    // EXPLICIT prompt for 12 poses WITHOUT text labels
     const artStyle = character.visualDNA.style || "pixar-3d";
     const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
-    const poseList = poseNames.map((name, i) => `${i + 1}. ${name}`).join(", ");
-    const simplePrompt = `Character reference sheet with exactly ${poseCount} different poses arranged in a ${gridCols}x${gridRows} grid. Poses: ${poseList}. Style: ${artStyle}, full body visible, clean white background, orthographic view, clean lines, consistent character design across all ${poseCount} poses`;
+    // List poses WITHOUT numbers to avoid text generation
+    const poseList = poseNames.join(", ");
+    const simplePrompt = `Character reference sheet showing ${poseCount} different poses (${poseList}) in a ${gridCols}×${gridRows} grid. Style: ${artStyle}. Full body visible in each pose. SOLID WHITE BACKGROUND (not transparent). NO TEXT, NO LABELS, NO NUMBERS on the image. Clean orthographic view. Professional character design reference with consistent appearance across all ${poseCount} poses.`;
 
     // SINGLE API CALL using img2img (like Gemini)
     const request: ImageGenerationRequest = {
