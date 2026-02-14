@@ -40,9 +40,8 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Default model: FLUX Redux Dev (image variation model)
-    // Simpler, proven model specifically designed for image-to-image variations
-    this.model = model || "black-forest-labs/flux-redux-dev";
+    // Use proven FLUX 1.1 Pro - stable, works with image input
+    this.model = model || "black-forest-labs/flux-1.1-pro";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -57,28 +56,19 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for FLUX Redux Dev (simple image variation)
+      // Simple FLUX input - same method as anchor image but with image input
       const input: Record<string, unknown> = {
         prompt: request.prompt,
         output_format: "webp",
         output_quality: 90,
       };
 
-      // Add input image (FLUX Redux uses 'image' parameter)
+      // Add image input if provided (for img2img)
       if (request.subjectImageUrl) {
         input.image = request.subjectImageUrl;
-
-        // Guidance scale for FLUX Redux
-        input.guidance = 2.5;
-
-        // Number of inference steps
-        input.steps = 28;
-
-        // Megapixels (controls output size, default 1)
-        input.megapixels = 1;
       }
 
-      // Add seed for reproducibility
+      // Add seed if provided
       if (request.seed !== undefined) {
         input.seed = request.seed;
       }
