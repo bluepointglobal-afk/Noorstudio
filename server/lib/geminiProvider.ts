@@ -27,7 +27,7 @@ export interface GeminiImageResponse {
 export class GeminiProvider {
   private apiKey: string;
   private apiUrl = "https://generativelanguage.googleapis.com/v1beta";
-  private model = "gemini-2.0-flash-exp"; // Supports image generation
+  private model = "gemini-2.5-flash-image"; // Image generation model
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
