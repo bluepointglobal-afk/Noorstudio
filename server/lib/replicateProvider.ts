@@ -40,9 +40,9 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Default model for pose sheet generation: FLUX 2 Dev (supports reference images)
-    // Official Black Forest Labs model with img2img support
-    this.model = model || "black-forest-labs/flux-2-dev";
+    // Default model: FLUX Redux Dev (image variation model)
+    // Simpler, proven model specifically designed for image-to-image variations
+    this.model = model || "black-forest-labs/flux-redux-dev";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -57,23 +57,25 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for FLUX 2 Dev (img2img with reference images)
+      // Build input for FLUX Redux Dev (simple image variation)
       const input: Record<string, unknown> = {
         prompt: request.prompt,
         output_format: "webp",
         output_quality: 90,
-        aspect_ratio: "1:1", // For character sheets
       };
 
-      // Add input image for img2img (character reference)
+      // Add input image (FLUX Redux uses 'image' parameter)
       if (request.subjectImageUrl) {
-        input.input_image = request.subjectImageUrl; // FLUX 2 Dev uses input_image parameter
+        input.image = request.subjectImageUrl;
 
-        // Guidance scale: how closely to follow the prompt (FLUX 2 default: 3.5)
-        input.guidance_scale = 3.5;
+        // Guidance scale for FLUX Redux
+        input.guidance = 2.5;
 
-        // Inference steps: quality vs speed
-        input.num_inference_steps = 28;
+        // Number of inference steps
+        input.steps = 28;
+
+        // Megapixels (controls output size, default 1)
+        input.megapixels = 1;
       }
 
       // Add seed for reproducibility
