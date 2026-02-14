@@ -68,11 +68,6 @@ export class GeminiProvider {
         text: request.prompt,
       });
 
-      // Calculate aspect ratio from requested dimensions
-      const aspectRatio = request.width && request.height
-        ? `${request.width}:${request.height}`
-        : "1:1";
-
       const payload = {
         contents: [{
           parts,
@@ -83,10 +78,11 @@ export class GeminiProvider {
           topP: 0.95,
           maxOutputTokens: 8192,
           responseModalities: ["image"],
-          // Try to influence output size via aspect ratio
-          aspectRatio,
         },
       };
+
+      // Log what we're sending
+      console.log(`[Gemini] Payload:`, JSON.stringify(payload, null, 2));
 
       console.log(`[Gemini] Calling generateContent API...`);
 
