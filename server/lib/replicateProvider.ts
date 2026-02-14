@@ -4,6 +4,7 @@
 import Replicate from "replicate";
 import * as fs from "fs/promises";
 import * as path from "path";
+import sharp from "sharp";
 import { uploadToCloudinary } from "./cloudinaryUpload";
 
 export interface ReplicateImageRequest {
@@ -39,9 +40,9 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Using fofr/face-to-many - specifically designed for character reference sheets
-    // Generates multiple consistent poses in a grid from a single reference image
-    this.model = model || "fofr/face-to-many";
+    // Using fofr/consistent-character - proven model for character consistency
+    // Generates multiple poses (separate images) which we stitch into a grid
+    this.model = model || "fofr/consistent-character";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -56,22 +57,26 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for fofr/face-to-many (character reference sheet generator)
+      // Build input for fofr/consistent-character
       const input: Record<string, unknown> = {
         prompt: request.prompt,
         negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
-        num_outputs: request.numOutputs || 4, // Default to 4 poses for grid
+        number_of_outputs: request.numOutputs || 4, // Generate 4 poses for 2×2 grid
         output_format: "webp",
         output_quality: 95,
+        randomise_poses: true, // Get varied poses
       };
 
-      // Add character reference if provided
+      // Add character reference if provided (IP-Adapter)
       if (request.subjectImageUrl) {
-        input.image = request.subjectImageUrl;
+        input.subject = request.subjectImageUrl;
 
-        // Face-to-many uses 'style' parameter instead of prompt_strength
-        // Default to maintaining character identity
-        input.style = "digital illustration, children's book character";
+        // Prompt strength for reference adherence
+        if (request.referenceStrength !== undefined) {
+          input.prompt_strength = request.referenceStrength;
+        } else {
+          input.prompt_strength = 0.95; // Very high for strict consistency
+        }
       }
 
       // Add seed for reproducibility
@@ -91,67 +96,83 @@ export class ReplicateProvider {
 
       const processingTimeMs = Date.now() - startTime;
 
-      // Extract image from output (Replicate can return streams, URLs, or various object formats)
-      let imageUrl: string;
+      // Extract image URLs from output
+      let imageUrls: string[] = [];
 
-      // Check if output is an array with a ReadableStream (newer Replicate SDK behavior)
-      if (Array.isArray(output) && output.length > 0) {
-        const firstElement = output[0];
+      // Handle array output (most common for number_of_outputs > 1)
+      if (Array.isArray(output)) {
+        console.log(`[Replicate] Output is array with ${output.length} elements`);
 
-        // Check if it's a ReadableStream (has getReader method)
-        if (firstElement && typeof firstElement === 'object' && 'getReader' in firstElement) {
-          console.log(`[Replicate] Detected ReadableStream output, downloading...`);
-          imageUrl = await this.downloadStreamAndStore(firstElement as ReadableStream, processingTimeMs);
-        } else if (typeof firstElement === 'string') {
-          // It's already a URL string
-          imageUrl = firstElement;
-        } else {
-          console.error(`[Replicate] Unexpected array element type:`, typeof firstElement);
-          throw new Error(`Unexpected array element type: ${typeof firstElement}`);
-        }
-      } else if (typeof output === 'string') {
-        imageUrl = output;
-      } else if (typeof output === 'object' && output !== null) {
-        // Handle object response (some models return {output: [...]} or {image: "..."})
-        const outputObj = output as Record<string, any>;
-
-        console.log(`[Replicate] Attempting to extract URL from object:`, JSON.stringify(outputObj).substring(0, 500));
-
-        // Try various known output formats
-        if (outputObj.output && Array.isArray(outputObj.output) && outputObj.output.length > 0) {
-          imageUrl = outputObj.output[0];
-        } else if (outputObj.image && typeof outputObj.image === 'string') {
-          imageUrl = outputObj.image;
-        } else if (outputObj.images && Array.isArray(outputObj.images) && outputObj.images.length > 0) {
-          imageUrl = outputObj.images[0];
-        } else if (outputObj.url && typeof outputObj.url === 'string') {
-          imageUrl = outputObj.url;
-        } else if (outputObj[0] && typeof outputObj[0] === 'string') {
-          // Sometimes it's an object that looks like an array
-          imageUrl = outputObj[0];
-        } else {
-          // Check if any field contains a URL-like string
-          const urlFields = Object.entries(outputObj).find(([key, value]) =>
-            typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))
-          );
-          if (urlFields) {
-            console.log(`[Replicate] Found URL in field: ${urlFields[0]}`);
-            imageUrl = urlFields[1] as string;
-          } else {
-            console.error(`[Replicate] Unexpected object structure - no URL found:`, JSON.stringify(output));
-            console.error(`[Replicate] Object keys:`, Object.keys(outputObj));
-            throw new Error(`Unexpected output format from Replicate: object without recognized image field. Keys: ${Object.keys(outputObj).join(', ')}`);
+        for (const element of output) {
+          if (element && typeof element === 'object' && 'getReader' in element) {
+            // ReadableStream - download and store
+            const url = await this.downloadStreamAndStore(element as ReadableStream, processingTimeMs);
+            imageUrls.push(url);
+          } else if (typeof element === 'string') {
+            // URL string
+            imageUrls.push(element);
           }
         }
+      } else if (typeof output === 'string') {
+        // Single URL string
+        imageUrls.push(output);
+      } else if (typeof output === 'object' && output !== null) {
+        // Object response
+        const outputObj = output as Record<string, any>;
+        console.log(`[Replicate] Object output, keys:`, Object.keys(outputObj));
+
+        if (outputObj.output && Array.isArray(outputObj.output)) {
+          imageUrls = outputObj.output.filter((url: any) => typeof url === 'string');
+        } else if (outputObj.images && Array.isArray(outputObj.images)) {
+          imageUrls = outputObj.images.filter((url: any) => typeof url === 'string');
+        } else if (outputObj.image && typeof outputObj.image === 'string') {
+          imageUrls.push(outputObj.image);
+        } else if (outputObj.url && typeof outputObj.url === 'string') {
+          imageUrls.push(outputObj.url);
+        }
+      }
+
+      if (imageUrls.length === 0) {
+        console.error(`[Replicate] No image URLs extracted from output:`, JSON.stringify(output));
+        throw new Error('No image URLs found in Replicate output');
+      }
+
+      console.log(`[Replicate] Extracted ${imageUrls.length} image URLs`);
+
+      // If multiple images requested, stitch into grid
+      let finalImageUrl: string;
+      const numOutputs = request.numOutputs || 1;
+
+      if (numOutputs > 1 && imageUrls.length > 1) {
+        console.log(`[Replicate] Multiple outputs (${imageUrls.length}) - stitching into grid...`);
+
+        // Determine grid dimensions based on count
+        let cols = 2, rows = 2;
+        if (imageUrls.length === 8) {
+          cols = 3; rows = 3;
+        } else if (imageUrls.length === 12) {
+          cols = 3; rows = 4;
+        }
+
+        // Trim to expected count if needed
+        const expectedCount = cols * rows;
+        if (imageUrls.length > expectedCount) {
+          console.log(`[Replicate] Trimming ${imageUrls.length} images to ${expectedCount} for ${cols}×${rows} grid`);
+          imageUrls = imageUrls.slice(0, expectedCount);
+        }
+
+        finalImageUrl = await this.stitchImagesIntoGrid(imageUrls, cols, rows);
+        console.log(`[Replicate] Grid stitched successfully: ${finalImageUrl}`);
       } else {
-        throw new Error(`Unexpected output format from Replicate: ${typeof output}`);
+        // Single image
+        finalImageUrl = imageUrls[0];
+        console.log(`[Replicate] Single image: ${finalImageUrl}`);
       }
 
       console.log(`[Replicate] Generation successful in ${processingTimeMs}ms`);
-      console.log(`[Replicate] Final imageUrl:`, imageUrl);
 
       return {
-        imageUrl,
+        imageUrl: finalImageUrl,
         seed: request.seed,
         model: this.model,
         processingTimeMs,
@@ -257,6 +278,109 @@ export class ReplicateProvider {
       console.error(`[Replicate] Stream download/upload failed:`, err.message);
       console.error(`[Replicate] Error stack:`, err.stack);
       throw new Error(`Failed to download/upload Replicate stream: ${err.message}`);
+    }
+  }
+
+  /**
+   * Stitch multiple images into a grid layout
+   * Downloads images, creates a grid, uploads to Cloudinary
+   *
+   * @param imageUrls - Array of image URLs to stitch (must be 4, 8, or 12)
+   * @param cols - Number of columns (2 or 3)
+   * @param rows - Number of rows (2, 3, or 4)
+   * @returns Cloudinary URL of the stitched grid
+   */
+  async stitchImagesIntoGrid(
+    imageUrls: string[],
+    cols: number = 2,
+    rows: number = 2
+  ): Promise<string> {
+    try {
+      const expectedCount = cols * rows;
+      if (imageUrls.length !== expectedCount) {
+        throw new Error(`Expected ${expectedCount} images for ${cols}×${rows} grid, got ${imageUrls.length}`);
+      }
+
+      console.log(`[Replicate] Stitching ${imageUrls.length} images into ${cols}×${rows} grid...`);
+
+      // Download all images as buffers
+      const imageBuffers: Buffer[] = [];
+      for (const url of imageUrls) {
+        console.log(`[Replicate] Downloading image: ${url.substring(0, 80)}...`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to download image from ${url}: ${response.statusText}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        imageBuffers.push(Buffer.from(arrayBuffer));
+      }
+
+      // Get dimensions of first image (assume all same size)
+      const firstImage = sharp(imageBuffers[0]);
+      const metadata = await firstImage.metadata();
+      const imgWidth = metadata.width || 512;
+      const imgHeight = metadata.height || 512;
+
+      console.log(`[Replicate] Individual image size: ${imgWidth}×${imgHeight}`);
+
+      // Calculate grid dimensions
+      const gridWidth = imgWidth * cols;
+      const gridHeight = imgHeight * rows;
+      const padding = 10; // White padding between images
+
+      console.log(`[Replicate] Creating grid canvas: ${gridWidth + (padding * (cols + 1))}×${gridHeight + (padding * (rows + 1))}`);
+
+      // Create composite array for Sharp
+      const composites: any[] = [];
+      for (let i = 0; i < imageUrls.length; i++) {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const x = (col * imgWidth) + (padding * (col + 1));
+        const y = (row * imgHeight) + (padding * (row + 1));
+
+        composites.push({
+          input: imageBuffers[i],
+          top: y,
+          left: x,
+        });
+      }
+
+      // Create white background and composite all images
+      const gridBuffer = await sharp({
+        create: {
+          width: gridWidth + (padding * (cols + 1)),
+          height: gridHeight + (padding * (rows + 1)),
+          channels: 3,
+          background: { r: 255, g: 255, b: 255 },
+        },
+      })
+        .composite(composites)
+        .webp({ quality: 95 })
+        .toBuffer();
+
+      console.log(`[Replicate] Grid created: ${gridBuffer.length} bytes`);
+
+      // Upload to Cloudinary
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substring(2, 10);
+      const filename = `pose-grid-${timestamp}-${randomSuffix}`;
+
+      console.log(`[Replicate] Uploading grid to Cloudinary as: ${filename}`);
+
+      const cloudinaryUrl = await uploadToCloudinary(gridBuffer, {
+        folder: 'noorstudio/pose-packs',
+        filename,
+        format: 'webp',
+      });
+
+      console.log(`[Replicate] Grid upload complete: ${cloudinaryUrl}`);
+
+      return cloudinaryUrl;
+    } catch (error) {
+      const err = error as Error;
+      console.error(`[Replicate] Grid stitching failed:`, err.message);
+      console.error(`[Replicate] Error stack:`, err.stack);
+      throw new Error(`Failed to stitch images into grid: ${err.message}`);
     }
   }
 
