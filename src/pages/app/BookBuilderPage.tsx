@@ -184,6 +184,54 @@ export default function BookBuilderPage() {
     }
   }, [hasRestoredAutosave, toast]);
 
+  // Refresh characters when page becomes visible or localStorage changes
+  useEffect(() => {
+    const refreshCharacters = () => {
+      const freshCharacters = getCharacters();
+      setCharacters(freshCharacters);
+      console.log('[BookBuilder] Refreshed characters:', freshCharacters.length, 'characters');
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshCharacters();
+      }
+    };
+
+    const handleFocus = () => {
+      refreshCharacters();
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      // Refresh when character storage changes
+      if (e.key && e.key.includes('characters')) {
+        console.log('[BookBuilder] Characters storage changed, refreshing...');
+        refreshCharacters();
+      }
+    };
+
+    // Refresh on visibility change (tab switching)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Refresh on window focus (navigation within app)
+    window.addEventListener('focus', handleFocus);
+    // Refresh on localStorage changes (character creation/updates)
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also refresh every 2 seconds while page is active (polling fallback)
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        refreshCharacters();
+      }
+    }, 2000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(pollInterval);
+    };
+  }, []);
+
   // Autosave whenever form data or step changes
   useEffect(() => {
     // Don't save empty forms
