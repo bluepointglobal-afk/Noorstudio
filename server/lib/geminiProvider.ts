@@ -47,6 +47,7 @@ export class GeminiProvider {
 
       console.log(`[Gemini] Generating image with ${this.model}...`);
       console.log(`[Gemini] Has reference: ${request.referenceImageUrl ? 'Yes' : 'No'}`);
+      console.log(`[Gemini] Requested dimensions: ${request.width}×${request.height}`);
 
       // Build multimodal request (image + text → image output)
       const parts = [];
@@ -67,6 +68,11 @@ export class GeminiProvider {
         text: request.prompt,
       });
 
+      // Calculate aspect ratio from requested dimensions
+      const aspectRatio = request.width && request.height
+        ? `${request.width}:${request.height}`
+        : "1:1";
+
       const payload = {
         contents: [{
           parts,
@@ -76,6 +82,9 @@ export class GeminiProvider {
           topK: 40,
           topP: 0.95,
           maxOutputTokens: 8192,
+          responseModalities: ["image"],
+          // Try to influence output size via aspect ratio
+          aspectRatio,
         },
       };
 
