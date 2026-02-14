@@ -101,18 +101,18 @@ export class GeminiProvider {
       console.log(`[Gemini] Response received`);
 
       // Extract image from response
-      // Gemini returns images as inline_data in parts
+      // Gemini returns images as inlineData (camelCase) in parts
       const imagePart = data.candidates?.[0]?.content?.parts?.find(
-        (part: any) => part.inline_data?.mime_type?.startsWith('image/')
+        (part: any) => part.inlineData?.mimeType?.startsWith('image/')
       );
 
-      if (!imagePart?.inline_data?.data) {
+      if (!imagePart?.inlineData?.data) {
         console.error(`[Gemini] No image in response:`, JSON.stringify(data, null, 2));
         throw new Error("No image data in Gemini response - check if model supports image output");
       }
 
       // Convert base64 to buffer and upload to Cloudinary
-      const imageBuffer = Buffer.from(imagePart.inline_data.data, 'base64');
+      const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
       const timestamp = Date.now();
       const randomSuffix = Math.random().toString(36).substring(2, 10);
       const filename = `gemini-${timestamp}-${randomSuffix}`;
