@@ -972,10 +972,10 @@ export async function generatePoseSheet(
       height = 2304;
     }
 
-    // Build SIMPLE prompt (like user's Gemini approach)
-    // Format: "X-pose character sheet, different expressions, dynamic actions, full body, white background, [Style], orthographic view, clean lines"
+    // Build EXPLICIT prompt for Gemini grid generation
+    // Must specify grid layout to ensure correct number of poses
     const artStyle = character.visualDNA.style || "pixar-3d";
-    const simplePrompt = `${poseCount}-pose character sheet, different expressions and dynamic actions, full body visible, clean white background, ${artStyle} illustration style, orthographic view, professional character reference sheet, clean lines, consistent character design`;
+    const simplePrompt = `${poseCount}-pose character sheet in ${gridCols}x${gridRows} grid layout, different expressions and dynamic actions, full body visible, clean white background, ${artStyle} illustration style, orthographic view, professional character reference sheet, clean lines, consistent character design, exactly ${poseCount} different poses arranged in ${gridCols} columns and ${gridRows} rows`;
 
     // SINGLE API CALL using img2img (like Gemini)
     const request: ImageGenerationRequest = {
