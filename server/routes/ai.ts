@@ -677,12 +677,16 @@ async function bflImageGeneration(
       timestamp: new Date().toISOString()
     }));
 
+    // Get first reference image if provided (for img2img testing)
+    const imageRef = req.references?.[0];
+
     const result = await bflProvider.generateImage({
       prompt: req.prompt,
       width: req.width || 1024,
       height: req.height || 1024,
       seed: req.seed,
       safety_tolerance: 2,
+      image: imageRef, // Pass image for img2img if available
     }, req.traceId);
 
     return {
@@ -1234,56 +1238,32 @@ router.post("/image", async (req: Request, res: Response) => {
     let response: ImageResponse;
 
     // ============================================
-    // DETERMINISTIC ROUTING (NO SILENT FALLBACK)
+    // TESTING: Use BFL for both text-only and img2img
     // ============================================
     //
-    // Rule 1: If hasReferences → ALWAYS Replicate (character consistency)
-    // Rule 2: Else (text-only) → ALWAYS BFL FLUX.2 Klein 9B
-    // Rule 3: If required provider not configured → FAIL with 400 (actionable message)
+    // Rule: ALWAYS try BFL FLUX first (testing img2img support)
+    // If BFL doesn't support image input, it will fail and we'll know
     //
-    if (hasReferences) {
-      // IMAGE+TEXT → REPLICATE (character consistency)
-      if (!replicateProvider) {
-        return res.status(400).json({
-          error: {
-            code: "REPLICATE_NOT_CONFIGURED",
-            message: "Image generation with references requires Replicate provider. Please configure REPLICATE_API_TOKEN environment variable.",
-            actionable: "Contact admin to set REPLICATE_API_TOKEN in Railway deployment.",
-          },
-        });
-      }
-
-      console.log(JSON.stringify({
-        trace_id: traceId,
-        stage: "provider_selected",
-        provider: "replicate",
-        reason: "has_references",
-        timestamp: new Date().toISOString()
-      }));
-
-      response = await replicateImageGeneration(bodyWithTrace);
-    } else {
-      // TEXT-ONLY → BFL FLUX.2 KLEIN 9B
-      if (!bflProvider) {
-        return res.status(400).json({
-          error: {
-            code: "BFL_NOT_CONFIGURED",
-            message: "Text-to-image generation requires BFL FLUX.2 Klein provider. Please configure BFL_API_KEY environment variable.",
-            actionable: "Contact admin to set BFL_API_KEY in Railway deployment.",
-          },
-        });
-      }
-
-      console.log(JSON.stringify({
-        trace_id: traceId,
-        stage: "provider_selected",
-        provider: "bfl",
-        reason: "text_only",
-        timestamp: new Date().toISOString()
-      }));
-
-      response = await bflImageGeneration(bodyWithTrace);
+    if (!bflProvider) {
+      return res.status(400).json({
+        error: {
+          code: "BFL_NOT_CONFIGURED",
+          message: "Image generation requires BFL FLUX.2 Klein provider. Please configure BFL_API_KEY environment variable.",
+          actionable: "Contact admin to set BFL_API_KEY in Railway deployment.",
+        },
+      });
     }
+
+    console.log(JSON.stringify({
+      trace_id: traceId,
+      stage: "provider_selected",
+      provider: "bfl",
+      reason: hasReferences ? "testing_img2img" : "text_only",
+      has_image_input: hasReferences,
+      timestamp: new Date().toISOString()
+    }));
+
+    response = await bflImageGeneration(bodyWithTrace);
 
     console.log("[BACKEND] Image generation completed:", {
       provider: response.provider,

@@ -13,8 +13,7 @@ export interface BFLImageRequest {
   height?: number;
   seed?: number;
   safety_tolerance?: number;
-  // Note: FLUX.2 Klein 9B does NOT support input_image
-  // For image-based generation, use Replicate instead
+  image?: string; // Testing: Try image input for img2img
 }
 
 export interface BFLImageResponse {
@@ -91,19 +90,27 @@ export class BFLProvider {
       }
 
       // Step 1: Submit generation request
+      const requestBody: Record<string, any> = {
+        prompt: request.prompt,
+        width: request.width || 1024,
+        height: request.height || 1024,
+        seed: request.seed,
+        safety_tolerance: request.safety_tolerance ?? 2,
+      };
+
+      // Try adding image if provided (testing img2img support)
+      if (request.image) {
+        requestBody.image = request.image;
+        console.log(`[BFL] Testing img2img with image: ${request.image.substring(0, 50)}...`);
+      }
+
       const submitResponse = await fetch(`${this.apiUrl}/flux-2-klein-9b`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-key": this.apiKey,
         },
-        body: JSON.stringify({
-          prompt: request.prompt,
-          width: request.width || 1024,
-          height: request.height || 1024,
-          seed: request.seed,
-          safety_tolerance: request.safety_tolerance ?? 2,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!submitResponse.ok) {
