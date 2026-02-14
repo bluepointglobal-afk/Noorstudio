@@ -40,8 +40,8 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Use proven FLUX 1.1 Pro - stable, works with image input
-    this.model = model || "black-forest-labs/flux-1.1-pro";
+    // Use Stability AI SDXL for proven img2img support
+    this.model = model || "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -56,16 +56,15 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Simple FLUX input - same method as anchor image but with image input
+      // SDXL img2img input - simple like BFL but with image support
       const input: Record<string, unknown> = {
         prompt: request.prompt,
-        output_format: "webp",
-        output_quality: 90,
       };
 
-      // Add image input if provided (for img2img)
+      // Add image input if provided (for img2img - generates pose grid in single image)
       if (request.subjectImageUrl) {
         input.image = request.subjectImageUrl;
+        input.prompt_strength = request.referenceStrength || 0.8;
       }
 
       // Add seed if provided
