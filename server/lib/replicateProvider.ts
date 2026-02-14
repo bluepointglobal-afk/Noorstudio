@@ -40,9 +40,9 @@ export class ReplicateProvider {
 
   constructor(apiToken: string, model?: string, storageDir?: string) {
     this.client = new Replicate({ auth: apiToken });
-    // Using fofr/consistent-character with latest version hash
-    // Version: 6d07be93 - generates multiple poses (separate images) which we stitch into a grid
-    this.model = model || "fofr/consistent-character:6d07be932f1a1dcab88b599a25863a98e50768597ab4ed3b6c099ef0f707dc05";
+    // Default model for pose sheet generation: FLUX img2img
+    // Simple image-to-image that works like user's Gemini example
+    this.model = model || "xlabs-ai/flux-dev-realism:4b99d0258d0c0c7e7ca8b337c5437bc5c9c2b823bbcd40589d3e64a739700040";
     this.storageDir = storageDir || process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
   }
 
@@ -57,31 +57,38 @@ export class ReplicateProvider {
     try {
       const startTime = Date.now();
 
-      // Build input for fofr/consistent-character
+      // Build input for FLUX img2img (simple, like user's Gemini approach)
       const input: Record<string, unknown> = {
         prompt: request.prompt,
-        negative_prompt: request.negativePrompt || this.buildDefaultNegativePrompt(),
-        number_of_outputs: request.numOutputs || 4, // Generate 4 poses for 2×2 grid
+        num_outputs: 1, // FLUX img2img generates 1 grid image
         output_format: "webp",
-        output_quality: 95,
-        randomise_poses: true, // Get varied poses
+        output_quality: 90,
       };
 
-      // Add character reference if provided (IP-Adapter)
+      // Add input image for img2img (character reference)
       if (request.subjectImageUrl) {
-        input.subject = request.subjectImageUrl;
+        input.image = request.subjectImageUrl;
 
-        // Prompt strength for reference adherence
-        if (request.referenceStrength !== undefined) {
-          input.prompt_strength = request.referenceStrength;
-        } else {
-          input.prompt_strength = 0.95; // Very high for strict consistency
-        }
+        // Strength: how much to transform the input (0-1)
+        // Lower = more like original, Higher = more transformation
+        // For pose sheets, we want high transformation to get different poses
+        input.strength = 0.75;
+
+        // Guidance scale: how closely to follow the prompt
+        input.guidance_scale = 3.5;
+
+        // Inference steps: quality vs speed
+        input.num_inference_steps = 28;
       }
 
       // Add seed for reproducibility
       if (request.seed !== undefined) {
         input.seed = request.seed;
+      }
+
+      // Add negative prompt if provided
+      if (request.negativePrompt) {
+        input.negative_prompt = request.negativePrompt;
       }
 
       console.log(`[Replicate] Generating image with model: ${this.model}`);

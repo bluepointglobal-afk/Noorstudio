@@ -36,6 +36,13 @@ export interface ImageGenerationRequest {
    * This is the primary reference image that defines the character's appearance.
    */
   characterReference?: string;
+
+  /**
+   * Number of images to generate (for multi-pose grid generation).
+   * Backend will stitch multiple outputs into a single grid image.
+   * Supported values: 4, 8, 12
+   */
+  numOutputs?: number;
 }
 
 export interface ImageGenerationResponse {

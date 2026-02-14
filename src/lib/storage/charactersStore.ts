@@ -972,19 +972,22 @@ export async function generatePoseSheet(
       height = 2304;
     }
 
-    // Build EXTREMELY explicit grid prompt for FLUX 2 Pro
-    const gridPrompt = buildExplicitGridPrompt(character, poseCount, gridCols, gridRows);
+    // Build SIMPLE prompt (like user's Gemini approach)
+    // Format: "X-pose character sheet, different expressions, dynamic actions, full body, white background, [Style], orthographic view, clean lines"
+    const artStyle = character.visualDNA.style || "pixar-3d";
+    const simplePrompt = `${poseCount}-pose character sheet, different expressions and dynamic actions, full body visible, clean white background, ${artStyle} illustration style, orthographic view, professional character reference sheet, clean lines, consistent character design`;
 
-    // SINGLE API CALL to generate entire grid
+    // SINGLE API CALL using img2img (like Gemini)
     const request: ImageGenerationRequest = {
-      prompt: gridPrompt,
+      prompt: simplePrompt,
       references: character.imageUrl ? [character.imageUrl] : undefined,
       characterReference: character.imageUrl,
       style: character.visualDNA.style || "pixar-3d",
       width,
       height,
       stage: "illustrations",
-      referenceStrength: 0.95, // Maximum consistency
+      referenceStrength: 0.75, // Allow transformation for different poses
+      numOutputs: 1, // FLUX img2img returns 1 grid image
     };
 
     const response = await generateImage(request);
