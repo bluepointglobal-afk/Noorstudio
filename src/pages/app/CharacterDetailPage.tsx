@@ -30,7 +30,6 @@ import {
   approvePose,
   unappprovePose,
   regeneratePose,
-  regenerateAllPoses,
   lockCharacter,
   unlockCharacter,
   createNewVersion,
@@ -273,7 +272,10 @@ export default function CharacterDetailPage() {
     }
 
     try {
-      const updated = await regenerateAllPoses(character.id);
+      // Use generatePoseSheet instead of regenerateAllPoses for single API call
+      // Default to 12 poses for "Regenerate All" action
+      const poseCount = (character as any).poseCount || 12;
+      const updated = await generatePoseSheet(character.id, poseCount as 4 | 8 | 12);
       if (updated) {
         setCharacter(updated);
         setCredits(getBalances());
