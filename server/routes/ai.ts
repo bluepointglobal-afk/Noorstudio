@@ -44,9 +44,14 @@ let replicateProvider: ReplicateProvider | null = null;
 import { BFLProvider } from "../lib/bflProvider";
 let bflProvider: BFLProvider | null = null;
 
+// Initialize Gemini provider if key is available
+import { GeminiProvider } from "../lib/geminiProvider";
+let geminiProvider: GeminiProvider | null = null;
+
 console.log("[INIT] IMAGE_PROVIDER:", IMAGE_PROVIDER);
 console.log("[INIT] REPLICATE_API_TOKEN:", REPLICATE_API_TOKEN ? "SET" : "NOT SET");
 console.log("[INIT] BFL_API_KEY:", BFL_API_KEY ? "SET" : "NOT SET");
+console.log("[INIT] GOOGLE_API_KEY:", GOOGLE_API_KEY ? "SET" : "NOT SET");
 console.log("[INIT] OPENAI_API_KEY (DISABLED):", OPENAI_API_KEY ? "SET BUT NOT USED" : "NOT SET");
 
 if (REPLICATE_API_TOKEN) {
@@ -57,6 +62,11 @@ if (REPLICATE_API_TOKEN) {
 if (BFL_API_KEY) {
   bflProvider = new BFLProvider(BFL_API_KEY);
   console.log("[INIT] ✅ BFL FLUX.2 Klein provider initialized (text-to-image)");
+}
+
+if (GOOGLE_API_KEY) {
+  geminiProvider = new GeminiProvider(GOOGLE_API_KEY);
+  console.log("[INIT] ✅ Gemini provider initialized (img2img, pose sheets)");
 }
 
 // ============================================
@@ -726,7 +736,78 @@ async function bflImageGeneration(
 }
 
 // ============================================
-// Google Generative AI Provider
+// Gemini Image Generation (for pose sheets)
+// ============================================
+
+async function geminiImageGeneration(
+  req: ImageRequest & { traceId: string },
+  retryCount = 0
+): Promise<ImageResponse> {
+  if (!geminiProvider) {
+    throw {
+      status: 400,
+      code: "GEMINI_NOT_CONFIGURED",
+      message: "Gemini provider not initialized. Check GOOGLE_API_KEY environment variable.",
+    };
+  }
+
+  try {
+    console.log(JSON.stringify({
+      trace_id: req.traceId,
+      stage: "gemini_request",
+      prompt_length: req.prompt.length,
+      reference_count: req.references?.length || 0,
+      timestamp: new Date().toISOString()
+    }));
+
+    // Get first reference image for img2img
+    const referenceImageUrl = req.references?.[0];
+
+    const result = await geminiProvider.generateImage({
+      prompt: req.prompt,
+      referenceImageUrl,
+      width: req.width || 1024,
+      height: req.height || 1024,
+      seed: req.seed,
+    });
+
+    return {
+      imageUrl: result.imageUrl,
+      provider: "gemini",
+      providerMeta: {
+        seed: result.seed,
+        model: "imagen-3.0",
+        processingTime: result.processingTimeMs,
+      },
+    };
+  } catch (error) {
+    const err = error as Error;
+    console.error(JSON.stringify({
+      trace_id: req.traceId,
+      error: "gemini_generation_failed",
+      message: err.message,
+      attempt: retryCount + 1,
+      timestamp: new Date().toISOString()
+    }));
+
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(JSON.stringify({
+        trace_id: req.traceId,
+        action: "retry",
+        delay_ms: delay,
+        timestamp: new Date().toISOString()
+      }));
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return geminiImageGeneration(req, retryCount + 1);
+    }
+
+    throw err;
+  }
+}
+
+// ============================================
+// Google Generative AI Provider (OLD - text only)
 // ============================================
 
 async function googleImageGeneration(
@@ -1238,32 +1319,56 @@ router.post("/image", async (req: Request, res: Response) => {
     let response: ImageResponse;
 
     // ============================================
-    // TESTING: Use BFL for both text-only and img2img
+    // ROUTING: BFL for anchor, Gemini for pose sheets
     // ============================================
     //
-    // Rule: ALWAYS try BFL FLUX first (testing img2img support)
-    // If BFL doesn't support image input, it will fail and we'll know
+    // Rule 1: If hasReferences (pose sheets) → Gemini (proven multi-pose grids)
+    // Rule 2: Else (anchor images) → BFL FLUX (proven text-to-image)
     //
-    if (!bflProvider) {
-      return res.status(400).json({
-        error: {
-          code: "BFL_NOT_CONFIGURED",
-          message: "Image generation requires BFL FLUX.2 Klein provider. Please configure BFL_API_KEY environment variable.",
-          actionable: "Contact admin to set BFL_API_KEY in Railway deployment.",
-        },
-      });
+    if (hasReferences) {
+      // POSE SHEETS → GEMINI (img2img with grid generation)
+      if (!geminiProvider) {
+        return res.status(400).json({
+          error: {
+            code: "GEMINI_NOT_CONFIGURED",
+            message: "Pose sheet generation requires Gemini provider. Please configure GOOGLE_API_KEY environment variable.",
+            actionable: "Contact admin to set GOOGLE_API_KEY in Railway deployment.",
+          },
+        });
+      }
+
+      console.log(JSON.stringify({
+        trace_id: traceId,
+        stage: "provider_selected",
+        provider: "gemini",
+        reason: "pose_sheet_generation",
+        has_references: true,
+        timestamp: new Date().toISOString()
+      }));
+
+      response = await geminiImageGeneration(bodyWithTrace);
+    } else {
+      // ANCHOR IMAGES → BFL FLUX
+      if (!bflProvider) {
+        return res.status(400).json({
+          error: {
+            code: "BFL_NOT_CONFIGURED",
+            message: "Anchor image generation requires BFL FLUX.2 Klein provider. Please configure BFL_API_KEY environment variable.",
+            actionable: "Contact admin to set BFL_API_KEY in Railway deployment.",
+          },
+        });
+      }
+
+      console.log(JSON.stringify({
+        trace_id: traceId,
+        stage: "provider_selected",
+        provider: "bfl",
+        reason: "anchor_image",
+        timestamp: new Date().toISOString()
+      }));
+
+      response = await bflImageGeneration(bodyWithTrace);
     }
-
-    console.log(JSON.stringify({
-      trace_id: traceId,
-      stage: "provider_selected",
-      provider: "bfl",
-      reason: hasReferences ? "testing_img2img" : "text_only",
-      has_image_input: hasReferences,
-      timestamp: new Date().toISOString()
-    }));
-
-    response = await bflImageGeneration(bodyWithTrace);
 
     console.log("[BACKEND] Image generation completed:", {
       provider: response.provider,
