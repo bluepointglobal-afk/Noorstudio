@@ -9,6 +9,11 @@ import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
 import { checkoutRoutes } from "./routes/checkout";
 import { webhookRoutes } from "./routes/webhooks";
+import { universesRoutes } from "./routes/universes";
+import { assetsRoutes } from "./routes/assets";
+import { documentsRoutes } from "./routes/documents";
+import { bookAssetsRoutes } from "./routes/bookAssets";
+import { outlineVersionsRoutes } from "./routes/outlineVersions";
 import { AppError, RateLimitError, AuthError } from "./errors";
 import { createClient } from "@supabase/supabase-js";
 import helmet from "helmet"; // Added import for helmet
@@ -383,6 +388,13 @@ app.use("/api/share", authMiddleware, shareRoutes);
 
 // Checkout routes (Stripe payments) - Protected
 app.use("/api/checkout", authMiddleware, checkoutRoutes);
+
+// Universe V2 routes - Protected
+app.use("/api/universes", authMiddleware, universesRoutes);
+app.use("/api/assets", authMiddleware, assetsRoutes);
+app.use("/api/documents", authMiddleware, documentsRoutes);
+app.use("/api/book-assets", authMiddleware, bookAssetsRoutes);
+app.use("/api/outline-versions", authMiddleware, outlineVersionsRoutes);
 
 // ============================================
 // Error Handler
