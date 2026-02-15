@@ -7,7 +7,7 @@
 
 DO $$
 DECLARE
-  test_user_id UUID;
+  test_account_id UUID;
   test_universe_id UUID;
   test_book_id UUID;
   test_asset_id UUID;
@@ -20,16 +20,16 @@ DECLARE
   current_version_count INT;
 BEGIN
   -- Get a test user (or create one)
-  SELECT id INTO test_user_id FROM auth.users LIMIT 1;
+  SELECT id INTO test_account_id FROM auth.users LIMIT 1;
 
-  IF test_user_id IS NULL THEN
+  IF test_account_id IS NULL THEN
     RAISE EXCEPTION 'No test user found. Please ensure auth.users has at least one user.';
   END IF;
 
   RAISE NOTICE '=================================================';
   RAISE NOTICE 'Phase 11: Database Integrity Tests';
   RAISE NOTICE '=================================================';
-  RAISE NOTICE 'Test User ID: %', test_user_id;
+  RAISE NOTICE 'Test User ID: %', test_account_id;
   RAISE NOTICE '';
 
   -- =====================================================
@@ -39,13 +39,13 @@ BEGIN
 
   -- Create test universe
   INSERT INTO universes (
-    user_id,
+    account_id,
     name,
     description,
     series_bible,
     book_presets
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Test Universe for Triggers',
     'Testing book_count trigger',
     'Series bible content',
@@ -65,13 +65,11 @@ BEGIN
     user_id,
     title,
     universe_id,
-    age_range,
     status
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Test Book for Trigger',
     test_universe_id,
-    '8-12',
     'draft'
   ) RETURNING id INTO test_book_id;
 
@@ -98,7 +96,7 @@ BEGIN
 
   -- Create test asset
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -106,7 +104,7 @@ BEGIN
     data,
     tags
   ) VALUES (
-    test_user_id,
+    test_account_id,
     test_universe_id,
     'illustration',
     'Test Illustration for Trigger',
@@ -162,13 +160,11 @@ BEGIN
     user_id,
     title,
     universe_id,
-    age_range,
     status
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Test Book 2 for Trigger',
     test_universe_id,
-    '8-12',
     'draft'
   ) RETURNING id INTO test_book_id_2;
 
@@ -212,7 +208,7 @@ BEGIN
   INSERT INTO outline_versions (
     book_id,
     version_number,
-    outline_data,
+    data,
     change_summary,
     is_current
   ) VALUES (
@@ -228,7 +224,7 @@ BEGIN
   -- Create second outline version (version_number should auto-increment)
   INSERT INTO outline_versions (
     book_id,
-    outline_data,
+    data,
     change_summary,
     is_current
   ) VALUES (

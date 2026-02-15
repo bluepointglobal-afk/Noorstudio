@@ -3,7 +3,7 @@
 
 DO $$
 DECLARE
-  test_user_id UUID;
+  test_account_id UUID;
   universe_full_id UUID;
   universe_partial_id UUID;
   universe_empty_id UUID;
@@ -19,9 +19,9 @@ DECLARE
   ts_now TEXT;
 BEGIN
   -- Get test user
-  SELECT id INTO test_user_id FROM auth.users LIMIT 1;
+  SELECT id INTO test_account_id FROM auth.users LIMIT 1;
 
-  IF test_user_id IS NULL THEN
+  IF test_account_id IS NULL THEN
     RAISE EXCEPTION 'No test user found';
   END IF;
 
@@ -30,7 +30,7 @@ BEGIN
   RAISE NOTICE '=================================================';
   RAISE NOTICE 'Phase 11: E2E Test Data Setup';
   RAISE NOTICE '=================================================';
-  RAISE NOTICE 'User ID: %', test_user_id;
+  RAISE NOTICE 'User ID: %', test_account_id;
   RAISE NOTICE 'Timestamp: %', ts_now;
   RAISE NOTICE '';
 
@@ -40,7 +40,7 @@ BEGIN
   RAISE NOTICE '--- Creating Universe 1: Full Presets ---';
 
   INSERT INTO universes (
-    user_id,
+    account_id,
     name,
     description,
     series_bible,
@@ -49,7 +49,7 @@ BEGIN
     book_presets,
     tags
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Fantasy Quest Series',
     'An epic fantasy series following young heroes on magical adventures',
     E'**Setting:** Medieval fantasy kingdom of Eldoria\n**Tone:** Adventurous, magical, hopeful\n**Themes:** Friendship, courage, discovery\n**Magic System:** Elemental magic (fire, water, earth, air)',
@@ -83,14 +83,14 @@ BEGIN
   RAISE NOTICE '--- Creating Universe 2: Partial Presets ---';
 
   INSERT INTO universes (
-    user_id,
+    account_id,
     name,
     description,
     series_bible,
     book_presets,
     tags
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Science Adventures',
     'Educational science-themed stories for curious minds',
     E'**Setting:** Modern world with science labs and experiments\n**Educational Goals:** STEM learning through stories',
@@ -109,13 +109,13 @@ BEGIN
   RAISE NOTICE '--- Creating Universe 3: No Presets ---';
 
   INSERT INTO universes (
-    user_id,
+    account_id,
     name,
     description,
     book_presets,
     tags
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Mystery Stories',
     'Thrilling mystery tales for young detectives',
     '{}'::jsonb,
@@ -130,14 +130,14 @@ BEGIN
   RAISE NOTICE '--- Creating Universe 4: Large Dataset ---';
 
   INSERT INTO universes (
-    user_id,
+    account_id,
     name,
     description,
     series_bible,
     book_presets,
     tags
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Animal Kingdom Chronicles',
     'A large series with many assets for performance testing',
     E'**Setting:** Magical animal kingdom\n**Characters:** Dozens of animal characters',
@@ -161,20 +161,19 @@ BEGIN
     user_id,
     title,
     universe_id,
-    age_range,
     status,
-    template,
-    layout_style,
-    trim_size
+    data
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'The Crystal of Light',
     universe_full_id,
-    '8-12',
-    'in_progress',
-    'adventure',
-    'split-page',
-    '8x10'
+    'generating',
+    jsonb_build_object(
+      'ageRange', '8-12',
+      'template', 'adventure',
+      'layoutStyle', 'split-page',
+      'trimSize', '8x10'
+    )
   ) RETURNING id INTO book1_id;
 
   RAISE NOTICE 'Created Book 1: The Crystal of Light (%)', book1_id;
@@ -184,20 +183,19 @@ BEGIN
     user_id,
     title,
     universe_id,
-    age_range,
     status,
-    template,
-    layout_style,
-    trim_size
+    data
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'The Shadow Kingdom',
     universe_full_id,
-    '8-12',
     'draft',
-    'adventure',
-    'split-page',
-    '8x10'
+    jsonb_build_object(
+      'ageRange', '8-12',
+      'template', 'adventure',
+      'layoutStyle', 'split-page',
+      'trimSize', '8x10'
+    )
   ) RETURNING id INTO book2_id;
 
   RAISE NOTICE 'Created Book 2: The Shadow Kingdom (%)', book2_id;
@@ -206,15 +204,16 @@ BEGIN
   INSERT INTO projects (
     user_id,
     title,
-    age_range,
     status,
-    template
+    data
   ) VALUES (
-    test_user_id,
+    test_account_id,
     'Standalone Story',
-    '6-9',
     'draft',
-    'fairy_tale'
+    jsonb_build_object(
+      'ageRange', '6-9',
+      'template', 'fairy_tale'
+    )
   ) RETURNING id INTO book3_id;
 
   RAISE NOTICE 'Created Book 3: Standalone Story (%)', book3_id;
@@ -227,7 +226,7 @@ BEGIN
 
   -- Illustration 1: Pending status
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -237,7 +236,7 @@ BEGIN
     file_urls,
     thumbnail_url
   ) VALUES (
-    test_user_id,
+    test_account_id,
     universe_full_id,
     'illustration',
     'Hero in Forest',
@@ -258,7 +257,7 @@ BEGIN
 
   -- Illustration 2: Draft status with variants
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -268,7 +267,7 @@ BEGIN
     file_urls,
     thumbnail_url
   ) VALUES (
-    test_user_id,
+    test_account_id,
     universe_full_id,
     'illustration',
     'Castle Approach',
@@ -302,7 +301,7 @@ BEGIN
 
   -- Illustration 3: Approved status (for reuse testing)
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -312,7 +311,7 @@ BEGIN
     file_urls,
     thumbnail_url
   ) VALUES (
-    test_user_id,
+    test_account_id,
     universe_full_id,
     'illustration',
     'Magic Battle',
@@ -357,7 +356,7 @@ BEGIN
 
   -- Cover 1: Front cover, draft status
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -367,7 +366,7 @@ BEGIN
     file_urls,
     thumbnail_url
   ) VALUES (
-    test_user_id,
+    test_account_id,
     universe_full_id,
     'cover',
     'Crystal of Light - Front',
@@ -398,7 +397,7 @@ BEGIN
 
   -- Cover 2: Full cover, approved status
   INSERT INTO assets (
-    user_id,
+    account_id,
     universe_id,
     type,
     name,
@@ -408,7 +407,7 @@ BEGIN
     file_urls,
     thumbnail_url
   ) VALUES (
-    test_user_id,
+    test_account_id,
     universe_full_id,
     'cover',
     'Crystal of Light - Full',
@@ -458,7 +457,7 @@ BEGIN
   INSERT INTO outline_versions (
     book_id,
     version_number,
-    outline_data,
+    data,
     change_summary,
     is_current,
     locked_sections
@@ -485,7 +484,7 @@ BEGIN
   INSERT INTO outline_versions (
     book_id,
     version_number,
-    outline_data,
+    data,
     change_summary,
     is_current,
     locked_sections
@@ -513,7 +512,7 @@ BEGIN
   INSERT INTO outline_versions (
     book_id,
     version_number,
-    outline_data,
+    data,
     change_summary,
     is_current,
     locked_sections
@@ -546,7 +545,7 @@ BEGIN
   -- Create 30 illustrations in large universe
   FOR i IN 1..30 LOOP
     INSERT INTO assets (
-      user_id,
+      account_id,
       universe_id,
       type,
       name,
@@ -556,7 +555,7 @@ BEGIN
       file_urls,
       thumbnail_url
     ) VALUES (
-      test_user_id,
+      test_account_id,
       universe_large_id,
       'illustration',
       'Animal Character ' || i,
@@ -572,11 +571,11 @@ BEGIN
       ),
       ARRAY['animal', 'character'],
       CASE
-        WHEN i % 3 = 1 THEN '["https://placehold.co/600x600?text=Character+' || i || '"]'::jsonb
+        WHEN i % 3 = 1 THEN jsonb_build_array('https://placehold.co/600x600?text=Character+' || i::text)
         ELSE '[]'::jsonb
       END,
       CASE
-        WHEN i % 3 = 1 THEN 'https://placehold.co/600x600?text=Character+' || i
+        WHEN i % 3 = 1 THEN 'https://placehold.co/600x600?text=Character+' || i::text
         ELSE NULL
       END
     );
