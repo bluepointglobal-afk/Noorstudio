@@ -48,7 +48,25 @@ DROP FUNCTION IF EXISTS update_universe_book_count();
 DROP VIEW IF EXISTS current_outlines;
 
 -- ============================================
--- Step 3: Drop new tables (in reverse dependency order)
+-- Step 3: Drop foreign key constraints first
+-- ============================================
+
+-- Drop FK from projects to new tables
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_universe_id_fkey;
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_document_id_fkey;
+
+-- Drop FK from book_assets
+ALTER TABLE book_assets DROP CONSTRAINT IF EXISTS fk_book_assets_book;
+
+-- Drop FK from universes to assets
+ALTER TABLE universes DROP CONSTRAINT IF EXISTS fk_universes_default_style;
+
+-- Drop FK from assets/documents to universes
+ALTER TABLE assets DROP CONSTRAINT IF EXISTS fk_assets_universe;
+ALTER TABLE documents DROP CONSTRAINT IF EXISTS fk_documents_universe;
+
+-- ============================================
+-- Step 4: Drop new tables (in reverse dependency order)
 -- ============================================
 
 DROP TABLE IF EXISTS outline_versions;
@@ -58,7 +76,7 @@ DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS documents;
 
 -- ============================================
--- Step 4: Remove new columns from projects table
+-- Step 5: Remove new columns from projects table
 -- ============================================
 
 ALTER TABLE projects
