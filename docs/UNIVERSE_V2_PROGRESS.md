@@ -2,7 +2,7 @@
 
 **Branch:** `universe-v2-refactor`
 **Last Updated:** February 15, 2026
-**Status:** Phase 5 Complete, Phase 6 In Progress
+**Status:** Phase 6 Complete, Phase 7 In Progress
 
 ---
 
@@ -148,17 +148,60 @@
 
 ---
 
+### Phase 6: Outline System with Version Control
+**Duration:** < 1 day
+**Commits:** 1
+
+#### Deliverables:
+- ✅ `OutlineVersionHistory.tsx` - Version control component
+  - Displays all outline versions for a book
+  - Expandable/collapsible version details
+  - Section-level locking with checkboxes
+  - Version restore functionality
+  - Current version badge
+- ✅ Test data setup
+  - `test-phase6-setup.sql` - Creates test book with 3 versions
+  - Version progression: 5→5→6 chapters
+  - Locked sections demonstration
+- ✅ Test plan documentation
+  - `test-phase6.md` - Comprehensive testing guide
+
+#### Features:
+- ✅ Version history display with timestamps
+- ✅ Change summary for each version
+- ✅ Chapter count and locked count indicators
+- ✅ Section locking UI:
+  - Checkbox for each chapter
+  - Visual feedback (highlighted when locked)
+  - "Save Locks" button for changes
+  - Lock/unlock icons
+- ✅ Version restore:
+  - "Restore" button on non-current versions
+  - Sets version as current
+  - Updates UI immediately
+  - Toast notifications
+- ✅ Loading/empty/error states
+- ✅ Callback for parent integration
+
+#### Testing:
+- ✅ Build successful
+- ✅ TypeScript types correct
+- ✅ Test data created (3 versions)
+- ⏳ Component integration pending
+
+---
+
 ## 🔄 In Progress
 
-### Phase 6: Outline System with Version Control
+### Phase 7: Illustration Studio
 **Status:** Starting
-**Estimated Duration:** 2-3 days
+**Estimated Duration:** 3-4 days
 
 #### Planned Deliverables:
-- Outline version history UI
-- Section-level locking interface
-- Version restore functionality
-- Current version indicator
+- Illustration generation UI
+- Variant selection interface
+- Approval workflow
+- Character consistency
 - Book presets configuration
 - Navigation integration
 
