@@ -3,3 +3,6 @@
 
 export * from './universeApi';
 export * from './assetApi';
+export * from './documentApi';
+export * from './bookAssetApi';
+export * from './outlineVersionApi';
