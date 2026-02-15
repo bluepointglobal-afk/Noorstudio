@@ -1,8 +1,8 @@
 # Universe V2 Implementation Progress
 
 **Branch:** `universe-v2-refactor`
-**Last Updated:** February 14, 2026
-**Status:** Phase 3 Complete, Phase 4 In Progress
+**Last Updated:** February 15, 2026
+**Status:** Phase 5 Complete, Phase 6 In Progress
 
 ---
 
@@ -87,17 +87,78 @@
 
 ---
 
+### Phase 4: Universe Studio UI
+**Duration:** < 1 day
+**Commits:** 1
+
+#### Deliverables:
+- ✅ `UniversesPage.tsx` - Updated to use useUniverses() hook
+  - Loading/error states
+  - Real-time universe list
+  - Character and book counts
+- ✅ `UniverseFormPage.tsx` - New universe creation/editing
+  - Form validation
+  - Toast notifications
+  - Create and edit modes
+- ✅ App routing updated
+  - `/app/universes/new` - Create universe
+  - `/app/universes/:id/edit` - Edit universe
+  - `/app/universes/:id` - View universe details
+
+#### Testing:
+- ✅ Build successful
+- ✅ Dev servers running
+- ✅ No TypeScript errors
+- ✅ Fixed duplicate variable declaration
+
+---
+
+### Phase 5: Book Creation Refactor
+**Duration:** < 1 day
+**Commits:** 1
+
+#### Deliverables:
+- ✅ `BookBuilderPage.tsx` - Universe-first book creation
+  - Replaced MOCK_UNIVERSES with real API
+  - Auto-populate book presets from selected universe
+  - Loading/error/empty states for universe selection
+  - "Create Universe" CTA when empty
+- ✅ Test data setup
+  - `test-phase5-setup.sql` - Creates 3 test universes
+  - Full presets, partial presets, and no presets scenarios
+- ✅ Test plan documentation
+  - `test-phase5.md` - Comprehensive testing guide
+
+#### Features:
+- ✅ Universe selection loads from API
+- ✅ Auto-fill form fields from `book_presets`:
+  - defaultAgeRange
+  - defaultTemplate
+  - defaultLayoutStyle
+  - defaultTrimSize
+- ✅ Toast notification when presets loaded
+- ✅ Graceful handling of missing presets
+
+#### Testing:
+- ✅ Build successful
+- ✅ Dev servers running
+- ✅ Test data created (3 universes)
+- ✅ API authentication working
+- ⏳ Manual UI testing required
+
+---
+
 ## 🔄 In Progress
 
-### Phase 4: Universe Studio UI
+### Phase 6: Outline System with Version Control
 **Status:** Starting
-**Estimated Duration:** 3-4 days
+**Estimated Duration:** 2-3 days
 
 #### Planned Deliverables:
-- Universe creation/editing page
-- Series bible editor
-- Writing/Visual DNA configurators
-- Character linking interface
+- Outline version history UI
+- Section-level locking interface
+- Version restore functionality
+- Current version indicator
 - Book presets configuration
 - Navigation integration
 
