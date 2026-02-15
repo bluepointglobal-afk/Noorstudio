@@ -2,17 +2,19 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { demoUniverses } from "@/lib/demo-data";
-import { Plus, Search, Globe, Users, BookOpen } from "lucide-react";
+import { Plus, Search, Globe, Users, BookOpen, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useUniverses } from "@/hooks/useUniverses";
 
 export default function UniversesPage() {
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
+  const { universes, loading, error } = useUniverses();
 
-  const filteredUniverses = demoUniverses.filter((u) =>
+  const filteredUniverses = universes.filter((u) =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.description.toLowerCase().includes(search.toLowerCase())
+    (u.description?.toLowerCase() || "").includes(search.toLowerCase())
   );
 
   return (
@@ -20,7 +22,7 @@ export default function UniversesPage() {
       title="Universes"
       subtitle="Manage your story universes and series"
       actions={
-        <Button variant="hero">
+        <Button variant="hero" onClick={() => navigate('/app/universes/new')}>
           <Plus className="w-4 h-4 mr-2" />
           New Universe
         </Button>
@@ -39,7 +41,23 @@ export default function UniversesPage() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      )}
+
       {/* Universe Grid */}
+      {!loading && !error && (
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredUniverses.map((universe) => (
           <Link
@@ -75,12 +93,17 @@ export default function UniversesPage() {
       {filteredUniverses.length === 0 && (
         <div className="text-center py-12">
           <Globe className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground mb-4">No universes found.</p>
-          <Button variant="hero">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Your First Universe
-          </Button>
+          <p className="text-muted-foreground mb-4">
+            {search ? "No universes match your search." : "No universes found."}
+          </p>
+          {!search && (
+            <Button variant="hero" onClick={() => navigate('/app/universes/new')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Your First Universe
+            </Button>
+          )}
         </div>
+      )}
       )}
     </AppLayout>
   );
