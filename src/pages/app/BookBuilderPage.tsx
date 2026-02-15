@@ -23,7 +23,6 @@ import {
 } from "@/lib/storage/charactersStore";
 import {
   createProject,
-  MOCK_UNIVERSES,
   LayoutStyle,
   TrimSize,
   ExportTarget,
@@ -38,6 +37,7 @@ import { listProjects } from "@/lib/storage/projectsStore";
 import { canCreateProject } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { ChapterArtifactItem, OutlineArtifactContent } from "@/lib/types/artifacts";
+import { useUniverses } from "@/hooks/useUniverses";
 
 const steps = [
   { id: 1, title: "Story World", icon: Globe, description: "World & guidelines" },
@@ -128,6 +128,9 @@ export default function BookBuilderPage() {
   const [projectCount, setProjectCount] = useState(0);
   const [hasRestoredAutosave, setHasRestoredAutosave] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  // Load universes from API
+  const { universes, loading: universesLoading, error: universesError } = useUniverses();
 
   const [formData, setFormData] = useState({
     // Step 1: Universe & Knowledge Base
@@ -264,10 +267,38 @@ export default function BookBuilderPage() {
   };
 
   const handleUniverseSelect = (universeId: string) => {
-    const universe = MOCK_UNIVERSES.find((u) => u.id === universeId);
+    const universe = universes.find((u) => u.id === universeId);
     if (universe) {
       updateForm("universeId", universe.id);
       updateForm("universeName", universe.name);
+
+      // Auto-populate from universe book_presets if available
+      if (universe.book_presets) {
+        const presets = universe.book_presets as {
+          defaultAgeRange?: string;
+          defaultTemplate?: TemplateType;
+          defaultLayoutStyle?: LayoutStyle;
+          defaultTrimSize?: TrimSize;
+        };
+
+        if (presets.defaultAgeRange) {
+          updateForm("ageRange", presets.defaultAgeRange);
+        }
+        if (presets.defaultTemplate) {
+          updateForm("templateType", presets.defaultTemplate);
+        }
+        if (presets.defaultLayoutStyle) {
+          updateForm("layoutStyle", presets.defaultLayoutStyle);
+        }
+        if (presets.defaultTrimSize) {
+          updateForm("trimSize", presets.defaultTrimSize);
+        }
+
+        toast({
+          title: "Universe Settings Loaded",
+          description: `Default settings from "${universe.name}" have been applied.`,
+        });
+      }
     }
   };
 
@@ -455,7 +486,7 @@ export default function BookBuilderPage() {
 
   const progress = (currentStep / steps.length) * 100;
   const lockedCharacters = characters.filter((c) => c.status === "locked");
-  const selectedUniverse = MOCK_UNIVERSES.find((u) => u.id === formData.universeId);
+  const selectedUniverse = universes.find((u) => u.id === formData.universeId);
   const selectedKB = knowledgeBases.find((k) => k.id === formData.knowledgeBaseId);
   const selectedTemplate = BOOK_TEMPLATES.find((t) => t.id === formData.templateType);
   const selectedCharacters = characters.filter((c) => formData.characterIds.includes(c.id));
@@ -539,32 +570,71 @@ export default function BookBuilderPage() {
 
             {/* Universe Selection */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Story World *</Label>
-                <span title="Choose the setting/world for your stories" aria-label="Choose the setting/world for your stories">
-                  <Info className="w-4 h-4 text-muted-foreground" />
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Story World *</Label>
+                  <span title="Choose the setting/world for your stories" aria-label="Choose the setting/world for your stories">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </span>
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="text-xs h-auto p-0"
+                  onClick={() => navigate("/app/universes/new")}
+                >
+                  Create Universe
+                </Button>
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {MOCK_UNIVERSES.map((universe) => (
-                  <div
-                    key={universe.id}
-                    className={cn(
-                      "p-4 rounded-xl border-2 cursor-pointer transition-all",
-                      formData.universeId === universe.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    )}
-                    onClick={() => handleUniverseSelect(universe.id)}
+
+              {universesLoading && (
+                <div className="p-6 rounded-xl border-2 border-dashed border-border text-center">
+                  <p className="text-sm text-muted-foreground">Loading universes...</p>
+                </div>
+              )}
+
+              {universesError && (
+                <div className="p-6 rounded-xl border-2 border-dashed border-border text-center">
+                  <p className="text-sm text-destructive">{universesError}</p>
+                </div>
+              )}
+
+              {!universesLoading && !universesError && universes.length === 0 && (
+                <div className="p-6 rounded-xl border-2 border-dashed border-border text-center">
+                  <Globe className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                  <p className="text-sm text-muted-foreground mb-2">No story worlds found</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/app/universes/new")}
                   >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Globe className="w-4 h-4 text-primary" />
-                      <h3 className="font-semibold">{universe.name}</h3>
+                    Create Your First Universe
+                  </Button>
+                </div>
+              )}
+
+              {!universesLoading && !universesError && universes.length > 0 && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {universes.map((universe) => (
+                    <div
+                      key={universe.id}
+                      className={cn(
+                        "p-4 rounded-xl border-2 cursor-pointer transition-all",
+                        formData.universeId === universe.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      )}
+                      onClick={() => handleUniverseSelect(universe.id)}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Globe className="w-4 h-4 text-primary" />
+                        <h3 className="font-semibold">{universe.name}</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{universe.description || "No description"}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{universe.description}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Knowledge Base Selection */}
