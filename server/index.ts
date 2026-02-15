@@ -19,6 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 import helmet from "helmet"; // Added import for helmet
 import { AI_TOKEN_BUDGETS, GLOBAL_LIMITS, estimateTokens } from "../src/lib/ai/tokenBudget";
 import { configureCloudinary } from "./lib/cloudinaryUpload";
+import { checkUniverseV2Access, addFeatureFlags, getFeatureFlagsHandler } from "./middleware/featureFlags";
 
 const STAGE_COSTS: Record<string, number> = Object.entries(AI_TOKEN_BUDGETS).reduce((acc, [key, val]) => {
   acc[key] = val.creditCost;
@@ -364,6 +365,10 @@ app.use(express.json({ limit: "1mb" }));
 // Apply rate limiting to specific routes
 app.use(rateLimitMiddleware);
 
+// Apply feature flags middleware (adds req.featureFlags)
+// Note: This must come after auth, as it needs req.user
+app.use(addFeatureFlags);
+
 // Serve stored images (BFL downloads, etc.)
 // TODO: Replace with cloud storage (S3/GCS/Cloudinary) for production
 const IMAGE_STORAGE_DIR = process.env.IMAGE_STORAGE_DIR || "/tmp/noorstudio-images";
@@ -378,6 +383,9 @@ console.log(`[INIT] Serving stored images from: ${IMAGE_STORAGE_DIR}`);
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// Feature flags endpoint - Protected
+app.get("/api/feature-flags", authMiddleware, getFeatureFlagsHandler);
 
 // AI routes (text/image generation) - Protected
 // Apply auth and credit middleware to AI routes

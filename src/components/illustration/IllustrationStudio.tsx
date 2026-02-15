@@ -304,7 +304,7 @@ export function IllustrationStudio({
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredIllustrations.map((illustration) => {
-            const status = (illustration.data as any)?.status || "draft";
+            const status = illustration.data?.status || "draft";
             const thumbnailUrl =
               illustration.thumbnailUrl || illustration.fileUrls[0];
             const usageCount = illustration.usageCount || 0;

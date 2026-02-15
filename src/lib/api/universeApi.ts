@@ -1,14 +1,20 @@
 // Universe API Client
 // Frontend API calls for universes
 
+/**
+ * JSON value types for flexible universe data structures
+ */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+
 export interface CreateUniverseInput {
   name: string;
   description?: string;
   seriesBible?: string;
-  writingDNA?: Record<string, any>;
-  visualDNA?: Record<string, any>;
+  writingDNA?: JsonObject;
+  visualDNA?: JsonObject;
   defaultStyleId?: string;
-  bookPresets?: Record<string, any>;
+  bookPresets?: JsonObject;
   tags?: string[];
 }
 
@@ -16,10 +22,10 @@ export interface UpdateUniverseInput {
   name?: string;
   description?: string;
   seriesBible?: string;
-  writingDNA?: Record<string, any>;
-  visualDNA?: Record<string, any>;
+  writingDNA?: JsonObject;
+  visualDNA?: JsonObject;
   defaultStyleId?: string;
-  bookPresets?: Record<string, any>;
+  bookPresets?: JsonObject;
   tags?: string[];
 }
 
@@ -29,11 +35,11 @@ export interface Universe {
   name: string;
   description?: string | null;
   seriesBible?: string | null;
-  writingDNA: Record<string, any>;
-  visualDNA: Record<string, any>;
+  writingDNA: JsonObject;
+  visualDNA: JsonObject;
   defaultStyleId?: string | null;
-  bookPresets: Record<string, any>;
-  metadata: Record<string, any>;
+  bookPresets: JsonObject;
+  metadata: JsonObject;
   tags: string[];
   bookCount: number;
   characterCount: number;

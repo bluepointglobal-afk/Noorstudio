@@ -3,15 +3,29 @@
 
 export type AssetType = 'character' | 'illustration' | 'cover' | 'background' | 'prop' | 'other';
 
+/**
+ * JSON value types for flexible asset data structures
+ */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+
+/**
+ * Asset data contains status and type-specific fields
+ */
+export interface AssetData extends JsonObject {
+  status?: 'pending' | 'draft' | 'approved';
+  [key: string]: JsonValue | undefined;
+}
+
 export interface CreateAssetInput {
   universeId?: string;
   type: AssetType;
   name: string;
   description?: string;
-  data: Record<string, any>;
+  data: AssetData;
   thumbnailUrl?: string;
   fileUrls?: string[];
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   tags?: string[];
 }
 
@@ -19,10 +33,10 @@ export interface UpdateAssetInput {
   universeId?: string;
   name?: string;
   description?: string;
-  data?: Record<string, any>;
+  data?: AssetData;
   thumbnailUrl?: string;
   fileUrls?: string[];
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   tags?: string[];
 }
 
@@ -33,10 +47,10 @@ export interface Asset {
   type: AssetType;
   name: string;
   description?: string | null;
-  data: Record<string, any>;
+  data: AssetData;
   thumbnailUrl?: string | null;
   fileUrls: string[];
-  metadata: Record<string, any>;
+  metadata: JsonObject;
   tags: string[];
   usageCount: number;
   createdAt: string;

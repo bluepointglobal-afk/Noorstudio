@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Globe,
   Edit,
@@ -40,12 +40,7 @@ export default function UniverseDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
-    loadUniverse();
-  }, [id]);
-
-  const loadUniverse = async () => {
+  const loadUniverse = useCallback(async () => {
     if (!id) return;
 
     setLoading(true);
@@ -58,7 +53,11 @@ export default function UniverseDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    loadUniverse();
+  }, [loadUniverse]);
 
   const handleDelete = async () => {
     if (!id) return;
