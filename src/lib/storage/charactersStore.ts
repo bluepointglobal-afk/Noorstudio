@@ -997,7 +997,6 @@ export async function generatePoseSheet(
     onProgress?.("Pose grid complete!");
 
     const now = new Date().toISOString();
-    const poseNames = DEFAULT_POSE_NAMES.slice(0, poseCount);
 
     // Create pose entries pointing to the grid image
     const updatedPoses: CharacterPose[] = poseNames.map((name, idx) => ({
