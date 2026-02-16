@@ -192,6 +192,15 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction): 
   // ALWAYS bypass auth in development mode for testing
   if (env.NODE_ENV === "development") {
     console.warn("[AUTH] Development mode - bypassing authentication");
+    // Set a dummy user for development with valid UUID
+    req.user = {
+      id: "00000000-0000-0000-0000-000000000001",
+      email: "dev@localhost",
+      app_metadata: {},
+      user_metadata: {},
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+    } as any;
     next();
     return;
   }
@@ -403,6 +412,48 @@ app.use("/api/assets", authMiddleware, assetsRoutes);
 app.use("/api/documents", authMiddleware, documentsRoutes);
 app.use("/api/book-assets", authMiddleware, bookAssetsRoutes);
 app.use("/api/outline-versions", authMiddleware, outlineVersionsRoutes);
+
+// Development-only migration runner
+if (env.NODE_ENV === "development") {
+  app.post("/api/dev/run-migrations", async (req: Request, res: Response) => {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+      const files = await fs.readdir(migrationsDir);
+      const migrationFiles = files
+        .filter(f => f.match(/^01[0-5]_.*\.sql$/))
+        .sort();
+
+      const results = [];
+      for (const file of migrationFiles) {
+        const filepath = path.join(migrationsDir, file);
+        const sql = await fs.readFile(filepath, 'utf-8');
+
+        try {
+          // Split by statement (basic split on semicolons)
+          const statements = sql
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('--'));
+
+          for (const statement of statements) {
+            await supabase?.query(statement + ';');
+          }
+
+          results.push({ file, status: 'success' });
+        } catch (error: any) {
+          results.push({ file, status: 'error', error: error.message });
+        }
+      }
+
+      res.json({ message: 'Migrations executed', results });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
 
 // ============================================
 // Error Handler
