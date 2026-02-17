@@ -30,7 +30,16 @@ const AuthPage = () => {
 
             const { error } = type === "login"
                 ? await supabase.auth.signInWithPassword({ email, password })
-                : await supabase.auth.signUp({ email, password });
+                : await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        emailRedirectTo: window.location.origin,
+                        data: {
+                          email_confirm: true
+                        }
+                    }
+                  });
 
             if (error) throw error;
 
@@ -41,8 +50,21 @@ const AuthPage = () => {
                 navigate(from, { replace: true });
             }
         } catch (error: unknown) {
-            const err = error as Error & { message?: string };
-            toast.error(err.message || "Authentication failed");
+            const err = error as Error & { message?: string; status?: number };
+            console.error("Auth error:", error);
+
+            let errorMessage = err.message || "Authentication failed";
+
+            // Provide helpful error messages
+            if (errorMessage.includes("Email not confirmed")) {
+                errorMessage = "Please check your email and confirm your account before logging in.";
+            } else if (errorMessage.includes("Invalid login credentials")) {
+                errorMessage = "Invalid email or password. Please try again.";
+            } else if (err.status === 500) {
+                errorMessage = "Server error. Please contact support or check Supabase Auth settings.";
+            }
+
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
