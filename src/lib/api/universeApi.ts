@@ -48,7 +48,24 @@ export interface Universe {
   deletedAt?: string | null;
 }
 
+import { supabase } from '@/lib/supabase/client';
+
 const API_BASE = import.meta.env.VITE_AI_IMAGE_PROXY_URL?.replace('/ai/image', '') || '/api';
+
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  }
+
+  return headers;
+}
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -59,7 +76,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function listUniverses(): Promise<Universe[]> {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/universes`, {
+    headers,
     credentials: 'include',
   });
   const data = await handleResponse<{ universes: Universe[] }>(response);
@@ -67,7 +86,9 @@ export async function listUniverses(): Promise<Universe[]> {
 }
 
 export async function getUniverse(id: string): Promise<Universe> {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/universes/${id}`, {
+    headers,
     credentials: 'include',
   });
   const data = await handleResponse<{ universe: Universe }>(response);
@@ -75,9 +96,10 @@ export async function getUniverse(id: string): Promise<Universe> {
 }
 
 export async function createUniverse(input: CreateUniverseInput): Promise<Universe> {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/universes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     credentials: 'include',
     body: JSON.stringify(input),
   });
@@ -86,9 +108,10 @@ export async function createUniverse(input: CreateUniverseInput): Promise<Univer
 }
 
 export async function updateUniverse(id: string, input: UpdateUniverseInput): Promise<Universe> {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/universes/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     credentials: 'include',
     body: JSON.stringify(input),
   });
@@ -97,8 +120,10 @@ export async function updateUniverse(id: string, input: UpdateUniverseInput): Pr
 }
 
 export async function deleteUniverse(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/universes/${id}`, {
     method: 'DELETE',
+    headers,
     credentials: 'include',
   });
 
