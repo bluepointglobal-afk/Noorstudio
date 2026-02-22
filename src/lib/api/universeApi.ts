@@ -57,14 +57,21 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     'Content-Type': 'application/json',
   };
 
+  // Skip auth headers for now - backend is in development mode
+  // TODO: Re-enable for production with proper token handling
+  /*
   if (supabase) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      // Trim whitespace and ensure valid header format
-      const token = session.access_token.trim().replace(/\s+/g, '');
-      headers['Authorization'] = `Bearer ${token}`;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const token = session.access_token.trim().replace(/\s+/g, '');
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.warn('Failed to get auth token:', error);
     }
   }
+  */
 
   return headers;
 }
