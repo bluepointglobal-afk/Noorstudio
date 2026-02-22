@@ -60,7 +60,9 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   if (supabase) {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
+      // Trim whitespace and ensure valid header format
+      const token = session.access_token.trim().replace(/\s+/g, '');
+      headers['Authorization'] = `Bearer ${token}`;
     }
   }
 
