@@ -21,9 +21,9 @@ const envSchema = z.object({
     NANOBANANA_API_KEY: z.string().optional(),
     GOOGLE_API_KEY: z.string().optional(),
     REPLICATE_API_TOKEN: z.string().optional(),
-    SUPABASE_URL: z.string().optional(),
-    SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-    SUPABASE_ANON_KEY: z.string().optional(),
+    SUPABASE_URL: z.string().optional().transform(v => v?.trim()),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().optional().transform(v => v?.trim()),
+    SUPABASE_ANON_KEY: z.string().optional().transform(v => v?.trim()),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     // Stripe
     STRIPE_SECRET_KEY: z.string().optional(),
