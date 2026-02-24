@@ -12,26 +12,26 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const envSchema = z.object({
     PORT: z.string().transform((v) => parseInt(v, 10)).default("3001"),
-    CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
+    CLIENT_ORIGIN: z.string().default("http://localhost:5173"),
     AI_TEXT_PROVIDER: z.enum(["mock", "claude"]).default("mock"),
     AI_IMAGE_PROVIDER: z.enum(["mock", "nanobanana", "google", "openai", "replicate", "flux"]).default("mock"),
-    CLAUDE_API_KEY: z.string().optional(),
-    OPENAI_API_KEY: z.string().optional(),
-    BFL_API_KEY: z.string().optional(),
-    NANOBANANA_API_KEY: z.string().optional(),
-    GOOGLE_API_KEY: z.string().optional(),
-    REPLICATE_API_TOKEN: z.string().optional(),
+    CLAUDE_API_KEY: z.string().optional().transform(v => v?.trim()),
+    OPENAI_API_KEY: z.string().optional().transform(v => v?.trim()),
+    BFL_API_KEY: z.string().optional().transform(v => v?.trim()),
+    NANOBANANA_API_KEY: z.string().optional().transform(v => v?.trim()),
+    GOOGLE_API_KEY: z.string().optional().transform(v => v?.trim()),
+    REPLICATE_API_TOKEN: z.string().optional().transform(v => v?.trim()),
     SUPABASE_URL: z.string().optional().transform(v => v?.trim()),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional().transform(v => v?.trim()),
     SUPABASE_ANON_KEY: z.string().optional().transform(v => v?.trim()),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     // Stripe
-    STRIPE_SECRET_KEY: z.string().optional(),
-    STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_SECRET_KEY: z.string().optional().transform(v => v?.trim()),
+    STRIPE_WEBHOOK_SECRET: z.string().optional().transform(v => v?.trim()),
     // Cloudinary (for image storage)
-    CLOUDINARY_CLOUD_NAME: z.string().optional(),
-    CLOUDINARY_API_KEY: z.string().optional(),
-    CLOUDINARY_API_SECRET: z.string().optional(),
+    CLOUDINARY_CLOUD_NAME: z.string().optional().transform(v => v?.trim()),
+    CLOUDINARY_API_KEY: z.string().optional().transform(v => v?.trim()),
+    CLOUDINARY_API_SECRET: z.string().optional().transform(v => v?.trim()),
 }).refine((data) => {
     if (data.AI_TEXT_PROVIDER === "claude" && !data.CLAUDE_API_KEY) {
         return false;

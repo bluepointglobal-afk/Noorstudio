@@ -5,6 +5,7 @@
 import { env } from "./env";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import path from "path";
 import { aiRoutes } from "./routes/ai";
 import { shareRoutes } from "./routes/share";
 import { checkoutRoutes } from "./routes/checkout";
@@ -362,7 +363,9 @@ app.use(helmet({
   contentSecurityPolicy: env.NODE_ENV === "production", // Enable CSP in production
 }));
 app.use(cors({
-  origin: env.CLIENT_ORIGIN,
+  origin: env.NODE_ENV === "production"
+    ? true  // same-origin, allow all
+    : [env.CLIENT_ORIGIN || "http://localhost:5173"],
   credentials: true,
 }));
 
@@ -453,6 +456,23 @@ if (env.NODE_ENV === "development") {
       res.status(500).json({ error: error.message });
     }
   });
+}
+
+// ============================================
+// Serve Static Frontend (Production)
+// ============================================
+
+// Serve static frontend (production)
+if (env.NODE_ENV === "production") {
+  const distPath = path.resolve(process.cwd(), "dist");
+  app.use(express.static(distPath));
+  app.get("*", (req, res) => {
+    // Don't catch API routes
+    if (!req.path.startsWith("/api/")) {
+      res.sendFile(path.join(distPath, "index.html"));
+    }
+  });
+  console.log(`[INIT] Serving static frontend from: ${distPath}`);
 }
 
 // ============================================

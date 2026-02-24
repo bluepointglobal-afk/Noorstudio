@@ -57,9 +57,6 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     'Content-Type': 'application/json',
   };
 
-  // Skip auth headers for now - backend is in development mode
-  // TODO: Re-enable for production with proper token handling
-  /*
   if (supabase) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -71,7 +68,6 @@ async function getAuthHeaders(): Promise<HeadersInit> {
       console.warn('Failed to get auth token:', error);
     }
   }
-  */
 
   return headers;
 }
