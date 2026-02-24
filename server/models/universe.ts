@@ -130,8 +130,16 @@ export const UniverseHelpers = {
 
   /**
    * Format universe for API response
+   * Handles both Date objects and ISO strings from Supabase
    */
-  toApiResponse(universe: Universe) {
+  toApiResponse(universe: any) {
+    const toISOString = (date: any): string => {
+      if (!date) return '';
+      if (typeof date === 'string') return date;
+      if (date instanceof Date) return date.toISOString();
+      return String(date);
+    };
+
     return {
       id: universe.id,
       accountId: universe.account_id,
@@ -146,9 +154,9 @@ export const UniverseHelpers = {
       tags: universe.tags,
       bookCount: universe.book_count,
       characterCount: universe.character_count,
-      createdAt: universe.created_at.toISOString(),
-      updatedAt: universe.updated_at.toISOString(),
-      deletedAt: universe.deleted_at?.toISOString() || null,
+      createdAt: toISOString(universe.created_at),
+      updatedAt: toISOString(universe.updated_at),
+      deletedAt: universe.deleted_at ? toISOString(universe.deleted_at) : null,
     };
   },
 
