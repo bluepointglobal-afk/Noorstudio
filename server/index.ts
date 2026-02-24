@@ -332,12 +332,12 @@ setInterval(() => {
 // Baseline HTTP Hardening
 app.use(helmet());
 
-// Custom CSP to allow Vite, Supabase, and NanoBanana
+// Custom CSP to allow Vite, Supabase, NanoBanana, and Stripe
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-inline/eval needed for Vite dev
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com"], // Stripe.js
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: [
         "'self'",
@@ -351,10 +351,12 @@ app.use(
         env.CLIENT_ORIGIN,
         "https://*.supabase.co", // Supabase API/Storage
         "https://api.nanobanana.com", // NanoBanana API
+        "https://*.stripe.com", // Stripe API
       ],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
+      frameSrc: ["https://js.stripe.com", "https://*.stripe.com"], // Stripe iframe elements
     },
   })
 );
